@@ -5,12 +5,6 @@ variable "aws_region" {
   default     = "us-west-2"
 }
 
-variable "aws_partition" {
-  description = "AWS partition for the AWS region"
-  type        = string
-  default     = "aws"
-}
-
 variable "instance_type" {
   description = "AWS EC2 instance type"
   type = string
@@ -23,22 +17,32 @@ variable "key_name" {
   default     = null # optional: use AWS SSM instead
 }
 
-variable "subnet_cidr" {
-  description = "CIDR block for the subnet"
-  type        = string
-  default     = "10.0.1.0/24"
-}
-
 variable "ami_id" {
   description = "AMI ID for the EC2 instance"
   type        = string
-  default     = null # to pin the Amazon Linux 2 AMI (adjust as needed)
+  default     = null # to pin the AMI (adjust as needed), otherwise defaults to latest AL2023
 }
 
-variable "iam_role_name" {
+variable "jupyter_data_volume_size" {
+  description = "The size in GB of the EBS volume accessible to the jupyter server"
+  type        = number
+  default     = 30
+}
+
+variable "jupyter_data_volume_type" {
+  description = "The type of EBS volume accessible by the jupyter server"
+  type        = string
+  default     = "gp3"
+}
+
+variable "iam_role_name_prefix" {
   description = "Name of the execution IAM role for the EC2 instance of the Jupyter Server"
   type        = string
-  default     = "JupyterDeploy-TlsViaNgrok-ExecutionRole"
+  default     = "JD-TlsViaNgrok-Exec"
+  validation {
+    condition     = length(var.iam_role_name_prefix) <= 37
+    error_message = "Max length for prefix is 38. Input at most 37 chars to account for hyphen postfix."
+  }
 }
 
 variable "custom_tags" {
