@@ -1,0 +1,9 @@
+services:
+  nginx:
+    user: "${SERVICE_UID}:${SERVICE_GID}"
+    image: nginxinc/nginx-unprivileged:latest
+    ports:
+      - "80:8080"
+    restart: always
+    security_opt:
+      - no-new-privileges:true
