@@ -3,6 +3,7 @@ provider "aws" {
   region = var.aws_region
 }
 
+data "aws_region" "current" {}
 data "aws_partition" "current" {}
 
 # Fetch the default VPC
@@ -49,22 +50,6 @@ resource "aws_security_group" "ec2_jupyter_server_sg" {
   name        = "jupyter-deploy-tls-via-ngrok-sg"
   description = "Security group for the EC2 instance serving the JupyterServer"
   vpc_id      = data.aws_vpc.default.id
-
-  # Disallow SSH access (we'll use aws ssm instead)
-  # ingress {
-  #   from_port   = 22
-  #   to_port     = 22
-  #   protocol    = "tcp"
-  #   cidr_blocks = ["0.0.0.0/0"]
-  # }
-
-  # disallow direct HTTPS access for now
-  # ingress {
-  #   from_port   = 443
-  #   to_port     = 443
-  #   protocol    = "tcp"
-  #   cidr_blocks = ["0.0.0.0/0"]
-  # }
 
   # Allow all outbound traffic
   egress {
@@ -190,6 +175,41 @@ resource "aws_volume_attachment" "jupyter_data_attachment" {
   instance_id = aws_instance.ec2_jupyter_server.id
 }
 
+# AWS Secret for the ngrok token
+resource "aws_secretsmanager_secret" "ngrok_secret" {
+  name_prefix = "${var.ngrok_token_secret_prefix}-"
+  tags = local.combined_tags
+}
+
+data "aws_iam_policy_document" "ngrok_secret_reader_policy_document" {
+  statement {
+    sid   = "SecretsManagerReadNgrokSecret"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret"
+    ]
+    resources = [
+      aws_secretsmanager_secret.ngrok_secret.arn
+    ]
+  }
+}
+resource "aws_iam_policy" "ngrok_secret_reader_policy" {
+  name_prefix = "ngrok-secret-reader-"
+  tags = local.combined_tags
+  policy = data.aws_iam_policy_document.ngrok_secret_reader_policy_document.json
+}
+resource "aws_iam_role_policy_attachment" "ngrok_secret_reader" {
+  role = aws_iam_role.execution_role.name
+  policy_arn = aws_iam_policy.ngrok_secret_reader_policy.arn
+}
+
+resource "aws_ssm_parameter" "ngrok_secret_arn" {
+  name    = "/jupyter-deploy/ngrok-secret-arn"
+  type    = "String"
+  value   = aws_secretsmanager_secret.ngrok_secret.arn
+  tags    = local.combined_tags 
+}
+
 # Read the local files
 data "local_file" "cloud_init" {
   filename = "${path.module}/cloudinit.sh"
@@ -203,6 +223,27 @@ data "local_file" "docker_compose" {
   filename = "${path.module}/docker-compose.yml"
 }
 
+
+data "local_file" "dockerfile_jupyter" {
+  filename = "${path.module}/dockerfile.jupyter"
+}
+
+# variables consistency checks
+locals {
+  google_emails_valid = var.oauth_provider != "google" || length(var.oauth_google_allowed_emails) > 0
+  github_usernames_valid = var.oauth_provider != "github" || length(var.oauth_github_allowed_usernames) > 0
+  ngrok_authtoken_provided = length(var.ngrok_auth_token) > 0
+}
+
+locals {
+  ngrok_config = templatefile("${path.module}/ngrok.yml.tftpl", {
+    oauth_provider            = var.oauth_provider
+    allowed_google_emails     = join(",", [for email in var.oauth_google_allowed_emails : "'${email}'"])
+    allowed_github_usernames  = join(",", [for username in var.oauth_github_allowed_usernames : "'${username}'"])
+    domain_name               = var.ngrok_domain_name
+  })
+}
+
 # SSM into the instance and execute the start-up scripts
 locals {
   # In order to inject the file content with the correct 
@@ -210,8 +251,11 @@ locals {
   indent_str = join("", [for i in range(local.indent_count) : " "])
   cloud_init_indented = join("\n${local.indent_str}", compact(split("\n", data.local_file.cloud_init.content)))
   docker_compose_indented = join("\n${local.indent_str}", compact(split("\n", data.local_file.docker_compose.content)))
+  dockerfile_jupyter_indented = join("\n${local.indent_str}", compact(split("\n", data.local_file.dockerfile_jupyter.content)))
   docker_startup_indented = join("\n${local.indent_str}", compact(split("\n", data.local_file.docker_startup.content)))
+  ngrok_config_indented = join("\n${local.indent_str}", compact(split("\n", local.ngrok_config)))
 }
+
 locals {
   ssm_startup_content=<<DOC
 schemaVersion: '2.2'
@@ -225,12 +269,21 @@ mainSteps:
           ${local.cloud_init_indented}
 
   - action: aws:runShellScript
-    name: SaveDockerCompose
+    name: SaveDockerFiles
     inputs:
       runCommand:
         - |
           tee /opt/docker/docker-compose.yml << 'EOF'
           ${local.docker_compose_indented}
+          EOF
+          tee /opt/docker/ngrok.yml << 'EOF'
+          ${local.ngrok_config_indented}
+          EOF
+          tee /opt/docker/docker-startup.sh << 'EOF'
+          ${local.docker_startup_indented}
+          EOF
+          tee /opt/docker/dockerfile.jupyter << 'EOF'
+          ${local.dockerfile_jupyter_indented}
           EOF
 
   - action: aws:runShellScript
@@ -238,24 +291,28 @@ mainSteps:
     inputs:
       runCommand:
         - |
-          ${local.docker_startup_indented}
+          chmod 744 /opt/docker/docker-startup.sh
+          sh /opt/docker/docker-startup.sh
 DOC
 
   # Additional validations
   has_required_files = alltrue([
     fileexists("${path.module}/cloudinit.sh"),
     fileexists("${path.module}/docker-compose.yml"),
-    fileexists("${path.module}/docker-startup.sh")
+    fileexists("${path.module}/docker-startup.sh"),
+    fileexists("${path.module}/dockerfile.jupyter"),
   ])
   
   files_not_empty = alltrue([
     length(data.local_file.cloud_init.content) > 0,
     length(data.local_file.docker_compose.content) > 0,
-    length(data.local_file.docker_startup.content) > 0
+    length(data.local_file.docker_startup.content) > 0,
+    length(data.local_file.dockerfile_jupyter) > 0,
   ])
 
   docker_compose_valid = can(yamldecode(data.local_file.docker_compose.content))
   ssm_content_valid = can(yamldecode(local.ssm_startup_content))
+  ngrok_config_valid = can(yamldecode(local.ngrok_config))
 }
 
 resource "aws_ssm_document" "instance_startup_instructions" {
@@ -267,10 +324,17 @@ resource "aws_ssm_document" "instance_startup_instructions" {
   tags = local.combined_tags
   lifecycle {
     precondition {
+      condition     = local.google_emails_valid
+      error_message = "If you use google as oauth provider, provide at least 1 gmail email"
+    }
+    precondition {
+      condition     = local.github_usernames_valid
+      error_message = "If you use github as oauth provider, provide at least 1 github username"
+    }
+    precondition {
       condition     = local.has_required_files
       error_message = "One or more required files are missing"
     }
-
     precondition {
       condition     = local.files_not_empty
       error_message = "One or more required files are empty"
@@ -279,21 +343,76 @@ resource "aws_ssm_document" "instance_startup_instructions" {
       condition     = length(local.ssm_startup_content) < 64000  # leaving some buffer
       error_message = "SSM document content exceeds size limit of 64KB"
     }
+    precondition {
+      condition     = local.ssm_content_valid
+      error_message = "SSM document is not a valid YAML"
+    }
+    precondition {
+      condition     = local.docker_compose_valid
+      error_message = "Docker compose is not a valid YAML"
+    }
+    precondition {
+      condition     = local.ngrok_config_valid
+      error_message = "ngrok.yml file is not a valid YAML"
+    }
   }
 }
 
-resource "aws_ssm_association" "instance_startup" {
+resource "null_resource" "store_ngrok_secret" {
+  count = local.ngrok_authtoken_provided ? 1 : 0
+  triggers = {
+    secret_arn = aws_secretsmanager_secret.ngrok_secret.arn
+  }
+  provisioner "local-exec" {
+    command = <<EOT
+      TOKEN="${var.ngrok_auth_token}"
+      aws secretsmanager put-secret-value \
+        --secret-id ${aws_secretsmanager_secret.ngrok_secret.arn} \
+        --secret-string "$TOKEN" \
+        --region ${data.aws_region.current.name}
+      EOT
+  }
+
+  depends_on = [ aws_secretsmanager_secret.ngrok_secret ]
+}
+
+# When ngrok auth token is not provided,
+# we need to seed the secret first
+resource "aws_ssm_association" "instance_startup_with_secret" {
+  count = local.ngrok_authtoken_provided ? 1 : 0
+  
   name = aws_ssm_document.instance_startup_instructions.name
   targets {
     key    = "InstanceIds"
     values = [aws_instance.ec2_jupyter_server.id]
   }
-
   automation_target_parameter_name = "InstanceIds"
-
   max_concurrency = "1"
   max_errors      = "0"
-
-  wait_for_success_timeout_seconds = 120
+  wait_for_success_timeout_seconds = 300
   tags = local.combined_tags
+
+  depends_on = [
+    aws_ssm_parameter.ngrok_secret_arn,
+    null_resource.store_ngrok_secret[0]
+  ]
+}
+
+# When ngrok auth token is not provided,
+# we assume the secret was already seeded elsewhere
+resource "aws_ssm_association" "instance_startup_without_secret" {
+  count = local.ngrok_authtoken_provided ? 0 : 1
+  
+  name = aws_ssm_document.instance_startup_instructions.name
+  targets {
+    key    = "InstanceIds"
+    values = [aws_instance.ec2_jupyter_server.id]
+  }
+  automation_target_parameter_name = "InstanceIds"
+  max_concurrency = "1"
+  max_errors      = "0"
+  wait_for_success_timeout_seconds = 300
+  tags = local.combined_tags
+
+  depends_on = [aws_ssm_parameter.ngrok_secret_arn]
 }
