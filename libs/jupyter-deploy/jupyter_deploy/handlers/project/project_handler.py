@@ -2,7 +2,7 @@ from pathlib import Path
 
 from jupyter_deploy import fs_utils
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.presets.path import PRESET_ROOT_PATH
+from jupyter_deploy.template_utils import TEMPLATES
 
 
 class ProjectHandler:
@@ -12,7 +12,9 @@ class ProjectHandler:
         self,
         project_dir: str | None,
         engine: EngineType = EngineType.TERRAFORM,
-        template_name: str = "",
+        provider: str = "aws",
+        infra: str = "ec2",
+        template: str = "tls-via-ngrok",
     ) -> None:
         """Create the project handler."""
         if not project_dir:
@@ -21,20 +23,26 @@ class ProjectHandler:
             self.project_path = Path(project_dir)
 
         self.engine = engine
+
+        template_name = ""
+        if provider and infra and template:
+            template_name = f"{provider}:{infra}:{template}"
+        
         self.source_path = self._find_template_path(template_name)
 
     def _find_template_path(self, template_name: str) -> Path:
         """Return the path of the template name.
 
         The template should be of the form <provider>:<infra-type>:<template_name>.
+        Raises ValueError if the template is not found.
         """
-        template_path_parts = template_name.split(":")
-        tf_template_path = Path(PRESET_ROOT_PATH / self.engine.lower())
+        if not template_name:
+            raise ValueError("Template name cannot be empty")
 
-        for template_path_part in template_path_parts:
-            tf_template_path /= template_path_part
-
-        return tf_template_path
+        if template_name in TEMPLATES:
+            return TEMPLATES[template_name]
+        
+        raise ValueError(f"Template '{template_name}' not found. Available templates: {list(TEMPLATES.keys())}")
 
     def may_export_to_project_path(self) -> bool:
         """Verify that the project output path does not contain any file or sub-directory."""

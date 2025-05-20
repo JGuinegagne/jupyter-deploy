@@ -1,6 +1,10 @@
-# AWS EC2 instance running a Jupyter Server using ngrok for TLS
-------
-This terraform project creates an EC2 instance in the default VPC that connects to ngrok for TLS.
+# Jupyter Deploy Terraform AWS EC2 Ngrok
+
+This package provides a Terraform preset for deploying a Jupyter Server on AWS EC2 using ngrok for TLS.
+
+## Description
+
+This terraform project creates an AWS EC2 instance in the default VPC that connects to ngrok for TLS.
 
 The instance is configured so that you can access it using [AWS SSM](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html).
 
@@ -16,24 +20,31 @@ This project:
     - `docker-startup.sh` to run the docker-compose up cmd and post docker-start instructions
 - creates an SSM association, which runs the startup script on the instance
 
+## Installation
+
+From the root of this package, run:
+
+```bash
+pip install -e jupyter-deploy-tf-aws-ec2-ngrok
+```
+
 ## Usage
-This terraform project is meant to be used with `jupyter-deploy`.
+
+This package is used by `jupyter-deploy`. Once installed, the template will be automatically available for use via the `jupyter-deploy` CLI.
+
+```bash
+jupyter-deploy terraform generate --provider aws --infra ec2 --template tls-via-ngrok
+```
 
 ## Requirements
+
 | Name | Version |
 |---|---|
 | terraform | >= 1.0 |
 | aws | >= 4.66 |
 
-## Providers
-| Name | Version |
-|---|---|
-| aws | >= 4.66 |
-
-## Modules
-No modules.
-
 ## Resources
+
 | Name | Type |
 |---|---|
 | [aws_security_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group) | resource |
@@ -47,6 +58,7 @@ No modules.
 | [aws_ssm_association](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_association) | resource |
 
 ## Inputs
+
 | Name | Type | Default | Description |
 |---|---|---|---|
 | aws_region | `string` | `null` | AWS region where the resources should be created |
@@ -62,6 +74,7 @@ No modules.
 | docker-startup.sh | file | bash script to run docker-compose and post docker-start instructions |
 
 ## Outputs
+
 | Name | Description |
 |---|---|
 | [aws_instance.id](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance#id-2) | The ID of the EC2 instance |

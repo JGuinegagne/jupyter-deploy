@@ -1,25 +1,26 @@
 # JupyterDeploy
 
-Jupyter deploy provides a command line interface tool (CLI) that you can
-use to deploy a Jupyter Server container to a remote compute provided by a Cloud provider.
+This monorepo contains packages for deploying Jupyter applications to various cloud providers.
 
-## Install
-`jupyter-deploy` is a Python library.
+## Packages
 
-You can use [uv](https://docs.astral.sh/uv/getting-started/) to manage your virtual environment.
+- [jupyter-deploy](./libs/jupyter-deploy/README.md): Core package providing a command line interface tool (CLI) that you can use to deploy a Jupyter Server container to a remote compute provided by a Cloud provider.
+- [jupyter-deploy-tf-aws-ec2-ngrok](./libs/jupyter-deploy-tf-aws-ec2-ngrok/README.md): A Terraform template for Jupyter deployment on AWS EC2.
 
-### Install Terraform
-Terraform from HashiCorp is the default deployment engine. To use it, you must set it up in your system.
-Refer to Terraform installation [guide](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli).
+### Installation
 
-Verify installation by running
+Run the following commands from the repository root to install each package from source.
+
 ```bash
-terraform --version
+# Execute in this order
+pip install -e ./libs/jupyter-deploy-tf-aws-ec2-ngrok
+pip install -e ./libs/jupyter-deploy
 ```
 
-## The CLI
-To get started, open a terminal and run:
-> uv run jupyter-deploy --help
-
 ## Contributing
-Refer to the contributing guide.
+
+Refer to the [contributing guide](./CONTRIBUTING.md).
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).

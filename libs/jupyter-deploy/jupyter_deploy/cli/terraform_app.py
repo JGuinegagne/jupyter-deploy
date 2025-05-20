@@ -20,15 +20,27 @@ def generate(
     engine: Annotated[
         EngineType, typer.Option("--engine", "-e", help="software to deploy resources")
     ] = EngineType.TERRAFORM,
-    template_name: Annotated[
-        str, typer.Option("--template", "-t", help="name of the template")
-    ] = "aws:ec2:tls-via-ngrok",
+    provider: Annotated[
+        str, typer.Option("--provider", help="cloud provider (e.g., aws, gcp)")
+    ] = "aws",
+    infra: Annotated[
+        str, typer.Option("--infra", help="infrastructure type (e.g., ec2, lambda)")
+    ] = "ec2",
+    template: Annotated[
+        str, typer.Option("--template", "-t", help="template name (e.g., tls-via-ngrok)")
+    ] = "tls-via-ngrok",
     project_dir: Annotated[
         str | None, typer.Option("--output-path", "-p", help="output path for your terraform project")
     ] = None,
 ) -> None:
     """Write a set of terraform .tf files in the project directory."""
-    project = project_handler.ProjectHandler(project_dir=project_dir, engine=engine, template_name=template_name)
+    project = project_handler.ProjectHandler(
+        project_dir=project_dir, 
+        engine=engine, 
+        provider=provider,
+        infra=infra,
+        template=template
+    )
     console = Console()
 
     # sanity check: if there are files under the project dir, ask if we should clear it first

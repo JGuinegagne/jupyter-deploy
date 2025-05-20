@@ -10,11 +10,11 @@ requires-python = ">=3.12"
 dependencies = [
     "click>=8.1.8",
     "typer>=0.15.3",
+    "jupyter-deploy-tf-aws-ec2-ngrok>=0.1.0",
 ]
 
 [project.scripts]
 jupyter-deploy = "jupyter_deploy.cli.deploy_app:main"
-
 
 [project.optional-dependencies]
 terraform = [
@@ -44,7 +44,7 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 check_untyped_defs = true
-mypy_path = ["src"]
+mypy_path = ["."]
 packages = ["jupyter_deploy"]
 
 [tool.ruff]
