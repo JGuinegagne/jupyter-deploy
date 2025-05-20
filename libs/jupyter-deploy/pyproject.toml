@@ -10,7 +10,6 @@ requires-python = ">=3.12"
 dependencies = [
     "click>=8.1.8",
     "typer>=0.15.3",
-    "jupyter-deploy-tf-aws-ec2-ngrok>=0.1.0",
 ]
 
 [project.scripts]
@@ -25,6 +24,10 @@ aws = [
     "boto3>=1.38.6",
     "boto3-stubs>=1.38.6",
     "mypy-boto3-ec2>=1.38.6",
+]
+
+default_template = [
+    "jupyter-deploy-tf-aws-ec2-ngrok>=0.1.0",
 ]
 
 [build-system]

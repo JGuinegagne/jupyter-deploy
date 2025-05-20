@@ -15,18 +15,18 @@ class TestTemplateUtils(unittest.TestCase):
         mock_entry_point1 = MagicMock()
         mock_entry_point1.name = "aws_ec2_tls-via-ngrok"
         mock_entry_point1.load.return_value = Path("/mock/template/path")
-        
+
         mock_entry_point2 = MagicMock()
         mock_entry_point2.name = "aws_lambda_basic"
         mock_entry_point2.load.return_value = Path("/mock/lambda/path")
-        
+
         mock_entry_points.return_value = [mock_entry_point1, mock_entry_point2]
-        
+
         # Mock Path.exists to return True for our mock paths
         with patch("pathlib.Path.exists", return_value=True):
             # Execute
             templates = get_templates("terraform")
-            
+
             # Assert
             self.assertEqual(len(templates), 2)
             self.assertEqual(templates["aws:ec2:tls-via-ngrok"], Path("/mock/template/path"))
@@ -39,7 +39,7 @@ class TestTemplateUtils(unittest.TestCase):
         """Test that get_templates handles unsupported engine types."""
         # Execute
         templates = get_templates("unsupported_engine")
-        
+
         # Assert
         self.assertEqual(len(templates), 0)
 
@@ -50,12 +50,12 @@ class TestTemplateUtils(unittest.TestCase):
         mock_entry_point = MagicMock()
         mock_entry_point.name = "aws_ec2_tls-via-ngrok"
         mock_entry_point.load.return_value = "not_a_path"  # Invalid path
-        
+
         mock_entry_points.return_value = [mock_entry_point]
-        
+
         # Execute
         templates = get_templates("terraform")
-        
+
         # Assert
         self.assertEqual(len(templates), 0)
         mock_entry_points.assert_called_once_with(group=TEMPLATE_ENTRY_POINTS["terraform"])
@@ -68,14 +68,14 @@ class TestTemplateUtils(unittest.TestCase):
         mock_entry_point = MagicMock()
         mock_entry_point.name = "aws_ec2_tls-via-ngrok"
         mock_entry_point.load.return_value = Path("/nonexistent/path")
-        
+
         mock_entry_points.return_value = [mock_entry_point]
-        
+
         # Mock Path.exists to return False
         with patch("pathlib.Path.exists", return_value=False):
             # Execute
             templates = get_templates("terraform")
-            
+
             # Assert
             self.assertEqual(len(templates), 0)
             mock_entry_points.assert_called_once_with(group=TEMPLATE_ENTRY_POINTS["terraform"])
@@ -88,12 +88,12 @@ class TestTemplateUtils(unittest.TestCase):
         mock_entry_point = MagicMock()
         mock_entry_point.name = "aws_ec2_tls-via-ngrok"
         mock_entry_point.load.side_effect = Exception("Failed to load")
-        
+
         mock_entry_points.return_value = [mock_entry_point]
-        
+
         # Execute
         templates = get_templates("terraform")
-        
+
         # Assert
         self.assertEqual(len(templates), 0)
         mock_entry_points.assert_called_once_with(group=TEMPLATE_ENTRY_POINTS["terraform"])
@@ -104,10 +104,10 @@ class TestTemplateUtils(unittest.TestCase):
         """Test that get_templates handles exceptions when getting entry points."""
         # Setup
         mock_entry_points.side_effect = Exception("Failed to get entry points")
-        
+
         # Execute
         templates = get_templates("terraform")
-        
+
         # Assert
         self.assertEqual(len(templates), 0)
         mock_entry_points.assert_called_once_with(group=TEMPLATE_ENTRY_POINTS["terraform"])
@@ -115,23 +115,19 @@ class TestTemplateUtils(unittest.TestCase):
     @patch("jupyter_deploy.template_utils.get_templates")
     def test_templates_loaded_for_all_engines(self, mock_get_templates):
         """Test that TEMPLATES dictionary is populated with all supported engines."""
-        #Setup
-        mock_get_templates.side_effect = lambda engine: {
-            "test:template": Path(f"/mock/{engine}/path")
-        }
-        
+        # Setup
+        mock_get_templates.side_effect = lambda engine: {"test:template": Path(f"/mock/{engine}/path")}
+
         # Execute
         from jupyter_deploy.template_utils import TEMPLATE_ENTRY_POINTS
-        templates = {
-            engine: mock_get_templates(engine)
-            for engine in TEMPLATE_ENTRY_POINTS.keys()
-        }
-        
+
+        templates = {engine: mock_get_templates(engine) for engine in TEMPLATE_ENTRY_POINTS.keys()}
+
         # Assert
         self.assertEqual(len(templates), len(TEMPLATE_ENTRY_POINTS))
         for engine in TEMPLATE_ENTRY_POINTS.keys():
             self.assertIn(engine, templates)
             self.assertEqual(templates[engine], {"test:template": Path(f"/mock/{engine}/path")})
-            
+
         # Verify get_templates was called once for each engine
         self.assertEqual(mock_get_templates.call_count, len(TEMPLATE_ENTRY_POINTS))

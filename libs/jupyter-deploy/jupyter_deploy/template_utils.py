@@ -3,13 +3,14 @@
 import importlib.metadata
 import logging
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
 TEMPLATE_ENTRY_POINTS = {
     "terraform": "jupyter_deploy.terraform_templates",
 }
+
 
 def get_templates(engine: str) -> Dict[str, Path]:
     """Get all registered templates for a specific engine from entry points.
@@ -20,13 +21,13 @@ def get_templates(engine: str) -> Dict[str, Path]:
     Returns:
         Dict[str, Path]: A dictionary mapping template names to their paths.
     """
-    templates = {}
+    templates: Dict[str, Path] = {}
     engine_lower = engine.lower()
-    
+
     if engine_lower not in TEMPLATE_ENTRY_POINTS:
         logger.warning(f"No entry point defined for engine: {engine}")
         return templates
-        
+
     entry_point_group = TEMPLATE_ENTRY_POINTS[engine_lower]
 
     try:
@@ -47,7 +48,8 @@ def get_templates(engine: str) -> Dict[str, Path]:
 
     return templates
 
-TEMPLATES = {engine: {} for engine in TEMPLATE_ENTRY_POINTS.keys()}
+
+TEMPLATES: Dict[str, Dict[str, Path]] = {engine: {} for engine in TEMPLATE_ENTRY_POINTS.keys()}
 
 for engine in TEMPLATE_ENTRY_POINTS.keys():
     TEMPLATES[engine] = get_templates(engine)

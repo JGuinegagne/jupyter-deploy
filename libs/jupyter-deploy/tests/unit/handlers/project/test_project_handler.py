@@ -56,11 +56,7 @@ class TestProjectHandler(unittest.TestCase):
 
         # Execute
         handler = ProjectHandler(
-            project_dir=project_dir,
-            engine=EngineType.TERRAFORM,
-            provider="gcp",
-            infra="vm",
-            template="custom-template"
+            project_dir=project_dir, engine=EngineType.TERRAFORM, provider="gcp", infra="vm", template="custom-template"
         )
 
         # Assert
@@ -69,23 +65,21 @@ class TestProjectHandler(unittest.TestCase):
         mock_find_template_path.assert_called_once_with("gcp:vm:custom-template")
 
     @patch("jupyter_deploy.handlers.project.project_handler.ProjectHandler._find_template_path")
-    @patch("jupyter_deploy.template_utils.TEMPLATES", {
-        "terraform": {
-            "aws:ec2:tls-via-ngrok": Path("/mock/template/path")
-        }
-    })
+    @patch(
+        "jupyter_deploy.template_utils.TEMPLATES", {"terraform": {"aws:ec2:tls-via-ngrok": Path("/mock/template/path")}}
+    )
     def test_find_template_path_valid(self, mock_find_template_path):
         """Test _find_template_path with valid template name."""
         # Setup
         mock_find_template_path.return_value = Path("/mock/template/path")
-        
+
         handler = ProjectHandler(project_dir="/test/project/dir")
-        
+
         # Execute
         # Call the real method, not the mock
         handler._find_template_path = lambda x: Path("/mock/template/path")
         result = handler._find_template_path("aws:ec2:tls-via-ngrok")
-        
+
         # Assert
         self.assertEqual(result, Path("/mock/template/path"))
 
@@ -95,11 +89,11 @@ class TestProjectHandler(unittest.TestCase):
         # Setup
         mock_find_template_path.side_effect = [
             Path("/mock/template/path"),  # For constructor
-            ValueError("Template name cannot be empty")  # For the actual test
+            ValueError("Template name cannot be empty"),  # For the actual test
         ]
-        
+
         handler = ProjectHandler(project_dir="/test/project/dir")
-        
+
         # Execute and Assert
         with self.assertRaisesRegex(ValueError, "Template name cannot be empty"):
             handler._find_template_path = lambda x: ProjectHandler._find_template_path(handler, x)
@@ -112,11 +106,11 @@ class TestProjectHandler(unittest.TestCase):
         # Setup
         mock_find_template_path.side_effect = [
             Path("/mock/template/path"),  # For constructor
-            ValueError("Engine 'terraform' is not supported. Available engines: none available")  # For the actual test
+            ValueError("Engine 'terraform' is not supported. Available engines: none available"),  # For the actual test
         ]
-        
+
         handler = ProjectHandler(project_dir="/test/project/dir")
-        
+
         # Execute and Assert
         with self.assertRaisesRegex(ValueError, "Engine 'terraform' is not supported"):
             # Call the real method, not the mock
@@ -124,19 +118,19 @@ class TestProjectHandler(unittest.TestCase):
             handler._find_template_path("aws:ec2:tls-via-ngrok")
 
     @patch("jupyter_deploy.handlers.project.project_handler.ProjectHandler._find_template_path")
-    @patch("jupyter_deploy.template_utils.TEMPLATES", {
-        "terraform": {}
-    })
+    @patch("jupyter_deploy.template_utils.TEMPLATES", {"terraform": {}})
     def test_find_template_path_template_not_found(self, mock_find_template_path):
         """Test _find_template_path with template not found."""
         # Setup
         mock_find_template_path.side_effect = [
             Path("/mock/template/path"),  # For constructor
-            ValueError("Template 'aws:ec2:tls-via-ngrok' not found for engine 'terraform'. Available templates: none")  # For the actual test
+            ValueError(
+                "Template 'aws:ec2:tls-via-ngrok' not found for engine 'terraform'. Available templates: none"
+            ),  # For the actual test
         ]
-        
+
         handler = ProjectHandler(project_dir="/test/project/dir")
-        
+
         # Execute and Assert
         with self.assertRaisesRegex(ValueError, "Template 'aws:ec2:tls-via-ngrok' not found"):
             # Call the real method, not the mock
@@ -152,13 +146,13 @@ class TestProjectHandler(unittest.TestCase):
         mock_exists = MagicMock(return_value=False)
         mock_path.exists = mock_exists
         mock_find_template_path.return_value = Path("/mock/template/path")
-        
+
         handler = ProjectHandler(project_dir="/test/project/dir")
         handler.project_path = mock_path
-        
+
         # Execute
         result = handler.may_export_to_project_path()
-        
+
         # Assert
         self.assertTrue(result)
         mock_exists.assert_called_once()
@@ -174,13 +168,13 @@ class TestProjectHandler(unittest.TestCase):
         mock_path.exists = mock_exists
         mock_is_empty_dir.return_value = True
         mock_find_template_path.return_value = Path("/mock/template/path")
-        
+
         handler = ProjectHandler(project_dir="/test/project/dir")
         handler.project_path = mock_path
-        
+
         # Execute
         result = handler.may_export_to_project_path()
-        
+
         # Assert
         self.assertTrue(result)
         mock_exists.assert_called_once()
@@ -196,13 +190,13 @@ class TestProjectHandler(unittest.TestCase):
         mock_path.exists = mock_exists
         mock_is_empty_dir.return_value = False
         mock_find_template_path.return_value = Path("/mock/template/path")
-        
+
         handler = ProjectHandler(project_dir="/test/project/dir")
         handler.project_path = mock_path
-        
+
         # Execute
         result = handler.may_export_to_project_path()
-        
+
         # Assert
         self.assertFalse(result)
         mock_exists.assert_called_once()
@@ -215,13 +209,13 @@ class TestProjectHandler(unittest.TestCase):
         # Setup
         mock_path = Path("/test/project/dir")
         mock_find_template_path.return_value = Path("/mock/template/path")
-        
+
         handler = ProjectHandler(project_dir="/test/project/dir")
         handler.project_path = mock_path
-        
+
         # Execute
         handler.clear_project_path()
-        
+
         # Assert
         mock_safe_clean_directory.assert_called_once_with(mock_path)
 
@@ -233,12 +227,12 @@ class TestProjectHandler(unittest.TestCase):
         mock_project_path = Path("/test/project/dir")
         mock_source_path = Path("/mock/template/path")
         mock_find_template_path.return_value = mock_source_path
-        
+
         handler = ProjectHandler(project_dir="/test/project/dir")
         handler.project_path = mock_project_path
-        
+
         # Execute
         handler.setup()
-        
+
         # Assert
         mock_safe_copy_tree.assert_called_once_with(mock_source_path, mock_project_path)

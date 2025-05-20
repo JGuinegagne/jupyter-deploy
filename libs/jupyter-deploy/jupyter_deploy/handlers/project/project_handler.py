@@ -27,7 +27,7 @@ class ProjectHandler:
         template_name = ""
         if provider and infra and template:
             template_name = f"{provider}:{infra}:{template}"
-        
+
         self.source_path = self._find_template_path(template_name)
 
     def _find_template_path(self, template_name: str) -> Path:
@@ -41,17 +41,15 @@ class ProjectHandler:
 
         engine_name = self.engine.lower()
 
-        print(TEMPLATES)
-        
         if engine_name not in TEMPLATES:
             available_engines = list(TEMPLATES.keys()) if TEMPLATES else "none available"
             raise ValueError(f"Engine '{engine_name}' is not supported. Available engines: {available_engines}")
-        
+
         engine_templates = TEMPLATES[engine_name]
-        
+
         if template_name in engine_templates:
             return engine_templates[template_name]
-        
+
         raise ValueError(
             f"Template '{template_name}' not found for engine '{engine_name}'. "
             f"Available templates: {list(engine_templates.keys()) if engine_templates else 'none'}"

@@ -15,6 +15,14 @@ aws_ec2_tls-via-ngrok = "jupyter_deploy_tf_aws_ec2_ngrok.template:TEMPLATE_PATH"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[dependency-groups]
+dev = [
+    "mypy>=1.15.0",
+    "pytest>=8.3.5",
+    "pytest-cov>=6.1.1",
+    "ruff>=0.11.8",
+]
+
 [tool.mypy]
 warn_return_any = true
 warn_unused_configs = true
