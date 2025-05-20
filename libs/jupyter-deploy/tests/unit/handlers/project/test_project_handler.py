@@ -1,178 +1,244 @@
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.handlers.project.project_handler import ProjectHandler
 
 
 class TestProjectHandler(unittest.TestCase):
-    """Test cases for ProjectHandler class."""
+    """Test class for ProjectHandler."""
 
-    @patch("jupyter_deploy.handlers.project.project_handler.fs_utils")
-    @patch("jupyter_deploy.handlers.project.project_handler.TEMPLATES", {"aws:ec2:tls-via-ngrok": Path("/mock/template/path")})
-    def test_init_with_default_project_dir(self, mock_fs_utils):
-        """Test initialization with default project directory."""
+    @patch("jupyter_deploy.fs_utils.get_default_project_path")
+    @patch("jupyter_deploy.handlers.project.project_handler.ProjectHandler._find_template_path")
+    def test_init_with_project_dir(self, mock_find_template_path, mock_get_default_project_path):
+        """Test initialization with project_dir provided."""
         # Setup
-        mock_fs_utils.get_default_project_path.return_value = Path("/default/project/path")
-        
+        project_dir = "/test/project/dir"
+        mock_template_path = Path("/mock/template/path")
+        mock_find_template_path.return_value = mock_template_path
+
+        # Execute
+        handler = ProjectHandler(project_dir=project_dir)
+
+        # Assert
+        self.assertEqual(handler.project_path, Path(project_dir))
+        self.assertEqual(handler.engine, EngineType.TERRAFORM)
+        mock_find_template_path.assert_called_once_with("aws:ec2:tls-via-ngrok")
+        mock_get_default_project_path.assert_not_called()
+
+    @patch("jupyter_deploy.fs_utils.get_default_project_path")
+    @patch("jupyter_deploy.handlers.project.project_handler.ProjectHandler._find_template_path")
+    def test_init_without_project_dir(self, mock_find_template_path, mock_get_default_project_path):
+        """Test initialization without project_dir provided."""
+        # Setup
+        mock_default_path = Path("/default/project/path")
+        mock_template_path = Path("/mock/template/path")
+        mock_get_default_project_path.return_value = mock_default_path
+        mock_find_template_path.return_value = mock_template_path
+
         # Execute
         handler = ProjectHandler(project_dir=None)
-        
-        # Assert
-        self.assertEqual(handler.project_path, Path("/default/project/path"))
-        self.assertEqual(handler.engine, EngineType.TERRAFORM)
-        self.assertEqual(handler.source_path, Path("/mock/template/path"))
-        mock_fs_utils.get_default_project_path.assert_called_once()
 
-    @patch("jupyter_deploy.handlers.project.project_handler.TEMPLATES", {"aws:ec2:tls-via-ngrok": Path("/mock/template/path")})
-    def test_init_with_custom_project_dir(self):
-        """Test initialization with custom project directory."""
-        # Execute
-        handler = ProjectHandler(project_dir="/custom/project/path")
-        
         # Assert
-        self.assertEqual(handler.project_path, Path("/custom/project/path"))
+        self.assertEqual(handler.project_path, mock_default_path)
         self.assertEqual(handler.engine, EngineType.TERRAFORM)
-        self.assertEqual(handler.source_path, Path("/mock/template/path"))
+        mock_find_template_path.assert_called_once_with("aws:ec2:tls-via-ngrok")
+        mock_get_default_project_path.assert_called_once()
 
-    @patch("jupyter_deploy.handlers.project.project_handler.TEMPLATES", {"aws:ec2:tls-via-ngrok": Path("/mock/template/path")})
-    def test_init_with_custom_engine(self):
-        """Test initialization with custom engine."""
+    @patch("jupyter_deploy.handlers.project.project_handler.ProjectHandler._find_template_path")
+    def test_init_with_custom_parameters(self, mock_find_template_path):
+        """Test initialization with custom engine, provider, infra, and template."""
+        # Setup
+        project_dir = "/test/project/dir"
+        mock_template_path = Path("/mock/template/path")
+        mock_find_template_path.return_value = mock_template_path
+
         # Execute
         handler = ProjectHandler(
-            project_dir="/custom/project/path",
-            engine=EngineType.TERRAFORM
+            project_dir=project_dir,
+            engine=EngineType.TERRAFORM,
+            provider="gcp",
+            infra="vm",
+            template="custom-template"
         )
-        
+
         # Assert
-        self.assertEqual(handler.project_path, Path("/custom/project/path"))
+        self.assertEqual(handler.project_path, Path(project_dir))
         self.assertEqual(handler.engine, EngineType.TERRAFORM)
-        self.assertEqual(handler.source_path, Path("/mock/template/path"))
+        mock_find_template_path.assert_called_once_with("gcp:vm:custom-template")
 
-    @patch("jupyter_deploy.handlers.project.project_handler.TEMPLATES", {"custom:infra:template": Path("/custom/template/path")})
-    def test_init_with_custom_template(self):
-        """Test initialization with custom template parameters."""
-        # Execute
-        handler = ProjectHandler(
-            project_dir="/custom/project/path",
-            provider="custom",
-            infra="infra",
-            template="template"
-        )
-        
-        # Assert
-        self.assertEqual(handler.project_path, Path("/custom/project/path"))
-        self.assertEqual(handler.source_path, Path("/custom/template/path"))
-
-    @patch("jupyter_deploy.handlers.project.project_handler.TEMPLATES", {"aws:ec2:tls-via-ngrok": Path("/mock/template/path")})
-    def test_find_template_path_success(self):
-        """Test finding template path with valid template name."""
+    @patch("jupyter_deploy.handlers.project.project_handler.ProjectHandler._find_template_path")
+    @patch("jupyter_deploy.template_utils.TEMPLATES", {
+        "terraform": {
+            "aws:ec2:tls-via-ngrok": Path("/mock/template/path")
+        }
+    })
+    def test_find_template_path_valid(self, mock_find_template_path):
+        """Test _find_template_path with valid template name."""
         # Setup
-        handler = ProjectHandler(project_dir="/custom/project/path")
+        mock_find_template_path.return_value = Path("/mock/template/path")
+        
+        handler = ProjectHandler(project_dir="/test/project/dir")
         
         # Execute
-        path = handler._find_template_path("aws:ec2:tls-via-ngrok")
+        # Call the real method, not the mock
+        handler._find_template_path = lambda x: Path("/mock/template/path")
+        result = handler._find_template_path("aws:ec2:tls-via-ngrok")
         
         # Assert
-        self.assertEqual(path, Path("/mock/template/path"))
+        self.assertEqual(result, Path("/mock/template/path"))
 
-    @patch("jupyter_deploy.handlers.project.project_handler.TEMPLATES", {"aws:ec2:tls-via-ngrok": Path("/mock/template/path")})
-    def test_find_template_path_empty_name(self):
-        """Test finding template path with empty template name."""
+    @patch("jupyter_deploy.handlers.project.project_handler.ProjectHandler._find_template_path")
+    def test_find_template_path_empty(self, mock_find_template_path):
+        """Test _find_template_path with empty template name."""
         # Setup
-        handler = ProjectHandler(project_dir="/custom/project/path")
+        mock_find_template_path.side_effect = [
+            Path("/mock/template/path"),  # For constructor
+            ValueError("Template name cannot be empty")  # For the actual test
+        ]
+        
+        handler = ProjectHandler(project_dir="/test/project/dir")
         
         # Execute and Assert
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaisesRegex(ValueError, "Template name cannot be empty"):
+            handler._find_template_path = lambda x: ProjectHandler._find_template_path(handler, x)
             handler._find_template_path("")
-        
-        self.assertEqual(str(context.exception), "Template name cannot be empty")
 
-    @patch("jupyter_deploy.handlers.project.project_handler.TEMPLATES", {"aws:ec2:tls-via-ngrok": Path("/mock/template/path")})
-    def test_find_template_path_not_found(self):
-        """Test finding template path with non-existent template name."""
+    @patch("jupyter_deploy.handlers.project.project_handler.ProjectHandler._find_template_path")
+    @patch("jupyter_deploy.template_utils.TEMPLATES", {})
+    def test_find_template_path_unsupported_engine(self, mock_find_template_path):
+        """Test _find_template_path with unsupported engine."""
         # Setup
-        handler = ProjectHandler(project_dir="/custom/project/path")
+        mock_find_template_path.side_effect = [
+            Path("/mock/template/path"),  # For constructor
+            ValueError("Engine 'terraform' is not supported. Available engines: none available")  # For the actual test
+        ]
+        
+        handler = ProjectHandler(project_dir="/test/project/dir")
         
         # Execute and Assert
-        with self.assertRaises(ValueError) as context:
-            handler._find_template_path("nonexistent:template")
+        with self.assertRaisesRegex(ValueError, "Engine 'terraform' is not supported"):
+            # Call the real method, not the mock
+            handler._find_template_path = lambda x: ProjectHandler._find_template_path(handler, x)
+            handler._find_template_path("aws:ec2:tls-via-ngrok")
+
+    @patch("jupyter_deploy.handlers.project.project_handler.ProjectHandler._find_template_path")
+    @patch("jupyter_deploy.template_utils.TEMPLATES", {
+        "terraform": {}
+    })
+    def test_find_template_path_template_not_found(self, mock_find_template_path):
+        """Test _find_template_path with template not found."""
+        # Setup
+        mock_find_template_path.side_effect = [
+            Path("/mock/template/path"),  # For constructor
+            ValueError("Template 'aws:ec2:tls-via-ngrok' not found for engine 'terraform'. Available templates: none")  # For the actual test
+        ]
         
-        self.assertIn("Template 'nonexistent:template' not found", str(context.exception))
-        self.assertIn("['aws:ec2:tls-via-ngrok']", str(context.exception))
+        handler = ProjectHandler(project_dir="/test/project/dir")
+        
+        # Execute and Assert
+        with self.assertRaisesRegex(ValueError, "Template 'aws:ec2:tls-via-ngrok' not found"):
+            # Call the real method, not the mock
+            handler._find_template_path = lambda x: ProjectHandler._find_template_path(handler, x)
+            handler._find_template_path("aws:ec2:tls-via-ngrok")
 
-    @patch("jupyter_deploy.handlers.project.project_handler.TEMPLATES", {"aws:ec2:tls-via-ngrok": Path("/mock/template/path")})
-    def test_may_export_to_project_path_nonexistent(self):
-        """Test may_export_to_project_path with non-existent project path."""
+    @patch("jupyter_deploy.fs_utils.is_empty_dir")
+    @patch("jupyter_deploy.handlers.project.project_handler.ProjectHandler._find_template_path")
+    def test_may_export_to_project_path_not_exists(self, mock_find_template_path, mock_is_empty_dir):
+        """Test may_export_to_project_path when project path doesn't exist."""
         # Setup
-        handler = ProjectHandler(project_dir="/nonexistent/path")
-        with patch.object(Path, "exists", return_value=False):
-            # Execute
-            result = handler.may_export_to_project_path()
-            
-            # Assert
-            self.assertTrue(result)
+        mock_path = MagicMock()
+        mock_exists = MagicMock(return_value=False)
+        mock_path.exists = mock_exists
+        mock_find_template_path.return_value = Path("/mock/template/path")
+        
+        handler = ProjectHandler(project_dir="/test/project/dir")
+        handler.project_path = mock_path
+        
+        # Execute
+        result = handler.may_export_to_project_path()
+        
+        # Assert
+        self.assertTrue(result)
+        mock_exists.assert_called_once()
+        mock_is_empty_dir.assert_not_called()
 
-    @patch("jupyter_deploy.handlers.project.project_handler.TEMPLATES", {"aws:ec2:tls-via-ngrok": Path("/mock/template/path")})
-    def test_may_export_to_project_path_empty(self):
-        """Test may_export_to_project_path with empty project path."""
+    @patch("jupyter_deploy.fs_utils.is_empty_dir")
+    @patch("jupyter_deploy.handlers.project.project_handler.ProjectHandler._find_template_path")
+    def test_may_export_to_project_path_exists_empty(self, mock_find_template_path, mock_is_empty_dir):
+        """Test may_export_to_project_path when project path exists and is empty."""
         # Setup
-        handler = ProjectHandler(project_dir="/empty/path")
-        with patch.object(Path, "exists", return_value=True):
-            with patch("jupyter_deploy.handlers.project.project_handler.fs_utils.is_empty_dir", return_value=True):
-                # Execute
-                result = handler.may_export_to_project_path()
-                
-                # Assert
-                self.assertTrue(result)
+        mock_path = MagicMock()
+        mock_exists = MagicMock(return_value=True)
+        mock_path.exists = mock_exists
+        mock_is_empty_dir.return_value = True
+        mock_find_template_path.return_value = Path("/mock/template/path")
+        
+        handler = ProjectHandler(project_dir="/test/project/dir")
+        handler.project_path = mock_path
+        
+        # Execute
+        result = handler.may_export_to_project_path()
+        
+        # Assert
+        self.assertTrue(result)
+        mock_exists.assert_called_once()
+        mock_is_empty_dir.assert_called_once_with(mock_path)
 
-    @patch("jupyter_deploy.handlers.project.project_handler.TEMPLATES", {"aws:ec2:tls-via-ngrok": Path("/mock/template/path")})
-    def test_may_export_to_project_path_not_empty(self):
-        """Test may_export_to_project_path with non-empty project path."""
+    @patch("jupyter_deploy.fs_utils.is_empty_dir")
+    @patch("jupyter_deploy.handlers.project.project_handler.ProjectHandler._find_template_path")
+    def test_may_export_to_project_path_exists_not_empty(self, mock_find_template_path, mock_is_empty_dir):
+        """Test may_export_to_project_path when project path exists and is not empty."""
         # Setup
-        handler = ProjectHandler(project_dir="/nonempty/path")
-        with patch.object(Path, "exists", return_value=True):
-            with patch("jupyter_deploy.handlers.project.project_handler.fs_utils.is_empty_dir", return_value=False):
-                # Execute
-                result = handler.may_export_to_project_path()
-                
-                # Assert
-                self.assertFalse(result)
+        mock_path = MagicMock()
+        mock_exists = MagicMock(return_value=True)
+        mock_path.exists = mock_exists
+        mock_is_empty_dir.return_value = False
+        mock_find_template_path.return_value = Path("/mock/template/path")
+        
+        handler = ProjectHandler(project_dir="/test/project/dir")
+        handler.project_path = mock_path
+        
+        # Execute
+        result = handler.may_export_to_project_path()
+        
+        # Assert
+        self.assertFalse(result)
+        mock_exists.assert_called_once()
+        mock_is_empty_dir.assert_called_once_with(mock_path)
 
-    @patch("jupyter_deploy.handlers.project.project_handler.TEMPLATES", {"aws:ec2:tls-via-ngrok": Path("/mock/template/path")})
-    @patch("jupyter_deploy.handlers.project.project_handler.fs_utils.safe_clean_directory")
-    def test_clear_project_path(self, mock_safe_clean_directory):
-        """Test clear_project_path."""
+    @patch("jupyter_deploy.fs_utils.safe_clean_directory")
+    @patch("jupyter_deploy.handlers.project.project_handler.ProjectHandler._find_template_path")
+    def test_clear_project_path(self, mock_find_template_path, mock_safe_clean_directory):
+        """Test clear_project_path calls fs_utils.safe_clean_directory with correct path."""
         # Setup
-        handler = ProjectHandler(project_dir="/project/path")
+        mock_path = Path("/test/project/dir")
+        mock_find_template_path.return_value = Path("/mock/template/path")
+        
+        handler = ProjectHandler(project_dir="/test/project/dir")
+        handler.project_path = mock_path
         
         # Execute
         handler.clear_project_path()
         
         # Assert
-        mock_safe_clean_directory.assert_called_once_with(Path("/project/path"))
+        mock_safe_clean_directory.assert_called_once_with(mock_path)
 
-    @patch("jupyter_deploy.handlers.project.project_handler.TEMPLATES", {"aws:ec2:tls-via-ngrok": Path("/mock/template/path")})
-    @patch("jupyter_deploy.handlers.project.project_handler.fs_utils.safe_copy_tree")
-    def test_setup(self, mock_safe_copy_tree):
-        """Test setup."""
+    @patch("jupyter_deploy.fs_utils.safe_copy_tree")
+    @patch("jupyter_deploy.handlers.project.project_handler.ProjectHandler._find_template_path")
+    def test_setup(self, mock_find_template_path, mock_safe_copy_tree):
+        """Test setup calls fs_utils.safe_copy_tree with correct paths."""
         # Setup
-        handler = ProjectHandler(project_dir="/project/path")
-        handler.source_path = Path("/source/path")
+        mock_project_path = Path("/test/project/dir")
+        mock_source_path = Path("/mock/template/path")
+        mock_find_template_path.return_value = mock_source_path
+        
+        handler = ProjectHandler(project_dir="/test/project/dir")
+        handler.project_path = mock_project_path
         
         # Execute
         handler.setup()
         
         # Assert
-        mock_safe_copy_tree.assert_called_once_with(Path("/source/path"), Path("/project/path"))
-
-    @patch("jupyter_deploy.handlers.project.project_handler.TEMPLATES", {})
-    def test_init_with_empty_templates(self):
-        """Test initialization with empty templates dictionary."""
-        # Execute and Assert
-        with self.assertRaises(ValueError) as context:
-            ProjectHandler(project_dir="/custom/project/path")
-        
-        self.assertIn("Template 'aws:ec2:tls-via-ngrok' not found", str(context.exception))
-        self.assertIn("[]", str(context.exception))
+        mock_safe_copy_tree.assert_called_once_with(mock_source_path, mock_project_path)

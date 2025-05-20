@@ -39,10 +39,23 @@ class ProjectHandler:
         if not template_name:
             raise ValueError("Template name cannot be empty")
 
-        if template_name in TEMPLATES:
-            return TEMPLATES[template_name]
+        engine_name = self.engine.lower()
+
+        print(TEMPLATES)
         
-        raise ValueError(f"Template '{template_name}' not found. Available templates: {list(TEMPLATES.keys())}")
+        if engine_name not in TEMPLATES:
+            available_engines = list(TEMPLATES.keys()) if TEMPLATES else "none available"
+            raise ValueError(f"Engine '{engine_name}' is not supported. Available engines: {available_engines}")
+        
+        engine_templates = TEMPLATES[engine_name]
+        
+        if template_name in engine_templates:
+            return engine_templates[template_name]
+        
+        raise ValueError(
+            f"Template '{template_name}' not found for engine '{engine_name}'. "
+            f"Available templates: {list(engine_templates.keys()) if engine_templates else 'none'}"
+        )
 
     def may_export_to_project_path(self) -> bool:
         """Verify that the project output path does not contain any file or sub-directory."""
