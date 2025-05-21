@@ -1,8 +1,8 @@
 import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from jupyter_deploy.template_utils import get_templates, TEMPLATE_ENTRY_POINTS
+from jupyter_deploy.template_utils import TEMPLATE_ENTRY_POINTS, get_templates
 
 
 class TestTemplateUtils(unittest.TestCase):
@@ -121,11 +121,11 @@ class TestTemplateUtils(unittest.TestCase):
         # Execute
         from jupyter_deploy.template_utils import TEMPLATE_ENTRY_POINTS
 
-        templates = {engine: mock_get_templates(engine) for engine in TEMPLATE_ENTRY_POINTS.keys()}
+        templates = {engine: mock_get_templates(engine) for engine in TEMPLATE_ENTRY_POINTS}
 
         # Assert
         self.assertEqual(len(templates), len(TEMPLATE_ENTRY_POINTS))
-        for engine in TEMPLATE_ENTRY_POINTS.keys():
+        for engine in TEMPLATE_ENTRY_POINTS:
             self.assertIn(engine, templates)
             self.assertEqual(templates[engine], {"test:template": Path(f"/mock/{engine}/path")})
 

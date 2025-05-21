@@ -6,6 +6,14 @@ This project leverages [uv](https://docs.astral.sh/uv/getting-started/) to manag
 run tools such as linter, type-checker, testing, or publishing.
 Fork and clone the repository to your local workspace, then install `uv`.
 
+This is a monorepo containing multiple packages managed as a uv workspace. After cloning the repository, you can simply run:
+
+```bash
+uv sync
+```
+
+This will automatically handle installation of all packages and their dependencies.
+
 ## Interact with the library
 Use `uv` to manage your virtual environment, and interact directly with the library:
 > uv run python -c "import jupyter_deploy; print(jupyter_deploy.hello())"
@@ -21,24 +29,31 @@ This project uses:
 You can access each tool with `uv` commands.
 
 ### Lint & order imports
-> uv run ruff check
+```bash
+uv run ruff check
+```
 
 You can attempt to fix issues by running
-> uv run ruff --fix
+```bash
+uv run ruff check --fix
+```
 
 ### Format your code
 `ruff` is a code formater in addition to a linter,
 do not forget to format the code before raising a pull request:
-> uv run ruff format
+```bash
+uv run ruff format
+```
 
 ### Enforce type checking
-> uv run mypy
+```bash
+uv run mypy
+```
 
 ### Unit tests
-> uv run pytest tests/unit
-
-Or to target a specific test:
-> uv run pytest tests/unit/path/to/test_file.py
+```bash
+uv run pytest
+```
 
 ### Integration tests
 To be added

@@ -1,12 +1,6 @@
 """Tests for the template module."""
 
-import os
-from pathlib import Path
-
-import pytest
-
 from jupyter_deploy_tf_aws_ec2_ngrok.template import TEMPLATE_PATH
-
 
 EXPECTED_TEMPLATE_FILES = [
     "cloudinit.sh",

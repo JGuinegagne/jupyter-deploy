@@ -5,7 +5,6 @@ from typer.testing import CliRunner
 
 from jupyter_deploy.cli.terraform_app import terraform_app
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.template_utils import TEMPLATES
 
 
 class TestTerraformApp(unittest.TestCase):

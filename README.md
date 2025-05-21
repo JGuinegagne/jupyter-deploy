@@ -9,12 +9,23 @@ This monorepo contains packages for deploying Jupyter applications to various cl
 
 ### Installation
 
-Run the following commands from the repository root to install each package from source.
+The project uses [uv](https://github.com/astral-sh/uv) for dependency management. After cloning the repository, run the following commands from the repository root:
 
 ```bash
-# Execute in this order
-pip install -e ./libs/jupyter-deploy-tf-aws-ec2-ngrok
-pip install -e ./libs/jupyter-deploy
+# Create and active new environment
+uv venv
+source .venv/bin/activate
+
+# Sync all dependencies
+uv sync
+```
+
+### Usage
+
+To get started, run from the same environment:
+
+```bash
+uv run jupyter-deploy --help
 ```
 
 ## Contributing

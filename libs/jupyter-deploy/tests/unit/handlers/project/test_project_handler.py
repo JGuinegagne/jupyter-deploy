@@ -1,6 +1,6 @@
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.handlers.project.project_handler import ProjectHandler

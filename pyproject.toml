@@ -1,0 +1,35 @@
+[project]
+name = "jupyter-deploy-monorepo"
+version = "0.1.0"
+description = "Monorepo for Jupyter deployment packages"
+readme = "README.md"
+requires-python = ">=3.12"
+
+[tool.uv.workspace]
+members = [
+    "libs/jupyter-deploy",
+    "libs/jupyter-deploy-tf-aws-ec2-ngrok",
+    "images/uvbase"
+]
+
+[tool.uv]
+dev-dependencies = [
+    "mypy>=1.15.0",
+    "pytest>=8.3.5",
+    "pytest-cov>=6.1.1",
+    "ruff>=0.11.8",
+    "typer>=0.15.4",
+    "rich>=10.11.0",
+]
+
+[tool.mypy]
+files = [
+    "libs/jupyter-deploy",
+    "libs/jupyter-deploy-tf-aws-ec2-ngrok",
+]
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "libs/jupyter-deploy",
+  "libs/jupyter-deploy-tf-aws-ec2-ngrok"
+]

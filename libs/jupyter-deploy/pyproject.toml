@@ -8,8 +8,8 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "click>=8.1.8",
-    "typer>=0.15.3",
+    "click<8.2.0",
+    "typer>=0.15.4",
 ]
 
 [project.scripts]
@@ -27,8 +27,11 @@ aws = [
 ]
 
 default_template = [
-    "jupyter-deploy-tf-aws-ec2-ngrok>=0.1.0",
+    "jupyter-deploy-tf-aws-ec2-ngrok",
 ]
+
+[tool.uv.sources]
+jupyter-deploy-tf-aws-ec2-ngrok = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -91,6 +94,3 @@ exclude_lines = [
 ]
 fail_under = 80
 show_missing = true
-
-[tool.uv.workspace]
-members = ["images/uvbase"]

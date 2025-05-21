@@ -3,15 +3,6 @@
 Jupyter deploy provides a command line interface tool (CLI) that you can
 use to deploy a Jupyter Server container to a remote compute provided by a Cloud provider.
 
-## Install
-
-From the repository root, run in order:
-
-```bash
-pip install -e ./libs/jupyter-deploy-tf-aws-ec2-ngrok
-pip install -e ./libs/jupyter-deploy
-```
-
 ### Install Terraform
 
 Terraform from HashiCorp is the default deployment engine. To use it, you must set it up in your system.
@@ -22,12 +13,25 @@ Verify installation by running
 terraform --version
 ```
 
-## The CLI
+## Install jupyter-deploy dependencies
 
-To get started, open a terminal and run:
+From the repository root, run:
 
 ```bash
-jupyter-deploy --help
+# Create and active new environment
+uv venv
+source .venv/bin/activate
+
+# Sync all dependencies
+uv sync
+```
+
+## The CLI
+
+To get started, open a terminal, cd to the repository root, and run:
+
+```bash
+uv run jupyter-deploy --help
 ```
 
 ## Templates
@@ -35,7 +39,7 @@ jupyter-deploy --help
 To use a template, use the following command format:
 
 ```bash
-jupyter-deploy terraform generate --provider aws --infra ec2 --template tls-via-ngrok
+uv run jupyter-deploy terraform generate --provider aws --infra ec2 --template tls-via-ngrok
 ```
 
 ## Contributing
