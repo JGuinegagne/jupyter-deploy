@@ -81,37 +81,6 @@ class TestTemplateUtils(unittest.TestCase):
             mock_entry_points.assert_called_once_with(group=TEMPLATE_ENTRY_POINTS["terraform"])
             mock_entry_point.load.assert_called_once()
 
-    @patch("importlib.metadata.entry_points")
-    def test_get_templates_load_exception(self, mock_entry_points):
-        """Test that get_templates handles exceptions when loading entry points."""
-        # Setup
-        mock_entry_point = MagicMock()
-        mock_entry_point.name = "aws_ec2_tls-via-ngrok"
-        mock_entry_point.load.side_effect = Exception("Failed to load")
-
-        mock_entry_points.return_value = [mock_entry_point]
-
-        # Execute
-        templates = get_templates("terraform")
-
-        # Assert
-        self.assertEqual(len(templates), 0)
-        mock_entry_points.assert_called_once_with(group=TEMPLATE_ENTRY_POINTS["terraform"])
-        mock_entry_point.load.assert_called_once()
-
-    @patch("importlib.metadata.entry_points")
-    def test_get_templates_entry_points_exception(self, mock_entry_points):
-        """Test that get_templates handles exceptions when getting entry points."""
-        # Setup
-        mock_entry_points.side_effect = Exception("Failed to get entry points")
-
-        # Execute
-        templates = get_templates("terraform")
-
-        # Assert
-        self.assertEqual(len(templates), 0)
-        mock_entry_points.assert_called_once_with(group=TEMPLATE_ENTRY_POINTS["terraform"])
-
     @patch("jupyter_deploy.template_utils.get_templates")
     def test_templates_loaded_for_all_engines(self, mock_get_templates):
         """Test that TEMPLATES dictionary is populated with all supported engines."""

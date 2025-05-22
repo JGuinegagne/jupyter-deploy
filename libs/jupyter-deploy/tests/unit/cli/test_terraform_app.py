@@ -41,7 +41,7 @@ class TestTerraformApp(unittest.TestCase):
             project_dir=None,
             engine=EngineType.TERRAFORM,
             provider="aws",
-            infra="ec2",
+            infrastructure="ec2",
             template="tls-via-ngrok",
         )
 
@@ -59,7 +59,7 @@ class TestTerraformApp(unittest.TestCase):
                 "terraform",
                 "--provider",
                 "aws",
-                "--infra",
+                "--infrastructure",
                 "ec2",
                 "--template",
                 "other-template",
@@ -75,7 +75,7 @@ class TestTerraformApp(unittest.TestCase):
             project_dir="sandbox/sb1",
             engine=EngineType.TERRAFORM,
             provider="aws",
-            infra="ec2",
+            infrastructure="ec2",
             template="other-template",
         )
 
@@ -86,7 +86,8 @@ class TestTerraformApp(unittest.TestCase):
 
         runner = CliRunner()
         result = runner.invoke(
-            terraform_app, ["generate", "-e", "terraform", "-t", "other-template", "-p", "sandbox/sb1"]
+            terraform_app,
+            ["generate", "-e", "terraform", "-P", "aws", "-I", "ec2", "-T", "a-template", "-p", "sandbox/sb1"],
         )
 
         # Check that the command ran successfully
@@ -96,8 +97,8 @@ class TestTerraformApp(unittest.TestCase):
             project_dir="sandbox/sb1",
             engine=EngineType.TERRAFORM,
             provider="aws",
-            infra="ec2",
-            template="other-template",
+            infrastructure="ec2",
+            template="a-template",
         )
 
     @patch("jupyter_deploy.handlers.project.project_handler.ProjectHandler")

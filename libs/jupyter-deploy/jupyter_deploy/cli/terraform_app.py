@@ -5,6 +5,8 @@ from rich.console import Console
 
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.handlers.project import project_handler  # import module for unit testing
+from jupyter_deploy.infrastructure.enum import AWSInfrastructureType, InfrastructureType
+from jupyter_deploy.provider.enum import ProviderType
 
 terraform_app = typer.Typer(
     help=(
@@ -20,10 +22,12 @@ def generate(
     engine: Annotated[
         EngineType, typer.Option("--engine", "-e", help="software to deploy resources")
     ] = EngineType.TERRAFORM,
-    provider: Annotated[str, typer.Option("--provider", help="cloud provider (e.g., aws, gcp)")] = "aws",
-    infra: Annotated[str, typer.Option("--infra", help="infrastructure type (e.g., ec2, lambda)")] = "ec2",
+    provider: Annotated[ProviderType, typer.Option("--provider", "-P", help="cloud provider")] = ProviderType.AWS,
+    infrastructure: Annotated[
+        InfrastructureType, typer.Option("--infrastructure", "-I", help="infrastructure type")
+    ] = AWSInfrastructureType.EC2,
     template: Annotated[
-        str, typer.Option("--template", "-t", help="template name (e.g., tls-via-ngrok)")
+        str, typer.Option("--template", "-T", help="template name (e.g., tls-via-ngrok)")
     ] = "tls-via-ngrok",
     project_dir: Annotated[
         str | None, typer.Option("--output-path", "-p", help="output path for your terraform project")
@@ -31,7 +35,7 @@ def generate(
 ) -> None:
     """Write a set of terraform .tf files in the project directory."""
     project = project_handler.ProjectHandler(
-        project_dir=project_dir, engine=engine, provider=provider, infra=infra, template=template
+        project_dir=project_dir, engine=engine, provider=provider, infrastructure=infrastructure, template=template
     )
     console = Console()
 

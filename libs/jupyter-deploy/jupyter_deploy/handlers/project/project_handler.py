@@ -2,6 +2,8 @@ from pathlib import Path
 
 from jupyter_deploy import fs_utils
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.infrastructure.enum import AWSInfrastructureType, InfrastructureType
+from jupyter_deploy.provider.enum import ProviderType
 from jupyter_deploy.template_utils import TEMPLATES
 
 
@@ -12,8 +14,8 @@ class ProjectHandler:
         self,
         project_dir: str | None,
         engine: EngineType = EngineType.TERRAFORM,
-        provider: str = "aws",
-        infra: str = "ec2",
+        provider: ProviderType = ProviderType.AWS,
+        infrastructure: InfrastructureType = AWSInfrastructureType.EC2,
         template: str = "tls-via-ngrok",
     ) -> None:
         """Create the project handler."""
@@ -24,17 +26,19 @@ class ProjectHandler:
 
         self.engine = engine
 
-        template_name = ""
-        if provider and infra and template:
-            template_name = f"{provider}:{infra}:{template}"
+        full_template_name: str | None = None
+        if provider and infrastructure and template:
+            full_template_name = f"{provider.lower()}:{infrastructure.lower()}:{template.lower()}"
 
-        self.source_path = self._find_template_path(template_name)
+        self.source_path = self._find_template_path(full_template_name)
 
-    def _find_template_path(self, template_name: str) -> Path:
+    def _find_template_path(self, template_name: str | None) -> Path:
         """Return the path of the template name.
 
-        The template should be of the form <provider>:<infra-type>:<template_name>.
-        Raises ValueError if the template is not found.
+        The template should be of the form <provider>:<infrastructure>:<template>.
+
+        Raises:
+            ValueError: if the template is not found.
         """
         if not template_name:
             raise ValueError("Template name cannot be empty")
