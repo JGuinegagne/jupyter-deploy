@@ -40,7 +40,9 @@ class TestTerraformApp(unittest.TestCase):
         mock_handler_cls.assert_called_once_with(
             project_dir=None,
             engine=EngineType.TERRAFORM,
-            template_name="aws:ec2:tls-via-ngrok",
+            provider="aws",
+            infrastructure="ec2",
+            template="tls-via-ngrok",
         )
 
     @patch("jupyter_deploy.handlers.project.project_handler.ProjectHandler")
@@ -55,8 +57,12 @@ class TestTerraformApp(unittest.TestCase):
                 "generate",
                 "--engine",
                 "terraform",
+                "--provider",
+                "aws",
+                "--infrastructure",
+                "ec2",
                 "--template",
-                "aws:ec2:other-template",
+                "other-template",
                 "--output-path",
                 "sandbox/sb1",
             ],
@@ -68,7 +74,9 @@ class TestTerraformApp(unittest.TestCase):
         mock_handler_cls.assert_called_once_with(
             project_dir="sandbox/sb1",
             engine=EngineType.TERRAFORM,
-            template_name="aws:ec2:other-template",
+            provider="aws",
+            infrastructure="ec2",
+            template="other-template",
         )
 
     @patch("jupyter_deploy.handlers.project.project_handler.ProjectHandler")
@@ -78,7 +86,8 @@ class TestTerraformApp(unittest.TestCase):
 
         runner = CliRunner()
         result = runner.invoke(
-            terraform_app, ["generate", "-e", "terraform", "-t", "aws:ec2:other-template", "-p", "sandbox/sb1"]
+            terraform_app,
+            ["generate", "-e", "terraform", "-P", "aws", "-I", "ec2", "-T", "a-template", "-p", "sandbox/sb1"],
         )
 
         # Check that the command ran successfully
@@ -87,7 +96,9 @@ class TestTerraformApp(unittest.TestCase):
         mock_handler_cls.assert_called_once_with(
             project_dir="sandbox/sb1",
             engine=EngineType.TERRAFORM,
-            template_name="aws:ec2:other-template",
+            provider="aws",
+            infrastructure="ec2",
+            template="a-template",
         )
 
     @patch("jupyter_deploy.handlers.project.project_handler.ProjectHandler")
