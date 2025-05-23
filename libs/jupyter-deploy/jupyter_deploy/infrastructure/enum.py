@@ -5,7 +5,6 @@ class AWSInfrastructureType(str, Enum):
     """Enum to list the types of AWS infrastructure."""
 
     EC2 = "ec2"
-    LAMBDA = "lambda"
 
 
 # Use the AWS infrastructure type as the default infrastructure type for now

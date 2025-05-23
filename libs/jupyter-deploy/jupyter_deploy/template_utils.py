@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 
 TEMPLATE_ENTRY_POINTS = {engine_type: f"jupyter_deploy.{engine_type.value}_templates" for engine_type in EngineType}
 
+TEMPLATES: dict[str, dict[str, Path]] = {engine: {} for engine in TEMPLATE_ENTRY_POINTS}
+
 
 def get_templates(engine: EngineType) -> dict[str, Path]:
     """Get all registered templates for a specific engine from entry points.
@@ -40,8 +42,6 @@ def get_templates(engine: EngineType) -> dict[str, Path]:
 
     return templates
 
-
-TEMPLATES: dict[str, dict[str, Path]] = {engine: {} for engine in TEMPLATE_ENTRY_POINTS}
 
 for engine in TEMPLATE_ENTRY_POINTS:
     TEMPLATES[engine] = get_templates(engine)

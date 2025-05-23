@@ -12,11 +12,6 @@ This monorepo contains packages for deploying Jupyter applications to various cl
 The project uses [uv](https://github.com/astral-sh/uv) for dependency management. After cloning the repository, run the following commands from the repository root:
 
 ```bash
-# Create and active new environment
-uv venv
-source .venv/bin/activate
-
-# Sync all dependencies
 uv sync
 ```
 
