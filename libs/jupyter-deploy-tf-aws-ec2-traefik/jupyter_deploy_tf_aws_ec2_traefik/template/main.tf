@@ -315,6 +315,18 @@ data "local_file" "dockerfile_jupyter" {
   filename = "${path.module}/dockerfile.jupyter"
 }
 
+data "local_file" "start_jupyter" {
+  filename = "${path.module}/start-jupyter.sh"
+}
+
+data "local_file" "pyproject_jupyter" {
+  filename = "${path.module}/pyproject.jupyter.toml"
+}
+
+data "local_file" "jupyter_server_config" {
+  filename = "${path.module}/jupyter_server_config.py"
+}
+
 # variables consistency checks
 locals {
   full_domain         = "${var.subdomain_name}.${var.domain_name}"
@@ -336,13 +348,16 @@ locals {
 # SSM into the instance and execute the start-up scripts
 locals {
   # In order to inject the file content with the correct 
-  indent_count                = 10
-  indent_str                  = join("", [for i in range(local.indent_count) : " "])
-  cloud_init_indented         = join("\n${local.indent_str}", compact(split("\n", data.local_file.cloud_init.content)))
-  docker_compose_indented     = join("\n${local.indent_str}", compact(split("\n", local.docker_compose_file)))
-  dockerfile_jupyter_indented = join("\n${local.indent_str}", compact(split("\n", data.local_file.dockerfile_jupyter.content)))
-  docker_startup_indented     = join("\n${local.indent_str}", compact(split("\n", data.local_file.docker_startup.content)))
-  traefik_config_indented     = join("\n${local.indent_str}", compact(split("\n", local.traefik_config_file)))
+  indent_count                   = 10
+  indent_str                     = join("", [for i in range(local.indent_count) : " "])
+  cloud_init_indented            = join("\n${local.indent_str}", compact(split("\n", data.local_file.cloud_init.content)))
+  docker_compose_indented        = join("\n${local.indent_str}", compact(split("\n", local.docker_compose_file)))
+  dockerfile_jupyter_indented    = join("\n${local.indent_str}", compact(split("\n", data.local_file.dockerfile_jupyter.content)))
+  start_jupyter_indented         = join("\n${local.indent_str}", compact(split("\n", data.local_file.start_jupyter.content)))
+  docker_startup_indented        = join("\n${local.indent_str}", compact(split("\n", data.local_file.docker_startup.content)))
+  traefik_config_indented        = join("\n${local.indent_str}", compact(split("\n", local.traefik_config_file)))
+  pyproject_jupyter_indented     = join("\n${local.indent_str}", compact(split("\n", data.local_file.pyproject_jupyter.content)))
+  jupyter_server_config_indented = join("\n${local.indent_str}", compact(split("\n", data.local_file.jupyter_server_config.content)))
 }
 
 locals {
@@ -374,6 +389,15 @@ mainSteps:
           tee /opt/docker/dockerfile.jupyter << 'EOF'
           ${local.dockerfile_jupyter_indented}
           EOF
+          tee /opt/docker/start-jupyter.sh << 'EOF'
+          ${local.start_jupyter_indented}
+          EOF
+          tee /opt/docker/pyproject.jupyter.toml << 'EOF'
+          ${local.pyproject_jupyter_indented}
+          EOF
+          tee /opt/docker/jupyter_server_config.py << 'EOF'
+          ${local.jupyter_server_config_indented}
+          EOF
 
   - action: aws:runShellScript
     name: StartDockerServices
@@ -389,12 +413,16 @@ DOC
     fileexists("${path.module}/cloudinit.sh"),
     fileexists("${path.module}/docker-startup.sh"),
     fileexists("${path.module}/dockerfile.jupyter"),
+    fileexists("${path.module}/start-jupyter.sh"),
+    fileexists("${path.module}/jupyter_server_config.py"),
   ])
 
   files_not_empty = alltrue([
     length(data.local_file.cloud_init.content) > 0,
     length(data.local_file.docker_startup.content) > 0,
     length(data.local_file.dockerfile_jupyter) > 0,
+    length(data.local_file.start_jupyter) > 0,
+    length(data.local_file.jupyter_server_config) > 0,
   ])
 
   docker_compose_valid = can(yamldecode(local.docker_compose_file))
