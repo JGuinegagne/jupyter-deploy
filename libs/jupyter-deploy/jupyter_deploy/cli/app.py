@@ -7,8 +7,11 @@ from rich.console import Console
 
 from jupyter_deploy import cmd_utils
 from jupyter_deploy.cli.servers_app import servers_app
-from jupyter_deploy.cli.terraform_app import terraform_app
+from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.handlers.project import config_handler
+from jupyter_deploy.handlers.project.init_handler import InitHandler
+from jupyter_deploy.infrastructure.enum import AWSInfrastructureType, InfrastructureType
+from jupyter_deploy.provider.enum import ProviderType
 
 
 class JupyterDeployCliRunner:
@@ -21,7 +24,6 @@ class JupyterDeployCliRunner:
             no_args_is_help=True,
         )
         self._setup_basic_commands()
-        self.app.add_typer(terraform_app, name="terraform")
         self.app.add_typer(servers_app, name="servers")
 
     def _setup_basic_commands(self) -> None:
@@ -34,6 +36,67 @@ class JupyterDeployCliRunner:
 
 
 runner = JupyterDeployCliRunner()
+
+
+@runner.app.command()
+def init(
+    path: Annotated[
+        str,
+        typer.Argument(
+            help="Path to the directory where jupyter-deploy will create your project files. "
+            "Pass '.' to use your current working directory."
+        ),
+    ],
+    engine: Annotated[
+        EngineType, typer.Option("--engine", "-E", help="Infrastructure as code software to manage your resources.")
+    ] = EngineType.TERRAFORM,
+    provider: Annotated[
+        ProviderType, typer.Option("--provider", "-P", help="Cloud provider where your resources will be provisioned.")
+    ] = ProviderType.AWS,
+    infrastructure: Annotated[
+        InfrastructureType,
+        typer.Option(
+            "--infrastructure",
+            "-I",
+            help="Infrastructure service that your cloud provider will use to provision your resources.",
+        ),
+    ] = AWSInfrastructureType.EC2,
+    template: Annotated[
+        str, typer.Option("--template", "-T", help="Base name of the infrastrucuture as code template (e.g., traefik)")
+    ] = "traefik",
+) -> None:
+    """Initialize a project directory containing the specified IaC template.
+
+    Template will be selected based on the provided parameters - the matching
+    template package must have already been installed.
+
+    Target project path must be specified. If the path is not empty, prompts
+    for confirmation before overwriting existing content.
+    """
+    project = InitHandler(
+        project_dir=path,
+        engine=engine,
+        provider=provider,
+        infrastructure=infrastructure,
+        template=template,
+    )
+    console = Console()
+
+    if not project.may_export_to_project_path():
+        delete_existing = typer.confirm(
+            f"The directory {project.project_path} is not empty, do you want to delete its content?"
+        )
+
+        if delete_existing:
+            project.clear_project_path()
+            console.print("Deleted existing files in project directory.\n", style="yellow")
+        else:
+            console.print(f"Left files under {project.project_path} untouched.\n", style="yellow")
+            typer.Abort()
+            return
+
+    project.setup()
+    console.print(f"Created start-up project files at: {project.project_path}.")
 
 
 @runner.app.command()
@@ -126,7 +189,7 @@ class JupyterDeployApp(JupyterApp):
     name = "jupyter-deploy"
     description = "Deploy Jupyter notebooks application to your favorite Cloud provider."
 
-    def start(self):
+    def start(self) -> None:
         """Run the deploy application."""
         args_without_command = sys.argv[2:] if len(sys.argv) > 2 else []
         sys.argv = args_without_command
