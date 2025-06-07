@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from pydantic import ValidationError
 
 from jupyter_deploy.engine.terraform.tf_config import TerraformConfigHandler
+from jupyter_deploy.engine.terraform.tf_constants import TF_DEFAULT_PLAN_FILENAME
 
 
 class TestTerraformConfigHandler(unittest.TestCase):
@@ -17,7 +18,17 @@ class TestTerraformConfigHandler(unittest.TestCase):
 
         # Assert
         self.assertIsNotNone(handler)
-        self.assertEqual(handler.plan_out_path, path / TerraformConfigHandler.TF_DFT_PLAN_FILENAME)
+        self.assertEqual(handler.plan_out_path, path / TF_DEFAULT_PLAN_FILENAME)
+
+    def test_class_uses_custom_output_file_when_provided(self) -> None:
+        # Arrange
+        path = Path("/fake/path")
+        custom_output = "custom-output-file"
+        handler = TerraformConfigHandler(path, output_filename=custom_output)
+
+        # Assert
+        self.assertIsNotNone(handler)
+        self.assertEqual(handler.plan_out_path, path / custom_output)
 
     @patch("jupyter_deploy.fs_utils.file_exists")
     def test_verify_preset_exists_calls_fs_util(self, mock_file_exists: Mock) -> None:

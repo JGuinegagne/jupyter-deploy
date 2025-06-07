@@ -10,34 +10,35 @@ from jupyter_deploy import cmd_utils, fs_utils
 from jupyter_deploy.engine.engine_config import EngineConfigHandler
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.engine.terraform import tf_plan, tf_verify
+from jupyter_deploy.engine.terraform.tf_constants import (
+    TF_DEFAULT_PLAN_FILENAME,
+    TF_INIT_CMD,
+    TF_PARSE_PLAN_CMD,
+    TF_PLAN_CMD,
+    TF_RECORDED_SECRETS_FILENAME,
+    TF_RECORDED_VARS_FILENAME,
+)
 from jupyter_deploy.provider.aws import aws_cli
 
 
 class TerraformConfigHandler(EngineConfigHandler):
     """Config handler implementation for terraform projects."""
 
-    TF_INIT_CMD = ["terraform", "init"]
-    TF_PLAN_CMD = ["terraform", "plan"]
-    TF_PARSE_PLAN_CMD = ["terraform", "show", "-json"]
-    TF_DFT_PLAN_FILENAME = "jdout-tfplan"
-    TF_RECORDED_VARS_FILENAME = "jdinputs.auto.tfvars"
-    TF_RECORDED_SECRETS_FILENAME = "jdinputs.secrets.auto.tfvars"
-
-    def __init__(self, project_path: Path) -> None:
+    def __init__(self, project_path: Path, output_filename: str | None = None) -> None:
         super().__init__(
             project_path=project_path,
             engine=EngineType.TERRAFORM,
         )
-        self.plan_out_path = project_path / TerraformConfigHandler.TF_DFT_PLAN_FILENAME
+        self.plan_out_path = project_path / (output_filename or TF_DEFAULT_PLAN_FILENAME)
 
     def _get_preset_path(self, preset_name: str) -> Path:
         return self.project_path / f"defaults-{preset_name}.tfvars"
 
     def _get_recorded_vars_filepath(self) -> Path:
-        return self.project_path / TerraformConfigHandler.TF_RECORDED_VARS_FILENAME
+        return self.project_path / TF_RECORDED_VARS_FILENAME
 
     def _get_recorded_secrets_filepath(self) -> Path:
-        return self.project_path / TerraformConfigHandler.TF_RECORDED_SECRETS_FILENAME
+        return self.project_path / TF_RECORDED_SECRETS_FILENAME
 
     def verify_preset_exists(self, preset_name: str) -> bool:
         file_path = self._get_preset_path(preset_name)
@@ -87,14 +88,14 @@ class TerraformConfigHandler(EngineConfigHandler):
         # may give errors, this command will never delete your configuration or
         # state.
         init_retcode, init_timed_out = cmd_utils.run_cmd_and_pipe_to_terminal(
-            TerraformConfigHandler.TF_INIT_CMD.copy(),
+            TF_INIT_CMD.copy(),
         )
         if init_retcode != 0 or init_timed_out:
             console.print(":x: Error initializing Terraform project.", style="red")
             return
 
         # 2/ run terraform plan and save output with ``terraform plan PATH``
-        plan_cmds = TerraformConfigHandler.TF_PLAN_CMD.copy()
+        plan_cmds = TF_PLAN_CMD.copy()
 
         # 2.1/ output plan to disk
         plan_cmds.append(f"-out={self.plan_out_path.absolute()}")
@@ -120,7 +121,7 @@ class TerraformConfigHandler(EngineConfigHandler):
             return
 
         console = rich_console.Console()
-        cmds = TerraformConfigHandler.TF_PARSE_PLAN_CMD + [f"{self.plan_out_path.absolute()}"]
+        cmds = TF_PARSE_PLAN_CMD + [f"{self.plan_out_path.absolute()}"]
 
         try:
             plan_content_str = cmd_utils.run_cmd_and_capture_output(cmds)

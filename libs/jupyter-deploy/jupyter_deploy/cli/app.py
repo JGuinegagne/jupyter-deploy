@@ -10,7 +10,9 @@ from jupyter_deploy import cmd_utils
 from jupyter_deploy.cli.servers_app import servers_app
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.handlers.project import config_handler
+from jupyter_deploy.handlers.project.down_handler import DownHandler
 from jupyter_deploy.handlers.project.init_handler import InitHandler
+from jupyter_deploy.handlers.project.up_handler import UpHandler
 from jupyter_deploy.infrastructure.enum import AWSInfrastructureType, InfrastructureType
 from jupyter_deploy.provider.enum import ProviderType
 
@@ -131,11 +133,15 @@ def config(
     skip_verify: Annotated[
         bool, typer.Option("--skip-verify", help="Avoid verifying that the project dependencies are configured.")
     ] = False,
+    output_filename: Annotated[
+        str | None, typer.Option("--output-filename", "-f", help="Name of the file to store the configuration to.")
+    ] = None,
 ) -> None:
     """Verify the system configuration, prompt inputs and prepare for deployment.
 
     Run either from a jupyter-deploy project directory created with `jd init`
-    or pass a --path PATH to such a directory.
+    or pass a --path PATH to such a directory. Optionally, you can also pass an
+    --output-file argument.
 
     The `config` command will remember your variable values so that you do not need to
     specify them again next time you run `config`.
@@ -147,7 +153,7 @@ def config(
     preset_name = None if defaults_preset_name == "none" else defaults_preset_name
 
     with cmd_utils.project_dir(project_dir):
-        handler = config_handler.ConfigHandler(preset_name=preset_name)
+        handler = config_handler.ConfigHandler(preset_name=preset_name, output_filename=output_filename)
 
         if not handler.validate():
             return
@@ -179,20 +185,49 @@ def config(
 
 
 @runner.app.command()
-def up(project_dir: Annotated[str | None, typer.Option("--path", "-p")] = None) -> None:
+def up(
+    project_dir: Annotated[
+        str | None, typer.Option("--path", "-p", help="Directory of the jupyter-deploy project to bring up.")
+    ] = None,
+    config_filename: Annotated[
+        str | None,
+        typer.Option(
+            "--config-filename", "-f", help="Name of a file in the project_dir containing the execution configuration."
+        ),
+    ] = None,
+    auto_approve: Annotated[
+        bool, typer.Option("--answer-yes", "-y", help="Apply changes without confirmation prompt.")
+    ] = False,
+) -> None:
     """Apply the changes defined in the IaC template.
 
     Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    or pass a --path PATH to such a directory. Optionally, you can also pass a --config-file
+    argument.
 
     Call `jd config` first to set the input variables and
     verify the configuration.
     """
-    pass
+    with cmd_utils.project_dir(project_dir):
+        handler = UpHandler()
+        console = Console()
+
+        console.rule("[bold]jupyter-deploy:[/] verifying presence of config file")
+        config_file_path = handler.get_config_file_path(config_filename)
+        if config_file_path:
+            console.rule("[bold]jupyter-deploy:[/] applying infrastructure changes")
+            handler.apply(config_file_path, auto_approve)
 
 
 @runner.app.command()
-def down(project_dir: Annotated[str | None, typer.Option("--path", "-p")] = None) -> None:
+def down(
+    project_dir: Annotated[
+        str | None, typer.Option("--path", "-p", help="Directory of the jupyter-deploy project to bring down.")
+    ] = None,
+    auto_approve: Annotated[
+        bool, typer.Option("--answer-yes", "-y", help="Destroy resources without confirmation prompt.")
+    ] = False,
+) -> None:
     """Destroy the resources defined in the IaC template.
 
     Run either from a jupyter-deploy project directed that you created with `jd init`;
@@ -201,7 +236,12 @@ def down(project_dir: Annotated[str | None, typer.Option("--path", "-p")] = None
     No-op if you have not already created the infrastructure with `jd up`, or if you
     already ran `jd down`.
     """
-    pass
+    with cmd_utils.project_dir(project_dir):
+        handler = DownHandler()
+        console = Console()
+
+        console.rule("[bold]jupyter-deploy:[/] destroying infrastructure resources")
+        handler.destroy(auto_approve)
 
 
 @runner.app.command()
