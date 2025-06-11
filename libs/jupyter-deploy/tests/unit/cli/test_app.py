@@ -757,3 +757,53 @@ class TestDownCommand(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_project_ctx_manager.assert_called_once_with(None)
         mock_down_fns["destroy"].assert_called_once_with(True)
+
+
+class TestOpenCommand(unittest.TestCase):
+    @contextmanager
+    def mock_project_dir(*_args: object, **_kwargs: object) -> Generator[None]:
+        yield None
+
+    def get_mock_open_handler(self) -> tuple[Mock, dict[str, Mock]]:
+        mock_open_handler = Mock()
+        mock_get_url = Mock()
+        mock_open_url = Mock()
+
+        mock_open_handler.get_url = mock_get_url
+        mock_open_handler.open_url = mock_open_url
+
+        mock_get_url.return_value = "https://example.com/jupyter"
+
+        return mock_open_handler, {"get_url": mock_get_url, "open_url": mock_open_url}
+
+    @patch("jupyter_deploy.cli.app.OpenHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_open_command_runs_open(self, mock_project_ctx_manager: Mock, mock_open_handler_cls: Mock) -> None:
+        mock_project_ctx_manager.side_effect = TestOpenCommand.mock_project_dir
+
+        mock_open_handler_instance, mock_open_fns = self.get_mock_open_handler()
+        mock_open_handler_cls.return_value = mock_open_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["open"])
+
+        assert result.exit_code == 0
+        mock_project_ctx_manager.assert_called_once_with(None)
+        mock_open_fns["get_url"].assert_called_once()
+        mock_open_fns["open_url"].assert_called_once_with("https://example.com/jupyter")
+
+    @patch("jupyter_deploy.cli.app.OpenHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_open_command_with_custom_path(self, mock_project_ctx_manager: Mock, mock_open_handler_cls: Mock) -> None:
+        mock_project_ctx_manager.side_effect = TestOpenCommand.mock_project_dir
+
+        mock_open_handler_instance, mock_open_fns = self.get_mock_open_handler()
+        mock_open_handler_cls.return_value = mock_open_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["open", "--path", "/custom/path"])
+
+        assert result.exit_code == 0
+        mock_project_ctx_manager.assert_called_once_with("/custom/path")
+        mock_open_fns["get_url"].assert_called_once()
+        mock_open_fns["open_url"].assert_called_once_with("https://example.com/jupyter")
