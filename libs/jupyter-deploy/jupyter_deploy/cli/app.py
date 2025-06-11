@@ -8,7 +8,9 @@ from rich.console import Console
 
 from jupyter_deploy import cmd_utils
 from jupyter_deploy.cli.servers_app import servers_app
+from jupyter_deploy.cli.variables_decorator import with_project_variables
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
 from jupyter_deploy.handlers.project import config_handler
 from jupyter_deploy.handlers.project.down_handler import DownHandler
 from jupyter_deploy.handlers.project.init_handler import InitHandler
@@ -69,7 +71,7 @@ def init(
         str, typer.Option("--template", "-T", help="Base name of the infrastrucuture as code template (e.g., traefik)")
     ] = "traefik",
 ) -> None:
-    """Initialize a project directory containing the specified IaC template.
+    """Initialize a project directory containing the specified infrastructure-as-code template.
 
     Template will be selected based on the provided parameters - the matching
     template package must have already been installed.
@@ -108,10 +110,8 @@ def init(
 
 
 @runner.app.command()
+@with_project_variables()
 def config(
-    project_dir: Annotated[
-        str | None, typer.Option("--path", "-p", help="Directory of the jupyter-deploy project to configure.")
-    ] = None,
     defaults_preset_name: Annotated[
         str,
         typer.Option(
@@ -137,52 +137,54 @@ def config(
     output_filename: Annotated[
         str | None, typer.Option("--output-filename", "-f", help="Name of the file to store the configuration to.")
     ] = None,
+    variables: Annotated[
+        dict[str, TemplateVariableDefinition] | None,
+        typer.Option("--variables", "-v", help="Will be removed by the decorator."),
+    ] = None,
 ) -> None:
     """Verify the system configuration, prompt inputs and prepare for deployment.
 
-    Run either from a jupyter-deploy project directory created with `jd init`
-    or pass a --path PATH to such a directory. Optionally, you can also pass an
-    --output-file argument.
+    You must run this command from a jupyter-deploy project directory created with `jd init`.
 
     The `config` command will remember your variable values so that you do not need to
     specify them again next time you run `config`.
 
-    You can reset these recorded values with `--reset` or `-r`.
+    You can reset these recorded values with `--reset` or `-r`. Sensitive variables do not
+    get recorded unless you pass `--record-secrets` or `-s`.
 
-    Sensitive variables do not get recorded unless you pass `--record-secrets` or `-s`.
+    You can pass an `--output-file` or `-f` argument to choose where to save the planned changes.
     """
     preset_name = None if defaults_preset_name == "none" else defaults_preset_name
 
-    with cmd_utils.project_dir(project_dir):
-        handler = config_handler.ConfigHandler(preset_name=preset_name, output_filename=output_filename)
+    handler = config_handler.ConfigHandler(preset_name=preset_name, output_filename=output_filename)
 
-        if not handler.validate():
-            return
+    if not handler.validate():
+        return
 
-        run_verify = not skip_verify
-        run_configure = False
+    run_verify = not skip_verify
+    run_configure = False
 
-        console = Console()
+    console = Console()
 
-        if reset:
-            console.rule("[bold]jupyter-deploy:[/] resetting recorded variables and secrets")
-            handler.reset_recorded_variables()
-            handler.reset_recorded_secrets()
+    if reset:
+        console.rule("[bold]jupyter-deploy:[/] resetting recorded variables and secrets")
+        handler.reset_recorded_variables()
+        handler.reset_recorded_secrets()
 
-        if run_verify:
-            console.rule("[bold]jupyter-deploy:[/] verifying requirements")
-            run_configure = handler.verify_requirements()
-        else:
-            console.print("[bold]jupyter-deploy:[/] skipping verification of requirements")
-            run_configure = True
+    if run_verify:
+        console.rule("[bold]jupyter-deploy:[/] verifying requirements")
+        run_configure = handler.verify_requirements()
+    else:
+        console.print("[bold]jupyter-deploy:[/] skipping verification of requirements")
+        run_configure = True
 
-        if run_configure:
-            console.rule("[bold]jupyter-deploy:[/] configuring the project")
-            handler.configure()
+    if run_configure:
+        console.rule("[bold]jupyter-deploy:[/] configuring the project")
+        handler.configure(variable_overrides=variables)
 
-            console.rule("[bold]jupyter-deploy:[/] recording input values")
-            handler.record(record_vars=True, record_secrets=record_secrets)
-            console.rule()
+        console.rule("[bold]jupyter-deploy:[/] recording input values")
+        handler.record(record_vars=True, record_secrets=record_secrets)
+        console.rule()
 
 
 @runner.app.command()
@@ -200,7 +202,7 @@ def up(
         bool, typer.Option("--answer-yes", "-y", help="Apply changes without confirmation prompt.")
     ] = False,
 ) -> None:
-    """Apply the changes defined in the IaC template.
+    """Apply the changes defined in the infrastructure-as-code template.
 
     Run either from a jupyter-deploy project directory that you created with `jd init`;
     or pass a --path PATH to such a directory. Optionally, you can also pass a --config-file
@@ -229,7 +231,7 @@ def down(
         bool, typer.Option("--answer-yes", "-y", help="Destroy resources without confirmation prompt.")
     ] = False,
 ) -> None:
-    """Destroy the resources defined in the IaC template.
+    """Destroy the resources defined in the infrastructure-as-code template.
 
     Run either from a jupyter-deploy project directed that you created with `jd init`;
     or pass a --path PATH to such a directory.
