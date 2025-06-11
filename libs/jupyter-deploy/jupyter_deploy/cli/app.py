@@ -70,14 +70,23 @@ def init(
     template: Annotated[
         str, typer.Option("--template", "-T", help="Base name of the infrastrucuture as code template (e.g., traefik)")
     ] = "traefik",
+    overwrite: Annotated[
+        bool,
+        typer.Option(
+            "--overwrite",
+            "-o",
+            help="Overwrite the project directory instead of failing when the directory is not empty.",
+        ),
+    ] = False,
 ) -> None:
     """Initialize a project directory containing the specified infrastructure-as-code template.
 
     Template will be selected based on the provided parameters - the matching
     template package must have already been installed.
 
-    Target project path must be specified. If the path is not empty, prompts
-    for confirmation before overwriting existing content.
+    Target project path must be specified. If the path is not empty, command
+    will fail unless the --overwrite flag is passed. --overwrite will prompt
+    for confirmation before deleting existing content.
     """
     if path is None:
         init_help_cmds = ["jupyter", "deploy", "init", "--help"]
@@ -93,20 +102,31 @@ def init(
     console = Console()
 
     if not project.may_export_to_project_path():
-        delete_existing = typer.confirm(
-            f"The directory {project.project_path} is not empty, do you want to delete its content?"
-        )
-
-        if delete_existing:
-            project.clear_project_path()
-            console.print("Deleted existing files in project directory.\n", style="yellow")
-        else:
-            console.print(f"Left files under {project.project_path} untouched.\n", style="yellow")
-            typer.Abort()
+        if not overwrite:
+            console.line()
+            console.print(f":x: The directory {project.project_path} is not empty, aborting.", style="red")
+            console.line()
+            console.print("If you want to overwrite this directory, use the --overwrite option.\n", style="yellow")
             return
+        else:
+            console.line()
+            console.print(f":warning: The target directory {project.abs_project_path} is not empty.", style="yellow")
+            console.line()
+            console.print(
+                "Initiating the project may overwrite your existing files, are you sure you want to proceed?",
+                style="yellow",
+            )
+
+            overwrite_existing = typer.confirm("")
+
+            if not overwrite_existing:
+                console.line()
+                console.print(f"Left files under {project.project_path} untouched.\n", style="yellow")
+                typer.Abort()
+                return
 
     project.setup()
-    console.print(f"Created start-up project files at: {project.project_path}.")
+    console.print(f"Created start-up project files at: {project.project_path}.\n")
 
 
 @runner.app.command()
