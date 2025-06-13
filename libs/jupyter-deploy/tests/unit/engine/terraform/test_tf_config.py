@@ -1,6 +1,7 @@
 import json
 import subprocess
 import unittest
+from collections import OrderedDict
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -8,6 +9,14 @@ from pydantic import ValidationError
 
 from jupyter_deploy.engine.terraform.tf_config import TerraformConfigHandler
 from jupyter_deploy.engine.terraform.tf_constants import TF_DEFAULT_PLAN_FILENAME
+from jupyter_deploy.engine.vardefs import (
+    BoolTemplateVariableDefinition,
+    DictStrTemplateVariableDefinition,
+    FloatTemplateVariableDefinition,
+    ListStrTemplateVariableDefinition,
+    StrTemplateVariableDefinition,
+    TemplateVariableDefinition,
+)
 
 
 class TestTerraformConfigHandler(unittest.TestCase):
@@ -249,10 +258,11 @@ class TestTerraformConfigHandler(unittest.TestCase):
         handler = TerraformConfigHandler(Path("/fake/path"))
 
         # Act
-        handler.configure()
+        result = handler.configure()
 
         # Assert
         # Check the second call was to plan
+        self.assertTrue(result)
         self.assertEqual(mock_run_cmd.call_count, 2)
 
         plan_cmds = mock_run_cmd.mock_calls[1][1][0]
@@ -261,7 +271,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         self.assertIn("-out=", plan_cmds[2])
 
     @patch("jupyter_deploy.cmd_utils.run_cmd_and_pipe_to_terminal")
-    def test_configure_calls_tf_plan_passes_variable(self, mock_run_cmd: Mock) -> None:
+    def test_configure_calls_tf_plan_passes_preset(self, mock_run_cmd: Mock) -> None:
         # Arrange
         # First call for init returns success
         # Second call for plan returns success
@@ -270,10 +280,11 @@ class TestTerraformConfigHandler(unittest.TestCase):
         handler = TerraformConfigHandler(path)
 
         # Act
-        handler.configure(preset_name="all")
+        result = handler.configure(preset_name="all")
 
         # Assert
         # Check the second call was to plan
+        self.assertTrue(result)
         self.assertEqual(mock_run_cmd.call_count, 2)
 
         plan_cmds = mock_run_cmd.mock_calls[1][1][0]
@@ -285,6 +296,62 @@ class TestTerraformConfigHandler(unittest.TestCase):
         self.assertEqual(f"-var-file={expect_path.absolute()}", plan_cmds[3])
 
     @patch("jupyter_deploy.cmd_utils.run_cmd_and_pipe_to_terminal")
+    def test_configure_calls_tf_plan_with_variable_override(self, mock_run_cmd: Mock) -> None:
+        # Arrange
+        # First call for init returns success
+        # Second call for plan returns success
+        mock_run_cmd.side_effect = [(0, False), (0, False)]
+        path = Path("/fake/path")
+        handler = TerraformConfigHandler(path)
+
+        mock_var1 = Mock(spec=StrTemplateVariableDefinition)
+        mock_var2 = Mock(spec=FloatTemplateVariableDefinition)
+        mock_var3 = Mock(spec=BoolTemplateVariableDefinition)
+        mock_var4 = Mock(spec=ListStrTemplateVariableDefinition)
+        mock_var5 = Mock(spec=DictStrTemplateVariableDefinition)
+        mock_variables: dict[str, TemplateVariableDefinition] = OrderedDict(
+            {"var1": mock_var1, "var2": mock_var2, "var3": mock_var3, "var4": mock_var4, "var5": mock_var5}
+        )
+        for idx, key in enumerate(mock_variables.keys()):
+            mock_variables[key].variable_name = f"var{idx + 1}"
+
+        mock_var1.assigned_value = "some-value"
+        mock_var2.assigned_value = 3.1459
+        mock_var3.assigned_value = True
+        mock_var4.assigned_value = ["email1@example.com", "email2@example.com"]
+        mock_var5.assigned_value = {"Key1": "Val1", "Key2": "Val2"}
+
+        # Act
+        result = handler.configure(preset_name="all", variable_overrides=mock_variables)
+
+        # Assert
+        # Check the second call was to plan
+        self.assertTrue(result)
+        self.assertEqual(mock_run_cmd.call_count, 2)
+        plan_cmds = mock_run_cmd.mock_calls[1][1][0]
+
+        expect_path = path / "defaults-all.tfvars"
+        self.assertEqual(f"-var-file={expect_path.absolute()}", plan_cmds[3])
+
+        plan_cmds_len = len(plan_cmds)
+
+        # should append the 3 variables as [-var, varname:varvalue]
+        self.assertEqual("-var", plan_cmds[plan_cmds_len - 10])
+        self.assertEqual("var1=some-value", plan_cmds[plan_cmds_len - 9])
+
+        self.assertEqual("-var", plan_cmds[plan_cmds_len - 8])
+        self.assertEqual("var2=3.1459", plan_cmds[plan_cmds_len - 7])
+
+        self.assertEqual("-var", plan_cmds[plan_cmds_len - 6])
+        self.assertEqual("var3=true", plan_cmds[plan_cmds_len - 5])
+
+        self.assertEqual("-var", plan_cmds[plan_cmds_len - 4])
+        self.assertEqual('var4=["email1@example.com", "email2@example.com"]', plan_cmds[plan_cmds_len - 3])
+
+        self.assertEqual("-var", plan_cmds[plan_cmds_len - 2])
+        self.assertEqual('var5={"Key1": "Val1", "Key2": "Val2"}', plan_cmds[plan_cmds_len - 1])
+
+    @patch("jupyter_deploy.cmd_utils.run_cmd_and_pipe_to_terminal")
     @patch("rich.console.Console")
     def test_configure_does_not_call_plan_if_tf_init_fails(self, mock_console: Mock, mock_run_cmd: Mock) -> None:
         # Arrange
@@ -294,9 +361,10 @@ class TestTerraformConfigHandler(unittest.TestCase):
         handler = TerraformConfigHandler(Path("/fake/path"))
 
         # Act
-        handler.configure()
+        result = handler.configure()
 
         # Assert
+        self.assertFalse(result)
         self.assertEqual(mock_run_cmd.call_count, 1)  # Only init should be called
         mock_cmd_call = mock_run_cmd.mock_calls[0]
         self.assertEqual(mock_cmd_call[1][0][:2], ["terraform", "init"])
@@ -311,9 +379,10 @@ class TestTerraformConfigHandler(unittest.TestCase):
         handler = TerraformConfigHandler(Path("/fake/path"))
 
         # Act
-        handler.configure()
+        result = handler.configure()
 
         # Assert
+        self.assertFalse(result)
         self.assertEqual(mock_run_cmd.call_count, 1)  # Only init should be called
         mock_cmd_call = mock_run_cmd.mock_calls[0]
         self.assertEqual(mock_cmd_call[1][0][:2], ["terraform", "init"])
@@ -330,9 +399,10 @@ class TestTerraformConfigHandler(unittest.TestCase):
         handler = TerraformConfigHandler(Path("/fake/path"))
 
         # Act
-        handler.configure()
+        result = handler.configure()
 
         # Assert
+        self.assertFalse(result)
         self.assertEqual(mock_run_cmd.call_count, 2)
         self.assertEqual(mock_console_instance.print.call_count, 1)
         mock_print_call = mock_console_instance.print.mock_calls[0]
@@ -351,9 +421,10 @@ class TestTerraformConfigHandler(unittest.TestCase):
         handler = TerraformConfigHandler(Path("/fake/path"))
 
         # Act
-        handler.configure()
+        result = handler.configure()
 
         # Assert
+        self.assertFalse(result)
         self.assertEqual(mock_run_cmd.call_count, 2)
         self.assertEqual(mock_console_instance.print.call_count, 1)
         mock_print_call = mock_console_instance.print.mock_calls[0]
