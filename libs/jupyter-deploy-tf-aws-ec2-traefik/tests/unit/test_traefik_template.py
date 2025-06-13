@@ -10,6 +10,7 @@ EXPECTED_TEMPLATE_FILES = [
     "docker-startup.sh",
     "dockerfile.jupyter",
     "main.tf",
+    "manifest.yaml",
     "outputs.tf",
     "pyproject.jupyter.toml",
     "jupyter_server_config.py",

@@ -8,6 +8,7 @@ EXPECTED_TEMPLATE_FILES = [
     "docker-startup.sh",
     "dockerfile.jupyter",
     "main.tf",
+    "manifest.yaml",
     "ngrok.yml.tftpl",
     "outputs.tf",
     "variables.tf",
