@@ -1,6 +1,6 @@
 """Tests for the template module."""
 
-from jupyter_deploy_tf_aws_ec2_traefik.template import TEMPLATE_PATH
+from jupyter_deploy_tf_aws_ec2_base.template import TEMPLATE_PATH
 
 EXPECTED_TEMPLATE_FILES = [
     "cloudinit.sh",
@@ -14,7 +14,6 @@ EXPECTED_TEMPLATE_FILES = [
     "outputs.tf",
     "pyproject.jupyter.toml",
     "jupyter_server_config.py",
-    "README.md",
     "start-jupyter.sh",
     "traefik.yml.tftpl",
     "variables.tf",
