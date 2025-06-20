@@ -20,8 +20,8 @@ data "aws_partition" "current" {}
 locals {
   default_tags = {
     Source   = "jupyter-deploy"
-    Template = "aws-ec2-base"
-    Version  = "1.0.0"
+    Template = "tf-aws-ec2-base"
+    Version  = "0.1.0a1"
   }
 
   combined_tags = merge(
@@ -341,7 +341,7 @@ locals {
   docker_compose_file = templatefile("${path.module}/docker-compose.yml.tftpl", {
     oauth_provider           = var.oauth_provider
     full_domain              = local.full_domain
-    auth_regex               = "^https://auth\\\\.${replace(local.full_domain, ".", "\\\\.")}/?$"
+    auth_regex               = "^https://auth\\\\.${replace(local.full_domain, ".", "\\\\.")}/(.*)"
     github_client_id         = var.oauth_app_client_id
     aws_region               = data.aws_region.current.name
     allowed_github_usernames = join(",", [for username in var.oauth_allowed_usernames : "${username}"])
