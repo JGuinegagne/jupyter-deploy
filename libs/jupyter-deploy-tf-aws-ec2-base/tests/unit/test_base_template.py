@@ -3,7 +3,7 @@
 from jupyter_deploy_tf_aws_ec2_base.template import TEMPLATE_PATH
 
 EXPECTED_TEMPLATE_FILES = [
-    "cloudinit.sh",
+    "cloudinit.sh.tftpl",
     "defaults-all.tfvars",
     "defaults-base.tfvars",
     "docker-compose.yml.tftpl",
@@ -18,6 +18,7 @@ EXPECTED_TEMPLATE_FILES = [
     "jupyter_server_config.py",
     "traefik.yml.tftpl",
     "variables.tf",
+    "update_users.sh",
 ]
 
 
