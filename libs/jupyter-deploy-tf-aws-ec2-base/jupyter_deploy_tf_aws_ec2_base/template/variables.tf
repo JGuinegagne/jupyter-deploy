@@ -259,6 +259,53 @@ variable "oauth_app_client_secret" {
   sensitive   = true
 }
 
+variable "logs_rotation_size_mb" {
+  description = <<-EOT
+    The size in megabytes at which to rotate log files under /var/log/services/.
+    
+    When a log file reaches this size, it will be rotated (a new log file will be created
+    and the old one will be compressed and archived).
+
+    Recommended: 50
+  EOT
+  type        = number
+
+  validation {
+    condition     = var.logs_rotation_size_mb > 0
+    error_message = "The logs_rotation_size_mb value must be greater than 0."
+  }
+}
+
+variable "max_log_files_count" {
+  description = <<-EOT
+    The maximum number of log files to retain at any given time for each service.
+    
+    When the retention limit has been reached, the current oldest logfile will be deleted.
+
+    Recommended: 180
+  EOT
+  type        = number
+
+  validation {
+    condition     = var.max_log_files_count > 0
+    error_message = "The max_log_files_count must be greater than 0."
+  }
+}
+
+variable "log_files_retention_days" {
+  description = <<-EOT
+    Remove rotated log files older than the specified number of days.
+
+    Recommended: 180
+  EOT
+  type        = number
+
+  validation {
+    condition     = var.log_files_retention_days > 0
+    error_message = "The log_files_retention_days value must be greater than 0."
+  }
+}
+
 variable "custom_tags" {
   description = <<-EOT
     Tags added to all the AWS resources this template will create in your AWS account.

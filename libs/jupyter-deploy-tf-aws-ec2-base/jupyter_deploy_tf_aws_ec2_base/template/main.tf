@@ -358,6 +358,9 @@ locals {
     allowed_github_usernames = local.allowed_github_usernames
     allowed_github_org       = local.allowed_github_org
     allowed_github_teams     = local.allowed_github_teams
+    logs_rotation_size_mb    = var.logs_rotation_size_mb
+    max_log_files_count      = var.max_log_files_count
+    log_files_retention_days = var.log_files_retention_days
   })
   traefik_config_file = templatefile("${path.module}/traefik.yml.tftpl", {
     letsencrypt_notification_email = var.letsencrypt_email

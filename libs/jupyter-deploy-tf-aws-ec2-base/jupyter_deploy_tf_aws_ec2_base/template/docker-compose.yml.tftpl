@@ -89,9 +89,6 @@ services:
   traefik:
     image: traefik:v2.10
     container_name: traefik
-    user: "$${SERVICE_UID}:$${SERVICE_GID}"
-    group_add:
-      - "$${DOCKER_GID}"
     restart: unless-stopped
     mem_limit: "256M"
     mem_reservation: "128M"
@@ -111,9 +108,6 @@ services:
   log-writer:
     image: docker:cli
     container_name: log-writer
-    user: "$${SERVICE_UID}:$${SERVICE_GID}"
-    group_add:
-      - "$${DOCKER_GID}"
     restart: unless-stopped
     mem_limit: "128M"
     mem_reservation: "64M"
@@ -133,6 +127,29 @@ services:
       - jupyter
       - traefik
       - oauth
+  log-rotator:
+    image: blacklabelops/logrotate:latest
+    container_name: log-rotator
+    restart: unless-stopped
+    mem_limit: "128M"
+    mem_reservation: "64M"
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /var/log/services:/var/log/services
+    environment:
+      - LOGS_DIRECTORIES=/var/log/services
+      - LOG_FILE_ENDINGS=log
+      - LOGROTATE_MAXAGE=${log_files_retention_days}
+      - LOGROTATE_SIZE=${logs_rotation_size_mb}M
+      - LOGROTATE_DATEFORMAT=-%Y-%m-%dT%H:%M:%S
+      - TZ=UTC
+      - LOGROTATE_COPIES=${max_log_files_count}
+      - LOGROTATE_COMPRESSION=compress
+      - LOGROTATE_LOGFILE=/var/log/services/logrotate.log
+      - LOGROTATE_STATUSFILE=/var/log/services/logrotate.status
+      - LOGROTATE_PARAMETERS=v
+      - LOGROTATE_CRONSCHEDULE=*/10 * * * * *
 networks:
   web:
     name: web
