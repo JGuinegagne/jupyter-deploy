@@ -5,11 +5,12 @@ from unittest.mock import Mock, patch
 import yaml
 
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.handlers.resource.server_handler import ServerHandler
+from jupyter_deploy.handlers.access.organization_handler import OrganizationHandler
 from jupyter_deploy.manifest import JupyterDeployManifest, JupyterDeployManifestV1
+from jupyter_deploy.provider.resolved_clidefs import StrResolvedCliParameter
 
 
-class TestServerHandler(unittest.TestCase):
+class TestOrganizationHandler(unittest.TestCase):
     mock_full_manifest: JupyterDeployManifest
 
     @classmethod
@@ -43,15 +44,18 @@ class TestServerHandler(unittest.TestCase):
         mock_cmd_runner_handler = Mock()
         mock_run_command_sequence = Mock()
         mock_get_result_value = Mock()
+        mock_update_variables = Mock()
 
         mock_cmd_runner_handler.run_command_sequence = mock_run_command_sequence
         mock_cmd_runner_handler.get_result_value = mock_get_result_value
+        mock_cmd_runner_handler.update_variables = mock_update_variables
 
-        mock_get_result_value.return_value = "IN_SERVICE"
+        mock_get_result_value.return_value = "org-name"
 
         return mock_cmd_runner_handler, {
             "run_command_sequence": mock_run_command_sequence,
             "get_result_value": mock_get_result_value,
+            "update_variables": mock_update_variables,
         }
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
@@ -67,21 +71,21 @@ class TestServerHandler(unittest.TestCase):
     ) -> None:
         path = Path("/some/cur/dir")
         mock_cwd.return_value = path
+
+        mock_manifest, _ = self.get_mock_manifest_and_fns()
+        mock_retrieve_manifest.return_value = mock_manifest
+
         mock_output_handler = self.get_mock_outputs_handler_and_fns()[0]
         mock_tf_outputs_handler.return_value = mock_output_handler
 
         mock_variable_handler = Mock()
         mock_tf_variables_handler.return_value = mock_variable_handler
 
-        mock_manifest, _ = self.get_mock_manifest_and_fns()
-        mock_retrieve_manifest.return_value = mock_manifest
-
-        handler = ServerHandler()
+        handler = OrganizationHandler()
 
         mock_retrieve_manifest.assert_called_once()
         mock_tf_outputs_handler.assert_called_once_with(project_path=path, project_manifest=mock_manifest)
         mock_tf_variables_handler.assert_called_once_with(project_path=path, project_manifest=mock_manifest)
-
         self.assertEqual(handler._output_handler, mock_output_handler)
         self.assertEqual(handler._variable_handler, mock_variable_handler)
         self.assertEqual(handler.engine, EngineType.TERRAFORM)
@@ -89,7 +93,7 @@ class TestServerHandler(unittest.TestCase):
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("jupyter_deploy.engine.terraform.tf_outputs.TerraformOutputsHandler")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
-    def test_server_methods_raise_not_implemented_error_if_manifest_does_not_define_cmd(
+    def test_organization_methods_raise_not_implemented_error_if_manifest_does_not_define_cmd(
         self, mock_tf_variables_handler: Mock, mock_tf_outputs_handler: Mock, mock_retrieve_manifest: Mock
     ) -> None:
         mock_tf_outputs_handler.return_value = self.get_mock_outputs_handler_and_fns()[0]
@@ -107,17 +111,22 @@ class TestServerHandler(unittest.TestCase):
             }
         )
         mock_retrieve_manifest.return_value = no_cmd_manifest
-
-        handler = ServerHandler()
+        handler = OrganizationHandler()
 
         with self.assertRaises(NotImplementedError):
-            handler.get_server_status()
+            handler.set_organization("org-name")
+
+        with self.assertRaises(NotImplementedError):
+            handler.unset_organization()
+
+        with self.assertRaises(NotImplementedError):
+            handler.get_organization()
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("jupyter_deploy.engine.terraform.tf_outputs.TerraformOutputsHandler")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
     @patch("jupyter_deploy.provider.manifest_command_runner.ManifestCommandRunner")
-    def test_server_methods_run_against_actual_manifest(
+    def test_organization_methods_run_against_actual_manifest(
         self,
         mock_cmd_runner_class: Mock,
         mock_tf_variables_handler: Mock,
@@ -129,17 +138,20 @@ class TestServerHandler(unittest.TestCase):
         mock_tf_outputs_handler.return_value = self.get_mock_outputs_handler_and_fns()[0]
         mock_tf_variables_handler.return_value = Mock()
 
-        handler = ServerHandler()
+        handler = OrganizationHandler()
 
         # verify methods work
-        status = handler.get_server_status()
-        self.assertEqual(status, "IN_SERVICE")
+        handler.set_organization("org-name")
+        handler.unset_organization()
+
+        org_name = handler.get_organization()
+        self.assertEqual(org_name, "org-name")
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("jupyter_deploy.engine.terraform.tf_outputs.TerraformOutputsHandler")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
     @patch("jupyter_deploy.provider.manifest_command_runner.ManifestCommandRunner")
-    def test_server_methods_raise_if_run_command_raises(
+    def test_organization_methods_raises_if_run_command_raises(
         self,
         mock_cmd_runner_class: Mock,
         mock_tf_variables_handler: Mock,
@@ -157,17 +169,21 @@ class TestServerHandler(unittest.TestCase):
         mock_cmd_runner_class.return_value = mock_cmd_runner
         mock_cmd_runner_fns["run_command_sequence"].side_effect = RuntimeError()
 
-        handler = ServerHandler()
+        handler = OrganizationHandler()
 
         # verify methods raise
         with self.assertRaises(RuntimeError):
-            handler.get_server_status()
+            handler.set_organization("org-name")
+        with self.assertRaises(RuntimeError):
+            handler.unset_organization()
+        with self.assertRaises(RuntimeError):
+            handler.get_organization()
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("jupyter_deploy.engine.terraform.tf_outputs.TerraformOutputsHandler")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
     @patch("jupyter_deploy.provider.manifest_command_runner.ManifestCommandRunner")
-    def test_status_methods_raise_if_get_command_result_raises(
+    def test_organization_methods_raise_if_get_command_result_raises(
         self,
         mock_cmd_runner_class: Mock,
         mock_tf_variables_handler: Mock,
@@ -185,48 +201,160 @@ class TestServerHandler(unittest.TestCase):
         mock_cmd_runner_class.return_value = mock_cmd_runner
         mock_cmd_runner_fns["get_result_value"].side_effect = KeyError()
 
-        handler = ServerHandler()
+        handler = OrganizationHandler()
 
-        # verify methods raise
+        # verify method raises
         # add only commands that return a result here
         with self.assertRaises(KeyError):
-            handler.get_server_status()
+            handler.get_organization()
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
-    @patch("jupyter_deploy.engine.terraform.tf_outputs.TerraformOutputsHandler")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
+    @patch("jupyter_deploy.engine.terraform.tf_outputs.TerraformOutputsHandler")
     @patch("jupyter_deploy.provider.manifest_command_runner.ManifestCommandRunner")
-    def test_get_status_calls_run_command_and_return_result(
+    @patch("rich.console.Console")
+    def test_set_organization_calls_run_command_sequence_with_correct_params(
         self,
+        mock_console_class: Mock,
         mock_cmd_runner_class: Mock,
-        mock_tf_variables_handler: Mock,
         mock_tf_outputs_handler: Mock,
+        mock_tf_variables_handler: Mock,
         mock_retrieve_manifest: Mock,
     ) -> None:
         # Setup
-        mock_manifest, mock_manifest_fns = self.get_mock_manifest_and_fns()
         mock_cmd = Mock()
+        mock_manifest, mock_manifest_fns = self.get_mock_manifest_and_fns()
         mock_manifest_fns["get_command"].return_value = mock_cmd
-
         mock_retrieve_manifest.return_value = mock_manifest
-        mock_output_handler, _ = self.get_mock_outputs_handler_and_fns()
 
+        mock_output_handler, _ = self.get_mock_outputs_handler_and_fns()
         mock_tf_outputs_handler.return_value = mock_output_handler
+
         mock_variable_handler = Mock()
         mock_tf_variables_handler.return_value = mock_variable_handler
 
         mock_cmd_runner, mock_cmd_runner_fns = self.get_mock_manifest_cmd_runner_and_fns()
         mock_cmd_runner_class.return_value = mock_cmd_runner
 
-        # Act
-        handler = ServerHandler()
-        result = handler.get_server_status()
+        mock_console = mock_console_class.return_value
+
+        # Execute
+        handler = OrganizationHandler()
+        handler.set_organization("org-name")
 
         # Verify
-        self.assertEqual(result, "IN_SERVICE")
-        mock_cmd_runner_class.assert_called_once()
-        mock_manifest_fns["get_command"].assert_called_once_with("server.status")
-        self.assertEqual(mock_cmd_runner_class.call_args[1]["output_handler"], mock_output_handler)
-        self.assertEqual(mock_cmd_runner_class.call_args[1]["variable_handler"], mock_variable_handler)
-        mock_cmd_runner_fns["run_command_sequence"].assert_called_once_with(mock_cmd, cli_paramdefs={})
-        mock_cmd_runner_fns["get_result_value"].assert_called_once_with(mock_cmd, "server.status", str)
+        mock_manifest_fns["get_command"].assert_called_once_with("organization.set")
+        mock_cmd_runner_class.assert_called_once_with(
+            console=mock_console,
+            output_handler=mock_output_handler,
+            variable_handler=mock_variable_handler,
+        )
+        mock_cmd_runner_fns["run_command_sequence"].assert_called_once_with(
+            mock_cmd,
+            cli_paramdefs={
+                "organization": StrResolvedCliParameter(parameter_name="organization", value="org-name"),
+                "category": StrResolvedCliParameter(parameter_name="category", value="org"),
+            },
+        )
+        mock_cmd_runner_fns["update_variables"].assert_called_once_with(mock_cmd)
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
+    @patch("jupyter_deploy.engine.terraform.tf_outputs.TerraformOutputsHandler")
+    @patch("jupyter_deploy.provider.manifest_command_runner.ManifestCommandRunner")
+    @patch("rich.console.Console")
+    def test_unset_organization_calls_run_command_sequence_with_correct_params(
+        self,
+        mock_console_class: Mock,
+        mock_cmd_runner_class: Mock,
+        mock_tf_outputs_handler: Mock,
+        mock_tf_variables_handler: Mock,
+        mock_retrieve_manifest: Mock,
+    ) -> None:
+        # Setup
+        mock_cmd = Mock()
+        mock_manifest, mock_manifest_fns = self.get_mock_manifest_and_fns()
+        mock_manifest_fns["get_command"].return_value = mock_cmd
+        mock_retrieve_manifest.return_value = mock_manifest
+
+        mock_output_handler, _ = self.get_mock_outputs_handler_and_fns()
+        mock_tf_outputs_handler.return_value = mock_output_handler
+
+        mock_variable_handler = Mock()
+        mock_tf_variables_handler.return_value = mock_variable_handler
+
+        mock_cmd_runner, mock_cmd_runner_fns = self.get_mock_manifest_cmd_runner_and_fns()
+        mock_cmd_runner_class.return_value = mock_cmd_runner
+
+        mock_console = mock_console_class.return_value
+
+        # Execute
+        handler = OrganizationHandler()
+        handler.unset_organization()
+
+        # Verify
+        mock_manifest_fns["get_command"].assert_called_once_with("organization.unset")
+        mock_cmd_runner_class.assert_called_once_with(
+            console=mock_console,
+            output_handler=mock_output_handler,
+            variable_handler=mock_variable_handler,
+        )
+        mock_cmd_runner_fns["run_command_sequence"].assert_called_once_with(
+            mock_cmd,
+            cli_paramdefs={
+                "category": StrResolvedCliParameter(parameter_name="category", value="org"),
+            },
+        )
+        mock_cmd_runner_fns["update_variables"].assert_called_once_with(mock_cmd)
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
+    @patch("jupyter_deploy.engine.terraform.tf_outputs.TerraformOutputsHandler")
+    @patch("jupyter_deploy.provider.manifest_command_runner.ManifestCommandRunner")
+    @patch("rich.console.Console")
+    def test_get_organization_calls_run_command_sequence_with_correct_params(
+        self,
+        mock_console_class: Mock,
+        mock_cmd_runner_class: Mock,
+        mock_tf_outputs_handler: Mock,
+        mock_tf_variables_handler: Mock,
+        mock_retrieve_manifest: Mock,
+    ) -> None:
+        # Setup
+        mock_cmd = Mock()
+        mock_manifest, mock_manifest_fns = self.get_mock_manifest_and_fns()
+        mock_manifest_fns["get_command"].return_value = mock_cmd
+        mock_retrieve_manifest.return_value = mock_manifest
+
+        mock_output_handler, _ = self.get_mock_outputs_handler_and_fns()
+        mock_tf_outputs_handler.return_value = mock_output_handler
+
+        mock_variable_handler = Mock()
+        mock_tf_variables_handler.return_value = mock_variable_handler
+
+        mock_cmd_runner, mock_cmd_runner_fns = self.get_mock_manifest_cmd_runner_and_fns()
+        mock_cmd_runner_class.return_value = mock_cmd_runner
+        mock_cmd_runner_fns["get_result_value"].return_value = "org-name"
+
+        mock_console = mock_console_class.return_value
+
+        # Execute
+        handler = OrganizationHandler()
+        result = handler.get_organization()
+
+        # Verify
+        self.assertEqual(result, "org-name")
+        mock_manifest_fns["get_command"].assert_called_once_with("organization.get")
+        mock_cmd_runner_class.assert_called_once_with(
+            console=mock_console,
+            output_handler=mock_output_handler,
+            variable_handler=mock_variable_handler,
+        )
+        mock_cmd_runner_fns["run_command_sequence"].assert_called_once_with(
+            mock_cmd,
+            cli_paramdefs={
+                "category": StrResolvedCliParameter(parameter_name="category", value="org"),
+            },
+        )
+        mock_cmd_runner_fns["get_result_value"].assert_called_once_with(mock_cmd, "organization.get", str)
+        mock_cmd_runner_fns["update_variables"].assert_not_called()
