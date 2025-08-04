@@ -136,7 +136,12 @@ resource "aws_instance" "ec2_jupyter_server" {
     volume_size = local.root_block_device.ebs.volume_size
     volume_type = try(local.root_block_device.ebs.volume_type, "gp3")
     encrypted   = try(local.root_block_device.ebs.encrypted, true)
-    tags        = local.combined_tags
+    tags = merge(
+      local.combined_tags,
+      {
+        Name = "jupyter-root-${local.doc_postfix}"
+      }
+    )
   }
 
   # IAM instance profile configuration
@@ -201,6 +206,29 @@ resource "aws_iam_role_policy_attachment" "route53_dns_delegation" {
   policy_arn = aws_iam_policy.route53_dns_delegation.arn
 }
 
+# Add required policies for EFS IAM auth and EC2 instance to describe resources
+data "aws_iam_policy" "efs_managed_policy" {
+  count = length(local.resolved_efs_mounts) > 0 ? 1 : 0
+  arn   = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonElasticFileSystemClientReadWriteAccess"
+}
+
+data "aws_iam_policy" "ec2_describe_policy" {
+  count = length(local.resolved_efs_mounts) > 0 ? 1 : 0
+  arn   = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEC2ReadOnlyAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "efs_client_read_write" {
+  count      = length(local.resolved_efs_mounts) > 0 ? 1 : 0
+  role       = aws_iam_role.execution_role.name
+  policy_arn = data.aws_iam_policy.efs_managed_policy[0].arn
+}
+
+resource "aws_iam_role_policy_attachment" "ec2_describe" {
+  count      = length(local.resolved_efs_mounts) > 0 ? 1 : 0
+  role       = aws_iam_role.execution_role.name
+  policy_arn = data.aws_iam_policy.ec2_describe_policy[0].arn
+}
+
 # Define the instance profile to associate the IAM role with the EC2 instance
 resource "aws_iam_instance_profile" "server_instance_profile" {
   role        = aws_iam_role.execution_role.name
@@ -218,7 +246,12 @@ resource "aws_ebs_volume" "jupyter_data" {
   type              = var.volume_type
   encrypted         = true
 
-  tags = local.combined_tags
+  tags = merge(
+    local.combined_tags,
+    {
+      Name = "jupyter-data-${local.doc_postfix}"
+    }
+  )
 }
 
 resource "aws_volume_attachment" "jupyter_data_attachment" {
@@ -232,7 +265,6 @@ resource "aws_secretsmanager_secret" "oauth_github_client_secret" {
   name_prefix = "${var.oauth_app_secret_prefix}-"
   tags        = local.combined_tags
 }
-
 data "aws_iam_policy_document" "oauth_github_client_secret" {
   statement {
     sid = "SecretsManagerReadGitHubAppClientSecret"
@@ -378,6 +410,8 @@ locals {
     allowed_github_usernames = local.allowed_github_usernames
     allowed_github_org       = local.allowed_github_org
     allowed_github_teams     = local.allowed_github_teams
+    ebs_mounts               = local.resolved_ebs_mounts
+    efs_mounts               = local.resolved_efs_mounts
   })
   traefik_config_file = templatefile("${path.module}/../services/traefik/traefik.yml.tftpl", {
     letsencrypt_notification_email = var.letsencrypt_email
@@ -412,12 +446,13 @@ locals {
   check_status_indented          = join("\n${local.indent_str}", compact(split("\n", data.local_file.check_status.content)))
   get_status_indented            = join("\n${local.indent_str}", compact(split("\n", data.local_file.get_status.content)))
   get_auth_indented              = join("\n${local.indent_str}", compact(split("\n", data.local_file.get_auth.content)))
+  cloudinit_volumes_indented     = join("\n${local.indent_str}", compact(split("\n", local.cloudinit_volumes_script)))
 }
 
 locals {
   ssm_startup_content = <<DOC
 schemaVersion: '2.2'
-description: Setup docker, mount volume, copy docker-compose, start docker services
+description: Setup docker, mount volumes, copy docker-compose, start docker services
 mainSteps:
   - action: aws:runShellScript
     name: CloudInit
@@ -425,6 +460,13 @@ mainSteps:
       runCommand:
         - |
           ${local.cloud_init_indented}
+
+  - action: aws:runShellScript
+    name: MountAdditionalVolumes
+    inputs:
+      runCommand:
+        - |
+          ${local.cloudinit_volumes_indented}
 
   - action: aws:runShellScript
     name: SaveDockerFiles
