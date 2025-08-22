@@ -29,7 +29,6 @@ def status(
         status = handler.get_host_status()
 
         console.print(f"Jupyter host status: [bold cyan]{status}[/]")
-        console.line()
 
 
 @host_app.command()
@@ -81,3 +80,20 @@ def restart(
     with cmd_utils.project_dir(project_dir):
         handler = host_handler.HostHandler()
         handler.restart_host()
+
+
+@host_app.command()
+def connect(
+    project_dir: Annotated[
+        str | None,
+        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project whose host to restart."),
+    ] = None,
+) -> None:
+    """Start an SSH-style connection to the host machine.
+
+    Run either from a jupyter-deploy project directory that you created with `jd init`;
+    or pass a --path PATH to such a directory.
+    """
+    with cmd_utils.project_dir(project_dir):
+        handler = host_handler.HostHandler()
+        handler.connect()

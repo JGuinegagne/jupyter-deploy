@@ -19,11 +19,12 @@ def _check_installation(
     console = Console()
 
     if not installed:
-        console.print(
-            f"This operation requires [bold]{tool_name}[/] to be installed in your system.\n\n"
-            "Got the following error when verifying installation:"
-        )
-        console.print(error_msg, style="bold red")
+        console.print(f":x: This operation requires [bold]{tool_name}[/] to be installed in your system.", style="red")
+        console.line()
+
+        if error_msg:
+            console.print(f"Error: {error_msg}", style="red")
+            console.line()
 
         if installation_url:
             console.print(f"Refer to the installation guide: {installation_url}")
@@ -77,7 +78,7 @@ def _check_ssm_plugin_installation(min_version: Version | None = None) -> bool:
     return _check_installation(
         tool_name="session-manager-plugin",
         min_version=min_version,
-        installation_url="https://docs.aws.amazon.com/systems-manager/latest/userguide/plugin-version-history.html",
+        installation_url="https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html",
     )
 
 
