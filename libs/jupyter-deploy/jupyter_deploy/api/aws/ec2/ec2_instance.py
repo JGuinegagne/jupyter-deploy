@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import time
 from enum import Enum
 
@@ -26,7 +28,7 @@ class Ec2InstanceState(str, Enum):
     STOPPED = "stopped"
 
     @classmethod
-    def from_name(cls, state_name: str) -> "Ec2InstanceState":
+    def from_name(cls, state_name: str) -> Ec2InstanceState:
         """Return the enum value, ignoring case.
 
         Raises:
@@ -39,7 +41,7 @@ class Ec2InstanceState(str, Enum):
         raise ValueError(f"No Ec2InstanceState found for '{state_name}'")
 
     @classmethod
-    def from_state_response(cls, instance_state: InstanceStateTypeDef) -> "Ec2InstanceState":
+    def from_state_response(cls, instance_state: InstanceStateTypeDef) -> Ec2InstanceState:
         """Return the enum value.
 
         Raises:

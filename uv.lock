@@ -277,6 +277,12 @@ dev = [
 name = "jupyter-deploy-tf-aws-ec2-base"
 version = "0.2.0"
 source = { editable = "libs/jupyter-deploy-tf-aws-ec2-base" }
+dependencies = [
+    { name = "boto3" },
+    { name = "boto3-stubs" },
+    { name = "mypy-boto3-ec2" },
+    { name = "mypy-boto3-ssm" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -291,6 +297,12 @@ dev = [
 ]
 
 [package.metadata]
+requires-dist = [
+    { name = "boto3" },
+    { name = "boto3-stubs" },
+    { name = "mypy-boto3-ec2" },
+    { name = "mypy-boto3-ssm" },
+]
 
 [package.metadata.requires-dev]
 dev = [
