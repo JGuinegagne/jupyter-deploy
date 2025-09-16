@@ -81,26 +81,30 @@ resource "aws_security_group" "ec2_jupyter_server_sg" {
   tags = local.combined_tags
 }
 
-# Retrieve the latest AL 2023 AMI
-data "aws_ssm_parameter" "amazon_linux_2023" {
-  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
-}
-
-data "aws_ami" "amazon_linux_2023" {
-  most_recent = true
-  owners      = ["amazon"]
-
-  filter {
-    name   = "image-id"
-    values = [data.aws_ssm_parameter.amazon_linux_2023.value]
-  }
+# Use the AMI module to select the appropriate AMI based on instance type
+module "ami_al2023" {
+  source        = "./modules/ami_al2023"
+  instance_type = var.instance_type
 }
 
 locals {
+  # Determine the AMI ID to use (user-provided or module-selected)
+  actual_ami_id = coalesce(var.ami_id, module.ami_al2023.ami_id)
+
+  # Extract AMI details for later use
+  ami_details = data.aws_ami.selected_ami
   root_block_device = [
-    for device in data.aws_ami.amazon_linux_2023.block_device_mappings :
-    device if device.device_name == data.aws_ami.amazon_linux_2023.root_device_name
+    for device in local.ami_details.block_device_mappings :
+    device if device.device_name == local.ami_details.root_device_name
   ][0]
+}
+
+# Get details of the selected AMI
+data "aws_ami" "selected_ami" {
+  filter {
+    name   = "image-id"
+    values = [local.actual_ami_id]
+  }
 }
 
 
@@ -119,7 +123,7 @@ resource "aws_eip" "jupyter_eip" {
 # - the security group
 # - the AMI
 resource "aws_instance" "ec2_jupyter_server" {
-  ami                    = coalesce(var.ami_id, data.aws_ami.amazon_linux_2023.id)
+  ami                    = local.actual_ami_id
   instance_type          = var.instance_type
   subnet_id              = data.aws_subnet.first_subnet_of_default_vpc.id
   vpc_security_group_ids = [aws_security_group.ec2_jupyter_server_sg.id]
@@ -133,7 +137,7 @@ resource "aws_instance" "ec2_jupyter_server" {
 
   # Root volume configuration
   root_block_device {
-    volume_size = var.root_volume_size_gb != null ? var.root_volume_size_gb : local.root_block_device.ebs.volume_size
+    volume_size = var.min_root_volume_size_gb != null ? max(var.min_root_volume_size_gb, try(local.root_block_device.ebs.volume_size, 1)) : local.root_block_device.ebs.volume_size
     volume_type = try(local.root_block_device.ebs.volume_type, "gp3")
     encrypted   = try(local.root_block_device.ebs.encrypted, true)
     tags = merge(
@@ -349,16 +353,8 @@ data "local_file" "jupyter_reset" {
   filename = "${path.module}/../services/jupyter/jupyter-reset.sh"
 }
 
-data "local_file" "pyproject_jupyter" {
-  filename = "${path.module}/../services/jupyter/pyproject.jupyter.toml"
-}
-
 data "local_file" "jupyter_server_config_uv" {
   filename = "${path.module}/../services/jupyter/jupyter_server_config.py"
-}
-
-data "local_file" "pyproject_kernel" {
-  filename = "${path.module}/../services/jupyter/pyproject.kernel.toml"
 }
 
 # Files for the Pixi environment
@@ -374,16 +370,8 @@ data "local_file" "jupyter_reset_pixi" {
   filename = "${path.module}/../services/jupyter-pixi/jupyter-reset-pixi.sh"
 }
 
-data "local_file" "pixi_jupyter" {
-  filename = "${path.module}/../services/jupyter-pixi/pixi.jupyter.toml"
-}
-
 data "local_file" "jupyter_server_config_pixi" {
   filename = "${path.module}/../services/jupyter-pixi/jupyter_server_config_pixi.py"
-}
-
-data "local_file" "pyproject_kernel_pixi" {
-  filename = "${path.module}/../services/jupyter-pixi/pyproject.kernel.pixi.toml"
 }
 
 # Other services
@@ -430,13 +418,34 @@ locals {
   github_auth_valid = var.oauth_provider != "github" || (var.oauth_allowed_usernames != null && length(var.oauth_allowed_usernames) > 0) || (var.oauth_allowed_org != null && length(var.oauth_allowed_org) > 0)
   teams_have_org    = var.oauth_allowed_teams == null || length(var.oauth_allowed_teams) == 0 || (var.oauth_allowed_org != null && length(var.oauth_allowed_org) > 0)
 
+  # Generate the templated TOML files
+  pyproject_jupyter_templated = templatefile("${path.module}/../services/jupyter/pyproject.jupyter.toml.tftpl", {
+    has_gpu    = module.ami_al2023.has_gpu
+    has_neuron = module.ami_al2023.has_neuron
+  })
+
+  pixi_jupyter_templated = templatefile("${path.module}/../services/jupyter-pixi/pixi.jupyter.toml.tftpl", {
+    has_gpu    = module.ami_al2023.has_gpu
+    has_neuron = module.ami_al2023.has_neuron
+  })
+
+  kernel_templated = templatefile("${path.module}/../services/jupyter/pyproject.kernel.toml.tftpl", {
+    has_gpu    = module.ami_al2023.has_gpu
+    has_neuron = module.ami_al2023.has_neuron
+  })
+
+  pixi_kernel_templated = templatefile("${path.module}/../services/jupyter-pixi/pyproject.kernel.toml.tftpl", {
+    has_gpu    = module.ami_al2023.has_gpu
+    has_neuron = module.ami_al2023.has_neuron
+  })
+
   # Select the correct files based on package manager type
   dockerfile_content            = var.jupyter_package_manager == "pixi" ? data.local_file.dockerfile_jupyter_pixi.content : data.local_file.dockerfile_jupyter.content
-  jupyter_toml_content          = var.jupyter_package_manager == "pixi" ? data.local_file.pixi_jupyter.content : data.local_file.pyproject_jupyter.content
+  jupyter_toml_content          = var.jupyter_package_manager == "pixi" ? local.pixi_jupyter_templated : local.pyproject_jupyter_templated
   jupyter_start_content         = var.jupyter_package_manager == "pixi" ? data.local_file.jupyter_start_pixi.content : data.local_file.jupyter_start.content
   jupyter_reset_content         = var.jupyter_package_manager == "pixi" ? data.local_file.jupyter_reset_pixi.content : data.local_file.jupyter_reset.content
   jupyter_server_config_content = var.jupyter_package_manager == "pixi" ? data.local_file.jupyter_server_config_pixi.content : data.local_file.jupyter_server_config_uv.content
-  kernel_pyproject_content      = var.jupyter_package_manager == "pixi" ? data.local_file.pyproject_kernel_pixi.content : data.local_file.pyproject_kernel.content
+  kernel_pyproject_content      = var.jupyter_package_manager == "pixi" ? local.pixi_kernel_templated : local.kernel_templated
   jupyter_toml_filename         = var.jupyter_package_manager == "pixi" ? "pixi.jupyter.toml" : "pyproject.jupyter.toml"
 }
 
@@ -462,6 +471,8 @@ locals {
     allowed_github_teams     = local.allowed_github_teams
     ebs_mounts               = local.resolved_ebs_mounts
     efs_mounts               = local.resolved_efs_mounts
+    has_gpu                  = module.ami_al2023.has_gpu
+    has_neuron               = module.ami_al2023.has_neuron
   })
   traefik_config_file = templatefile("${path.module}/../services/traefik/traefik.yml.tftpl", {
     letsencrypt_notification_email = var.letsencrypt_email
@@ -604,7 +615,6 @@ DOC
     fileexists("${path.module}/../services/jupyter-pixi/jupyter-start-pixi.sh"),
     fileexists("${path.module}/../services/jupyter-pixi/jupyter-reset-pixi.sh"),
     fileexists("${path.module}/../services/jupyter-pixi/jupyter_server_config_pixi.py"),
-    fileexists("${path.module}/../services/jupyter-pixi/pyproject.kernel.pixi.toml"),
     fileexists("${path.module}/../services/logrotator/dockerfile.logrotator"),
     fileexists("${path.module}/../services/commands/update-auth.sh"),
     fileexists("${path.module}/../services/commands/refresh-oauth-cookie.sh"),
