@@ -5,7 +5,11 @@ channels = [
 description = "A basic image with jupyterlab and server-documents"
 name = "jupyter-pixi"
 platforms = [
+%{ if cpu_architecture == "arm64" ~}
+    "linux-aarch64",
+%{ else ~}
     "linux-64",
+%{ endif ~}
 ]
 version = "0.2.1"
 
@@ -13,10 +17,10 @@ version = "0.2.1"
 
 [dependencies]
 python = ">=3.12"
-jupyterlab = ">=4.4.2,<5"
-ipywidgets = ">=8.1.7,<9"
 
 [pypi-dependencies]
+jupyterlab = ">=4.4.2,<5"
+ipywidgets = ">=8.1.7,<9"
 jupyter-server-documents = ">=0.1.0a0"
 %{ if has_gpu || has_neuron ~}
 numpy = ">=2.3.0"
