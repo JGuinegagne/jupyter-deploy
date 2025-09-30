@@ -1,5 +1,24 @@
-# Additional volume configurations
-# This file manages optional EBS and EFS volumes that can be attached to the Jupyter instance
+# Define EBS volume for the notebook data (will mount on /home/jovyan)
+resource "aws_ebs_volume" "jupyter_data" {
+  availability_zone = var.availability_zone
+  size              = var.volume_size_gb
+  type              = var.volume_type
+  encrypted         = true
+
+  tags = merge(
+    var.combined_tags,
+    {
+      Name = "jupyter-data-${var.postfix}"
+    }
+  )
+}
+
+# Attach the main jupyter data volume to the EC2 instance
+resource "aws_volume_attachment" "jupyter_data_attachment" {
+  device_name = "/dev/sdf"
+  volume_id   = aws_ebs_volume.jupyter_data.id
+  instance_id = var.instance_id
+}
 
 # STEP 1: EBS creation or reference
 # Create additional EBS volumes when 'name' is specified
@@ -9,15 +28,15 @@ resource "aws_ebs_volume" "additional_volumes" {
     idx => ebs_mount if lookup(ebs_mount, "name", null) != null
   }
 
-  availability_zone = data.aws_subnet.first_subnet_of_default_vpc.availability_zone
+  availability_zone = var.availability_zone
   size              = try(tonumber(lookup(each.value, "size_gb", "30")), 30)
   type              = lookup(each.value, "type", "gp3")
   encrypted         = true
 
   tags = merge(
-    local.combined_tags,
+    var.combined_tags,
     {
-      Name = "${lookup(each.value, "name", "")}-${local.doc_postfix}"
+      Name = "${lookup(each.value, "name", "")}-${var.postfix}"
     }
   )
 }
@@ -35,7 +54,6 @@ data "aws_ebs_volume" "referenced_volumes" {
   }
 }
 
-
 # STEP 2: EFS creation or reference
 # Create EFS file systems when 'name' is specified
 resource "aws_efs_file_system" "additional_file_systems" {
@@ -46,9 +64,9 @@ resource "aws_efs_file_system" "additional_file_systems" {
 
   encrypted = true
   tags = merge(
-    local.combined_tags,
+    var.combined_tags,
     {
-      Name = "${lookup(each.value, "name", "")}-${local.doc_postfix}"
+      Name = "${lookup(each.value, "name", "")}-${var.postfix}"
     }
   )
 }
@@ -62,8 +80,19 @@ data "aws_efs_file_system" "referenced_file_systems" {
   file_system_id = each.value
 }
 
+# Get default subnet for EFS mount target
+data "aws_subnets" "default" {
+  filter {
+    name   = "availability-zone"
+    values = [var.availability_zone]
+  }
+}
 
-# STEP 3: Generate the volumes init script
+data "aws_subnet" "default" {
+  id = data.aws_subnets.default.ids[0]
+}
+
+# STEP 3: Generate the volumes mappings
 locals {
   # combine created and referenced EBS volumes into a single map
   resolved_ebs_mounts = [
@@ -97,18 +126,11 @@ locals {
     if lookup(efs_mount, "persist", "") == "true"
   ]
 
-  # Do NOT depend on the attachments to avoid a circular dependency issue
-  # instance -> attachment -> cloudinit-volume -> ssm-document -> instance
-  cloudinit_volumes_script = templatefile("${path.module}/../services/cloudinit-volumes.sh.tftpl", {
-    ebs_volumes = local.resolved_ebs_mounts
-    efs_volumes = local.resolved_efs_mounts
-    aws_region  = data.aws_region.current.region
-  })
+  # Removed cloudinit_volumes_script - moved to main.tf
 }
 
-
 # STEP 4: Associate EBS and EFS to the EC2 instance
-# first for EBS volumes
+# first for additional EBS volumes
 resource "aws_volume_attachment" "additional_ebs_attachments" {
   for_each = {
     for idx, ebs_mount in local.resolved_ebs_mounts :
@@ -119,33 +141,12 @@ resource "aws_volume_attachment" "additional_ebs_attachments" {
   }
   device_name = each.value.device_name
   volume_id   = each.value.volume_id
-  instance_id = aws_instance.ec2_jupyter_server.id
+  instance_id = var.instance_id
 }
 
-# second for EFS file systems
-resource "aws_security_group" "efs_security_group" {
-  count       = length(var.additional_efs_mounts) > 0 ? 1 : 0
-  name        = "jupyter-deploy-efs-${local.doc_postfix}"
-  description = "Security group for EFS mount targets"
-  vpc_id      = aws_default_vpc.default.id
+# Use the security group provided by the network module
 
-  # Allow NFS traffic from the EC2 instance
-  ingress {
-    from_port       = 2049
-    to_port         = 2049
-    protocol        = "tcp"
-    security_groups = [aws_security_group.ec2_jupyter_server_sg.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = local.combined_tags
-}
+# Create mount targets for EFS file systems
 resource "aws_efs_mount_target" "additional_efs_targets" {
   for_each = {
     for idx, efs_mount in local.resolved_efs_mounts :
@@ -155,6 +156,6 @@ resource "aws_efs_mount_target" "additional_efs_targets" {
     }
   }
   file_system_id  = each.value.file_system_id
-  subnet_id       = data.aws_subnet.first_subnet_of_default_vpc.id
-  security_groups = [aws_security_group.efs_security_group[0].id]
+  subnet_id       = data.aws_subnet.default.id
+  security_groups = length(var.additional_efs_mounts) > 0 && var.efs_security_group_id != null ? [var.efs_security_group_id] : []
 }
