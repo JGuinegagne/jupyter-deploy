@@ -33,12 +33,19 @@ class EngineOpenHandler:
         """Return the URL to access the notebook app, or the empty string if it cannot be resolved."""
         try:
             url_outdef = self.output_handler.get_declared_output_def("open_url", outdefs.StrTemplateOutputDefinition)
-        except (ValueError, KeyError, NotImplementedError, TypeError) as e:
+        except (ValueError, NotImplementedError, TypeError) as e:
             console = self.get_console()
             console.print(
                 f":x: Could not retrieve the declared value 'open_url' in the manifest. Error details: {e}",
                 style="red",
             )
+            return ""
+        except KeyError as _:
+            console = self.get_console()
+            console.print(":warning: URL not available.", style="yellow")
+            console.print("This is normal if you have not deployed the project.", style="yellow")
+            console.line()
+            console.print("Run [bold cyan]jd config[/] then [bold cyan]jd up[/].")
             return ""
 
         if not url_outdef.value:

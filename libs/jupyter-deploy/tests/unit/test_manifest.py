@@ -58,3 +58,15 @@ class TestJupyterDeployManifestV1(unittest.TestCase):
         )
         with self.assertRaises(NotImplementedError):
             manifest.get_command("cmd_does_not_exist")
+
+    def test_manifest_v1_has_command_found(self) -> None:
+        manifest = JupyterDeployManifestV1(
+            **self.manifest_v1_parsed_content  # type: ignore
+        )
+        self.assertTrue(manifest.has_command("host.status"))
+
+    def test_manifest_v1_has_command_not_found(self) -> None:
+        manifest = JupyterDeployManifestV1(
+            **self.manifest_v1_parsed_content  # type: ignore
+        )
+        self.assertFalse(manifest.has_command("i.do.not.exist"))

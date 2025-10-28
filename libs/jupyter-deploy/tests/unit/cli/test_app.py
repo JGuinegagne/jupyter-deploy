@@ -759,15 +759,10 @@ class TestOpenCommand(unittest.TestCase):
 
     def get_mock_open_handler(self) -> tuple[Mock, dict[str, Mock]]:
         mock_open_handler = Mock()
-        mock_get_url = Mock()
         mock_open_url = Mock()
 
-        mock_open_handler.get_url = mock_get_url
-        mock_open_handler.open_url = mock_open_url
-
-        mock_get_url.return_value = "https://example.com/jupyter"
-
-        return mock_open_handler, {"get_url": mock_get_url, "open_url": mock_open_url}
+        mock_open_handler.open = mock_open_url
+        return mock_open_handler, {"open": mock_open_url}
 
     @patch("jupyter_deploy.cli.app.OpenHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -782,8 +777,7 @@ class TestOpenCommand(unittest.TestCase):
 
         assert result.exit_code == 0
         mock_project_ctx_manager.assert_called_once_with(None)
-        mock_open_fns["get_url"].assert_called_once()
-        mock_open_fns["open_url"].assert_called_once_with("https://example.com/jupyter")
+        mock_open_fns["open"].assert_called_once()
 
     @patch("jupyter_deploy.cli.app.OpenHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -798,8 +792,7 @@ class TestOpenCommand(unittest.TestCase):
 
         assert result.exit_code == 0
         mock_project_ctx_manager.assert_called_once_with("/custom/path")
-        mock_open_fns["get_url"].assert_called_once()
-        mock_open_fns["open_url"].assert_called_once_with("https://example.com/jupyter")
+        mock_open_fns["open"].assert_called_once()
 
 
 class TestShowCommand(unittest.TestCase):
