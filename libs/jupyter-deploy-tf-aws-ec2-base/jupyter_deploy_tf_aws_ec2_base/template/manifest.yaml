@@ -2,7 +2,7 @@ schema_version: 1
 template:
   name: tf-aws-ec2-base
   engine: terraform
-  version: 0.2.4
+  version: 0.2.5
 requirements:
 - name: terraform
 - name: awscli
