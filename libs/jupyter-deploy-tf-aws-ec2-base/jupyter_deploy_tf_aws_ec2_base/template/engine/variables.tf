@@ -214,7 +214,7 @@ variable "oauth_allowed_org" {
 
     If specified, all members of this organization will be allowed access.
     
-    Enter "" if you don't want to authorize by organization membership, 
+    Leave blank if you don't want to authorize by organization membership, 
     but note that you must provide a value for oauth_allowed_usernames instead.
 
     Example: my-org
@@ -260,18 +260,15 @@ variable "oauth_app_client_id" {
     Client ID of the OAuth app that will control access to your jupyter notebooks.
 
     You must create an OAuth app first in your Github account.
-    1. Open GitHub: https://github.com/
-    2. Select your user icon on the top right
-    3. Select 'Settings'
-    4. On the left nav, select 'Developer settings'
-    5. Go to 'OAuth Apps'
-    6. Select 'New OAuth App'
-    7. Select an app name, for example: Jupyter-ec2-base
-    8. Input home page URL: https://<subdomain>.<domain>
-    9. Application description: add your description or leave blank
-    10. Authorization callback URL: https://<subdomain>.<domain>/oauth2/callback
-    11. Select 'Register Application'
-    12. Retrieve the Client ID
+    1. If you already have an OAuth app, select it from https://github.com/settings/developers
+    2. Or create a new OAuth app at: https://github.com/settings/applications/new
+    3. 'Application name': Jupyter-ec2-base or any name you choose
+    4. 'Homepage URL': https://<subdomain>.<domain>
+    5. 'Application description': add your description or leave blank
+    6. 'Authorization callback URL': https://<subdomain>.<domain>/oauth2/callback
+    7. Leave 'Enable Device Flow' unticked
+    8. Select 'Register Application'
+    9. Retrieve the Client ID
     Full instructions: https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app
 
     Example: 00000aaaaa11111bbbbb
