@@ -3,6 +3,7 @@ name = "jupyter-deploy"
 version = "0.2.5"
 description = "CLI based tool to deploy Jupyter applications that integrates with infrastructure as code frameworks."
 readme = "README.md"
+license = { file = "LICENSE" }
 authors = [
     { name = "Jonathan Guinegagne", email = "jggg@amazon.com" },
     { name = "Michael Chin", email = "chnmch@amazon.com" },
@@ -55,6 +56,10 @@ dev = [
     "ruff>=0.11.8",
     "parameterized>=0.9.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/jupyter-infra/jupyter-deploy"
+github = "https://github.com/jupyter-infra/jupyter-deploy/tree/main/libs/jupyter-deploy"
 
 [tool.mypy]
 warn_return_any = true
