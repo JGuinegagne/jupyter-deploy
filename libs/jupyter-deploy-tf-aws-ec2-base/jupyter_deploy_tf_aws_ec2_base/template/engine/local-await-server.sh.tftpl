@@ -233,7 +233,7 @@ main(){
             echo "Instance is ready!"
             ready=true
         elif [ "$INNER_STATUS" = "INITIALIZING" ]; then
-            echo "Instance still inializing..."
+            echo "Instance still initializing..."
             sleep 10
             attempts=$((attempts+1))
         elif [ "$INNER_STATUS" = "FETCHING_CERTIFICATES" ]; then
