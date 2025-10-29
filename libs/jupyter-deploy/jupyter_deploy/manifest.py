@@ -123,6 +123,11 @@ class JupyterDeployManifestV1(BaseModel):
             raise NotImplementedError(f"No implementation found for command: {cmd_name}")
         return command
 
+    def has_command(self, cmd_name: str) -> bool:
+        """Return true if the manifest defines the command, false otherwise."""
+        command = next((cmd for cmd in (self.commands or []) if cmd.cmd == cmd_name), None)
+        return command is not None
+
     def get_requirements(self) -> list[JupyterDeployRequirementV1]:
         """Return the list of requirements as declared in the manifest."""
         return self.requirements or []

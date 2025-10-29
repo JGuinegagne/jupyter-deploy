@@ -334,8 +334,7 @@ def open(
     """
     with cmd_utils.project_dir(project_dir):
         handler = OpenHandler()
-        url = handler.get_url()
-        handler.open_url(url)
+        handler.open()
 
 
 @runner.app.command()

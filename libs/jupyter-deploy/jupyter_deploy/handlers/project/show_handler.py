@@ -36,12 +36,12 @@ class ShowHandler(BaseProjectHandler):
         if show_info:
             console.line()
             self._show_project_basic_info()
-        if show_outputs:
-            console.line()
-            self._show_project_outputs()
         if show_variables:
             console.line()
             self._show_project_variables()
+        if show_outputs:
+            console.line()
+            self._show_project_outputs()
 
     def _show_project_basic_info(self) -> None:
         """Display basic project information."""
