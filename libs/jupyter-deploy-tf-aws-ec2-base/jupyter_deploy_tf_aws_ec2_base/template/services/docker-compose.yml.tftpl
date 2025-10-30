@@ -31,7 +31,7 @@ services:
       - "traefik.http.routers.jupyter.entrypoints=websecure"
       - "traefik.http.routers.jupyter.tls.certresolver=letsencrypt"
       - "traefik.http.services.jupyter.loadbalancer.server.port=8888"
-      - "traefik.http.routers.jupyter.middlewares=oauth-errors@docker,oauth-auth@docker"
+      - "traefik.http.routers.jupyter.middlewares=oauth-errors@docker,oauth-auth@docker,oauth-faults@docker"
     volumes:
       - /mnt/jupyter-data:/home/jovyan
       - /var/run/docker.sock:/var/run/docker.sock
@@ -79,6 +79,8 @@ services:
         tag: "docker.oauth"
     depends_on:
       - fluent-bit
+    volumes:
+      - ./static:/var/www/static:ro
     labels:
       - "traefik.enable=true"
       # Main service definition
@@ -101,11 +103,20 @@ services:
       - "traefik.http.middlewares.oauth-errors.errors.status=401-403"
       - "traefik.http.middlewares.oauth-errors.errors.service=oauth"
       - "traefik.http.middlewares.oauth-errors.errors.query=/oauth2/sign_in?rd={url}"
+      # 500 error handling middleware
+      - "traefik.http.middlewares.oauth-faults.errors.status=500-599"
+      - "traefik.http.middlewares.oauth-faults.errors.service=oauth"
+      - "traefik.http.middlewares.oauth-faults.errors.query=/static/oauth_error_500.html"
+      # Static files router have direct access without auth
+      - "traefik.http.routers.static.rule=Host(`${full_domain}`) && PathPrefix(`/static/`)"
+      - "traefik.http.routers.static.service=oauth"
+      - "traefik.http.routers.static.entrypoints=websecure"
+      - "traefik.http.routers.static.tls.certresolver=letsencrypt"
       # Auth domain routing
       - "traefik.http.routers.oauth.rule=Host(`${full_domain}`) && PathPrefix(`/oauth2/`)"
       - "traefik.http.routers.oauth.entrypoints=websecure"
       - "traefik.http.routers.oauth.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.oauth.middlewares=auth-headers@docker"
+      - "traefik.http.routers.oauth.middlewares=auth-headers@docker,oauth-faults@docker"
       - "traefik.http.routers.oauth.service=oauth"
     networks:
       - web
@@ -126,8 +137,11 @@ services:
       - OAUTH2_PROXY_COOKIE_SECRET=$${OAUTH_SECRET}
       - OAUTH2_PROXY_COOKIE_SECURE=true
       - OAUTH2_PROXY_REVERSE_PROXY=true
-      - OAUTH2_PROXY_UPSTREAMS=https://${full_domain}/
+      - OAUTH2_PROXY_UPSTREAMS=https://${full_domain}/,file:///var/www/static/#/static/
       - OAUTH2_PROXY_WHITELIST_DOMAINS=${full_domain}
+      - OAUTH2_PROXY_CUSTOM_TEMPLATES_DIR=/var/www/static
+      - OAUTH2_PROXY_SKIP_AUTH_ROUTE=/static/=
+      - OAUTH2_PROXY_SKIP_AUTH_REGEX=^/static/.*$
   traefik:
     image: traefik:latest
     container_name: traefik

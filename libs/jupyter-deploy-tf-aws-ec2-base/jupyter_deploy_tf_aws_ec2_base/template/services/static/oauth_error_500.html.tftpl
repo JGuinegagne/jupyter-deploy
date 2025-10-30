@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authorization Failure</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #e53e3e;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        h2 {
+            margin-top: 30px;
+            color: #2c5282;
+        }
+        .section {
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        ol {
+            padding-left: 25px;
+        }
+        li {
+            margin-bottom: 15px;
+        }
+        a {
+            color: #3182ce;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        code {
+            background-color: #edf2f7;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>OAuth Access Failure</h1>
+
+    <div class="section">
+        <p>There was a problem authenticating your GitHub identity or verifying your access permissions.</p>
+    </div>
+
+    <h2>Troubleshooting</h2>
+
+    <div class="section">
+        <ol>
+            <li>
+                <strong>Verify your GitHub OAuth app configuration</strong>
+                <p>Check your GitHub OAuth application <a href="https://github.com/settings/developers" target="_blank">settings</a>:</p>
+                <ul>
+                    <li>Homepage URL must be <code>https://${full_domain}</code></li>
+                    <li>Authorization callback URL must be <code>https://${full_domain}/oauth2/callback</code></li>
+                </ul>
+            </li>
+
+            <li>
+                <strong>Verify that your GitHub identity is authorized to access the app</strong>
+                <p>Use the following Jupyter Deploy commands to verify the allowlisted entities:</p>
+                <ul>
+                    <li><code>jd users list</code> - List allowed users</li>
+                    <li><code>jd organization get</code> - Check allowed organization</li>
+                    <li><code>jd teams get</code> - Check allowed teams</li>
+                </ul>
+            </li>
+
+            <li>
+                <strong>When allowlisting with a GitHub organization, grant the OAuth app permission to access the organization</strong>
+                <p>You may need to reset the tokens already issued by GitHub:</p>
+                <ol>
+                    <li>Go to the <a href="https://github.com/settings/developers" target="_blank">OAuth app settings</a></li>
+                    <li>Find your OAuth app</li>
+                    <li>Click "Revoke all users token"</li>
+                    <li>Try to log on again</li>
+                </ol>
+            </li>
+        </ol>
+    </div>
+</body>
+</html>

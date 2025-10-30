@@ -56,7 +56,16 @@ data "local_file" "cloudinit_volumes_tftpl" {
   filename = "${path.module}/../services/cloudinit-volumes.sh.tftpl"
 }
 
+data "local_file" "oauth_error_500_html_tftpl" {
+  filename = "${path.module}/../services/static/oauth_error_500.html.tftpl"
+}
+
 locals {
+  # Generate the templated HTML file
+  oauth_error_500_templated = templatefile("${path.module}/../services/static/oauth_error_500.html.tftpl", {
+    full_domain = module.network.full_domain
+  })
+
   # Generate the templated TOML files
   pyproject_jupyter_templated = templatefile("${path.module}/../services/jupyter/pyproject.jupyter.toml.tftpl", {
     has_gpu    = module.ami_al2023.has_gpu
@@ -157,6 +166,7 @@ locals {
   get_status_indented            = join("\n${local.indent_str}", compact(split("\n", data.local_file.get_status.content)))
   get_auth_indented              = join("\n${local.indent_str}", compact(split("\n", data.local_file.get_auth.content)))
   update_server_indented         = join("\n${local.indent_str}", compact(split("\n", data.local_file.update_server.content)))
+  oauth_error_500_indented       = join("\n${local.indent_str}", compact(split("\n", local.oauth_error_500_templated)))
   cloudinit_volumes_indented     = join("\n${local.indent_str}", compact(split("\n", local.cloudinit_volumes_script)))
 }
 
@@ -184,6 +194,10 @@ mainSteps:
     inputs:
       runCommand:
         - |
+          mkdir -p /opt/docker/static
+          tee /opt/docker/static/oauth_error_500.html << 'EOF'
+          ${local.oauth_error_500_indented}
+          EOF
           tee /opt/docker/docker-compose.yml << 'EOF'
           ${local.docker_compose_indented}
           EOF
@@ -270,6 +284,7 @@ DOC
     fileexists("${path.module}/../services/commands/get-status.sh"),
     fileexists("${path.module}/../services/commands/get-auth.sh"),
     fileexists("${path.module}/../services/commands/update-server.sh"),
+    fileexists("${path.module}/../services/static/oauth_error_500.html.tftpl"),
   ])
 
   files_not_empty = alltrue([
@@ -288,6 +303,7 @@ DOC
     length(data.local_file.get_status) > 0,
     length(data.local_file.get_auth) > 0,
     length(data.local_file.update_server) > 0,
+    length(data.local_file.oauth_error_500_html_tftpl) > 0,
   ])
 
   docker_compose_valid = can(yamldecode(local.docker_compose_file))
