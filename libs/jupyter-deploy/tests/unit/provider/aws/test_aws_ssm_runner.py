@@ -213,6 +213,7 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
         mock_send_cmd.return_value = {
             "Status": "Success",
             "StandardOutputContent": "Command output",
+            "StandardErrorContent": "Command error",
         }
 
         resolved_arguments: dict[str, ResolvedInstructionArgument] = {
@@ -242,6 +243,7 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
 
         self.assertEqual(result["Status"].value, "Success")
         self.assertEqual(result["StandardOutputContent"].value, "Command output")
+        self.assertEqual(result["StandardErrorContent"].value, "Command error")
         # There should be at least one print call (for the execute info)
         self.assertGreaterEqual(console.print.call_count, 1)
         # Find the call with the document and instance info

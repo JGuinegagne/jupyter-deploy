@@ -138,6 +138,10 @@ class AwsSsmRunner(InstructionRunner):
             "StandardOutputContent": StrResolvedInstructionResult(
                 result_name="StandardOutputContent", value=command_stdout
             ),
+            "StandardErrorContent": StrResolvedInstructionResult(
+                result_name="StandardErrorContent",
+                value=command_stderr,
+            ),
         }
 
     def _start_session(
