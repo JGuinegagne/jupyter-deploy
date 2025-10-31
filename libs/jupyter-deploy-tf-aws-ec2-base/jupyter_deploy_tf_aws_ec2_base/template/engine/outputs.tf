@@ -79,6 +79,12 @@ output "server_update_document" {
   value       = aws_ssm_document.server_update.name
 }
 
+# server.logs CLI handling
+output "server_logs_document" {
+  description = "Name of the SSM document to retrieve server container logs."
+  value       = aws_ssm_document.server_logs.name
+}
+
 # Resources that should not be destroyed by `jd down`
 output "persisting_resources" {
   description = "List of identifiers of resources that should not be destroyed (have persist=true)."

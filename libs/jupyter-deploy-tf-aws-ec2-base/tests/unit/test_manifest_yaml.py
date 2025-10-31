@@ -13,8 +13,9 @@ class TestManifest(unittest.TestCase):
     MANIFEST: dict[str, Any] | None = None
     EXPECTED_REQUIREMENTS = ["terraform", "awscli", "jq"]
     EXPECTED_VALUES = ["open_url", "aws_region", "persisting_resources"]
+    EXPECTED_SERVICES = ["jupyter", "traefik", "oauth"]
     EXPECTED_HOST_COMMANDS = ["host.status", "host.start", "host.stop", "host.restart", "host.connect"]
-    EXPECTED_SERVER_COMMANDS = ["server.status", "server.start", "server.stop", "server.restart"]
+    EXPECTED_SERVER_COMMANDS = ["server.status", "server.start", "server.stop", "server.restart", "server.logs"]
     EXPECTED_USERS_COMMANDS = ["users.list", "users.add", "users.remove", "users.set"]
     EXPECTED_TEAMS_COMMANDS = ["teams.list", "teams.add", "teams.remove", "teams.set"]
     EXPECTED_ORGANIZATION_COMMANDS = ["organization.get", "organization.set", "organization.unset"]
@@ -65,6 +66,17 @@ class TestManifest(unittest.TestCase):
 
         for expected_val in self.EXPECTED_VALUES:
             self.assertIn(expected_val, value_names, f"Expected value {expected_val} missing from manifest")
+
+    def test_all_expected_services_declared(self) -> None:
+        """Test that all expected services are declared in the manifest."""
+        if self.MANIFEST is None:
+            self.fail("MANIFEST is None, test setup failed")
+            return
+
+        services = self.MANIFEST.get("services", [])
+
+        for expected_service in self.EXPECTED_SERVICES:
+            self.assertIn(expected_service, services, f"Expected value {expected_service} missing from manifest")
 
     def test_all_expected_host_commands_declared(self) -> None:
         """Test that all expected host commands are declared in the manifest."""

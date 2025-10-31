@@ -13,6 +13,10 @@ values:
   - name: "aws_region"
     source: "output"
     source-key: "region"
+services:
+  - jupyter
+  - traefik
+  - oauth
 commands:
   - cmd: "host.status"
     sequence:
@@ -123,6 +127,29 @@ commands:
           - api-attribute: "service"
             source: "cli"
             source-key: "service"
+  - cmd: server.logs
+    sequence:
+    - api-name: aws.ssm.wait-command-sync
+      arguments:
+      - api-attribute: document_name
+        source: output
+        source-key: server_logs_document
+      - api-attribute: instance_id
+        source: output
+        source-key: instance_id
+      - api-attribute: service
+        source: cli
+        source-key: service
+      - api-attribute: extra
+        source: cli
+        source-key: extra
+    results:
+    - result-name: server.logs
+      source: result
+      source-key: '[0].StandardOutputContent'
+    - result-name: server.errors
+      source: result
+      source-key: '[0].StandardErrorContent'
   - cmd: "users.add"
     sequence:
       - api-name: "aws.ssm.wait-command-sync"

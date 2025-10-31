@@ -156,6 +156,35 @@ mainSteps:
         - |
           sh /usr/local/bin/update-server.sh {{action}} {{service}}
 DOC
+  ssm_server_logs   = <<DOC
+schemaVersion: '2.2'
+description: Returns the container logs.
+parameters:
+  service:
+    type: String
+    description: "The service whose logs to print on (jupyter, traefik or oauth)."
+    default: jupyter
+    allowedValues:
+      - jupyter
+      - traefik
+      - oauth
+  extra:
+    type: String
+    description: "The additional parameters to pass to docker logs."
+    default: "-n 100"
+mainSteps:
+  - action: aws:runShellScript
+    name: Logs
+    inputs:
+      runCommand:
+        - |
+          if [ -z "{{extra}}" ]; then
+            EXTRA="-n 100"
+          else
+            EXTRA="{{extra}}"
+          fi
+          docker logs {{service}} $EXTRA
+DOC
 }
 
 locals {
@@ -223,5 +252,14 @@ resource "aws_ssm_document" "server_update" {
   document_format = "YAML"
 
   content = local.ssm_server_update
+  tags    = local.combined_tags
+}
+
+resource "aws_ssm_document" "server_logs" {
+  name            = "server-logs-${local.doc_postfix}"
+  document_type   = "Command"
+  document_format = "YAML"
+
+  content = local.ssm_server_logs
   tags    = local.combined_tags
 }

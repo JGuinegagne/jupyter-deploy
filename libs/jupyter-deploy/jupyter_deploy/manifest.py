@@ -6,6 +6,12 @@ from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.enum import InstructionArgumentSource, ResultSource, TransformType, UpdateSource, ValueSource
 
 
+class InvalidServiceError(ValueError):
+    """Special error class to indicate an invalid service name."""
+
+    pass
+
+
 class JupyterDeployTemplateV1(BaseModel):
     model_config = ConfigDict(extra="allow")
     name: str
@@ -93,6 +99,7 @@ class JupyterDeployManifestV1(BaseModel):
     template: JupyterDeployTemplateV1
     requirements: list[JupyterDeployRequirementV1] | None = None
     values: list[JupyterDeployValueV1] | None = None
+    services: list[str] | None = None
     commands: list[JupyterDeployCommandV1] | None = None
 
     def get_engine(self) -> EngineType:
@@ -122,6 +129,37 @@ class JupyterDeployManifestV1(BaseModel):
         if not command:
             raise NotImplementedError(f"No implementation found for command: {cmd_name}")
         return command
+
+    def get_services(self) -> list[str]:
+        """Return the services name."""
+        if not self.services:
+            return []
+        return self.services
+
+    def get_validated_service(self, svc: str, allow_all: bool = True) -> str:
+        """Return the value matching the service.
+
+        Raises:
+            InvalidServiceError if service is invalid
+        """
+        services = self.get_services()
+
+        # no services defined: just allow
+        if not services:
+            return svc
+
+        # first, if service is explicitely listed in services, return it
+        if svc in services:
+            return svc
+
+        # else, use placeholders
+        if svc == "default":
+            if len(services):
+                return services[0]
+        elif svc == "all" and allow_all:
+            return "all"
+
+        raise InvalidServiceError(f"Invalid service, use one of {services}")
 
     def has_command(self, cmd_name: str) -> bool:
         """Return true if the manifest defines the command, false otherwise."""

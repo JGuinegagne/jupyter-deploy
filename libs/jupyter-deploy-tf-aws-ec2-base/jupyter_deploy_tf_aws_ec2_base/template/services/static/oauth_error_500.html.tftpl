@@ -25,15 +25,12 @@
         .section {
             background-color: #f8f9fa;
             border-radius: 5px;
-            padding: 20px;
+            padding: 10px;
             margin-bottom: 20px;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
-        ol {
-            padding-left: 25px;
-        }
         li {
-            margin-bottom: 15px;
+            margin-bottom: 10px;
         }
         a {
             color: #3182ce;
@@ -51,7 +48,7 @@
     </style>
 </head>
 <body>
-    <h1>OAuth Access Failure</h1>
+    <h1>Authorization Failure</h1>
 
     <div class="section">
         <p>There was a problem authenticating your GitHub identity or verifying your access permissions.</p>
@@ -63,10 +60,12 @@
         <ol>
             <li>
                 <strong>Verify your GitHub OAuth app configuration</strong>
-                <p>Check your GitHub OAuth application <a href="https://github.com/settings/developers" target="_blank">settings</a>:</p>
+                <p>Find your OAuth app on GitHub <a href="https://github.com/settings/developers" target="_blank">settings page</a>:</p>
                 <ul>
                     <li>Homepage URL must be <code>https://${full_domain}</code></li>
                     <li>Authorization callback URL must be <code>https://${full_domain}/oauth2/callback</code></li>
+                    <li>Verify that the OAuth app Client ID and Client Secret match your Jupyter Deploy config</li>
+                    <li>Look at your oauth service logs with <code>jd server logs -s oauth</code></li>
                 </ul>
             </li>
 
@@ -74,21 +73,20 @@
                 <strong>Verify that your GitHub identity is authorized to access the app</strong>
                 <p>Use the following Jupyter Deploy commands to verify the allowlisted entities:</p>
                 <ul>
-                    <li><code>jd users list</code> - List allowed users</li>
-                    <li><code>jd organization get</code> - Check allowed organization</li>
-                    <li><code>jd teams get</code> - Check allowed teams</li>
+                    <li><code>jd users list</code> - Check allowlisted GitHub usernames</li>
+                    <li><code>jd organization get</code> - Check allowlisted GitHub organization</li>
+                    <li><code>jd teams list</code> - Check allowlisted GitHub teams of the organization</li>
                 </ul>
             </li>
 
             <li>
                 <strong>When allowlisting with a GitHub organization, grant the OAuth app permission to access the organization</strong>
                 <p>You may need to reset the tokens already issued by GitHub:</p>
-                <ol>
-                    <li>Go to the <a href="https://github.com/settings/developers" target="_blank">OAuth app settings</a></li>
-                    <li>Find your OAuth app</li>
-                    <li>Click "Revoke all users token"</li>
+                <ul>
+                    <li>Find your OAuth app on GitHub <a href="https://github.com/settings/developers" target="_blank">settings page</a></li>
+                    <li>Click <code>Revoke all users token</code></li>
                     <li>Try to log on again</li>
-                </ol>
+                </ul>
             </li>
         </ol>
     </div>

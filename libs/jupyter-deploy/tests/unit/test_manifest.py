@@ -5,7 +5,7 @@ from typing import Any
 import yaml
 
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.manifest import JupyterDeployManifestV1
+from jupyter_deploy.manifest import InvalidServiceError, JupyterDeployManifestV1
 
 
 class TestJupyterDeployManifestV1(unittest.TestCase):
@@ -70,3 +70,35 @@ class TestJupyterDeployManifestV1(unittest.TestCase):
             **self.manifest_v1_parsed_content  # type: ignore
         )
         self.assertFalse(manifest.has_command("i.do.not.exist"))
+
+    def test_manifest_v1_get_services(self) -> None:
+        manifest = JupyterDeployManifestV1(
+            **self.manifest_v1_parsed_content  # type: ignore
+        )
+        self.assertListEqual(manifest.get_services(), ["jupyter", "traefik", "oauth"])
+
+    def test_manifest_v1_get_validated_service(self) -> None:
+        manifest = JupyterDeployManifestV1(
+            **self.manifest_v1_parsed_content  # type: ignore
+        )
+        for svc in ["jupyter", "traefik", "oauth"]:
+            self.assertEqual(manifest.get_validated_service(svc), svc)
+
+    def test_manifest_v1_get_validated_service_default_return_first_value(self) -> None:
+        manifest = JupyterDeployManifestV1(
+            **self.manifest_v1_parsed_content  # type: ignore
+        )
+        self.assertEqual(manifest.get_validated_service("default"), "jupyter")
+
+    def test_manifest_v1_get_validated_service_all_allowed(self) -> None:
+        manifest = JupyterDeployManifestV1(
+            **self.manifest_v1_parsed_content  # type: ignore
+        )
+        self.assertEqual(manifest.get_validated_service("all", allow_all=True), "all")
+
+    def test_manifest_v1_get_validated_service_all_disallowed(self) -> None:
+        manifest = JupyterDeployManifestV1(
+            **self.manifest_v1_parsed_content  # type: ignore
+        )
+        with self.assertRaises(InvalidServiceError):
+            manifest.get_validated_service("all", allow_all=False)
