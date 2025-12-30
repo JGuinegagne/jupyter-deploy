@@ -15,6 +15,7 @@ jupyter-deploy = { workspace = true }
 members = [
     "libs/jupyter-deploy",
     "libs/jupyter-deploy-tf-aws-ec2-base",
+    "libs/pytest-jupyter-deploy",
     "images/uvbase"
 ]
 
@@ -38,11 +39,13 @@ disallow_untyped_defs = true
 check_untyped_defs = true
 files = [
     "libs/jupyter-deploy",
-    "libs/jupyter-deploy-tf-aws-ec2-base"
+    "libs/jupyter-deploy-tf-aws-ec2-base",
+    "libs/pytest-jupyter-deploy"
 ]
 
 [tool.pytest.ini_options]
 pythonpath = [
   "libs/jupyter-deploy",
-  "libs/jupyter-deploy-tf-aws-ec2-base"
+  "libs/jupyter-deploy-tf-aws-ec2-base",
+  "libs/pytest-jupyter-deploy"
 ]

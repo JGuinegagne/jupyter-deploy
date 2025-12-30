@@ -6,7 +6,7 @@
 - the main code paths/imports of the CLI must not import any of such package, however specific command handlers need them
 - the module `provider/instruction_runner_factory` handles such optional imports; do not break that pattern
 with imports to cloud-provider or infrastructure-as-code specific libraries elsewhere
-- The `jupyter-deploy-tf-aws-ec2-base` is the primary template used by the CLI
+- The `jupyter-deploy-tf-aws-ec2-base` package is the primary template used by the CLI
   - Uses Terraform as infrastructure as code engine
   - Uses AWS as cloud provider
   - Uses GitHub as OAuth identity provider
@@ -14,6 +14,7 @@ with imports to cloud-provider or infrastructure-as-code specific libraries else
   - Default values should be set in `presets/defaults-all.tfvars`
   - There must not be any `variable` blocks in files other than `variables.tf`
   - IMPORTANT: Do not copy files to `/home/jovyan` during Docker build time. The EBS volume for Jupyter data is mounted at runtime, and any files copied during build will be hidden by this mount. Instead, copy files to a location like `/opt` during build and then copy them to `/home/jovyan` in startup scripts.
+- The `pytest-jupyter-deploy` package is a pytest fixture for templates; it's also referred to as the test engine.
 
 # Development Workflow
 After making code changes, always run from the root of the repository:
