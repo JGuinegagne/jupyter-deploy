@@ -127,6 +127,7 @@ ENV/
 env.bak/
 venv.bak/
 *.env
+.env.*
 
 # mkdocs documentation
 /site
@@ -164,3 +165,7 @@ claude-test-*.yaml
 # local files
 /tmp
 /sandbox*
+
+# Playwright authentication state and test artifacts
+.auth/
+test-results/

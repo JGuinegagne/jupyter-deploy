@@ -1,0 +1,18 @@
+services:
+  e2e:
+    image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    container_name: jupyter-deploy-e2e
+    hostname: ${HOSTNAME:-localhost}
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - ~/.aws:/root/.aws:ro
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    environment:
+      - DISPLAY=${DISPLAY}
+      - AWS_PROFILE=${AWS_PROFILE:-default}
+      - GITHUB_USERNAME=${GITHUB_USERNAME:-}
+      - GITHUB_PASSWORD=${GITHUB_PASSWORD:-}
+    network_mode: host
+    # Keep container running in background
+    command: sleep infinity

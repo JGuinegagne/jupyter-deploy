@@ -1,114 +1,133 @@
 """CLI wrapper for jupyter-deploy commands."""
 
+import re
 import subprocess
 from pathlib import Path
+
+from jupyter_deploy import cmd_utils as jd_cmd_utils
+
+
+class JDCliError(RuntimeError):
+    pass
+
+
+class JDCliTimeoutError(RuntimeError):
+    pass
 
 
 class JDCli:
     """Wrapper for jupyter-deploy CLI commands."""
 
-    def __init__(self, working_dir: Path) -> None:
-        """Initialize CLI wrapper.
+    def __init__(self, project_dir: Path) -> None:
+        """Initialize CLI wrapper."""
+        self.project_dir = project_dir
 
-        Args:
-            working_dir: Working directory for CLI commands
-        """
-        self.working_dir = working_dir
-
-    def init(self, dir_name: Path | str, engine: str, provider: str, infra: str, name: str) -> None:
-        """Initialize a deployment project.
-
-        Args:
-            dir_name: Directory to initialize
-            engine: Engine type (e.g., "terraform")
-            provider: Cloud provider (e.g., "aws")
-            infra: Infrastructure type (e.g., "ec2")
-            name: Template name (e.g., "base")
-        """
-        cmd = [
-            "jd",
-            "init",
-            "-E",
-            engine,
-            "-P",
-            provider,
-            "-I",
-            infra,
-            "-T",
-            name,
-            str(dir_name),
-        ]
-        self._run_command(cmd, cwd=None, description="Initialize deployment project")
-
-    def config(self) -> None:
-        """Configure the deployment."""
-        cmd = ["jd", "config"]
-        self._run_command(cmd, cwd=self.working_dir, description="Configure deployment")
-
-    def up(self, timeout: int | None = None) -> None:
-        """Deploy infrastructure.
-
-        Args:
-            timeout: Command timeout in seconds
-        """
-        cmd = ["jd", "up"]
-        self._run_command(cmd, cwd=self.working_dir, description="Deploy infrastructure", timeout=timeout)
-
-    def down(self, timeout: int | None = None) -> None:
-        """Tear down infrastructure.
-
-        Args:
-            timeout: Command timeout in seconds
-        """
-        cmd = ["jd", "down"]
-        self._run_command(cmd, cwd=self.working_dir, description="Tear down infrastructure", timeout=timeout)
-
-    def show(self) -> None:
-        """Display deployment information.
-
-        Args:
-            info: Display core project and template information
-            outputs: Display outputs information
-            variables: Display variables information
-        """
-        cmd = ["jd", "show"]
-        self._run_command(cmd, cwd=self.working_dir, description="Display deployment info")
-
-    def _run_command(
+    def run_command(
         self,
         cmd: list[str],
-        cwd: Path | None,
-        description: str,
-        timeout: int | None = None,
-        capture_output: bool = False,
+        timeout_seconds: int | None = None,
+        capture_output: bool = True,
     ) -> subprocess.CompletedProcess[str]:
-        """Run a command and handle errors.
+        """Run a command from the project directory.
 
         Args:
             cmd: Command to run
             cwd: Working directory for command
-            description: Human-readable description for error messages
-            timeout: Command timeout in seconds
+            timeout_seconds: Command timeout in seconds
             capture_output: Whether to capture stdout/stderr
 
         Returns:
             CompletedProcess instance
 
         Raises:
-            subprocess.CalledProcessError: If command fails
-            subprocess.TimeoutExpired: If command times out
+            JDCliError: If command fails
+            JDCliTimeoutError: If command times out
         """
-        try:
-            result = subprocess.run(
-                cmd,
-                cwd=cwd,
-                check=True,
-                timeout=timeout,
-                capture_output=capture_output,
-                text=True,
-            )
-            return result
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to {description}: {e}") from e
-        except subprocess.TimeoutExpired as e:
-            raise RuntimeError(f"Timeout while trying to {description}") from e
+        with jd_cmd_utils.switch_dir(self.project_dir):
+            try:
+                result = subprocess.run(
+                    cmd,
+                    check=True,
+                    timeout=timeout_seconds,
+                    capture_output=capture_output,
+                    text=True,
+                )
+                return result
+            except subprocess.CalledProcessError as e:
+                raise JDCliError(f"Failed to run '{cmd}': {e}") from e
+            except subprocess.TimeoutExpired as e:
+                raise JDCliTimeoutError(f"Timeout while trying to run '{cmd}") from e
+
+    def get_host_status(self) -> str:
+        """Get the host status string.
+
+        Returns:
+            Host status string (e.g., "running", "stopped", "pending")
+
+        Raises:
+            JDCliError: If command fails
+            ValueError: If status cannot be parsed
+        """
+        result = self.run_command(["jupyter-deploy", "host", "status"])
+
+        # Parse output for line "Jupyter host status: <status>"
+        for line in result.stdout.splitlines():
+            if line.startswith("Jupyter host status:"):
+                # Extract status after the colon and color codes
+                status = line.split(":", 1)[1].strip()
+                # Remove ANSI color codes if present
+                status = re.sub(r"\x1b\[[0-9;]*m", "", status)
+                return status.lower()
+
+        raise ValueError("Could not parse host status from command output")
+
+    def get_server_status(self) -> str:
+        """Get the server status string.
+
+        Returns:
+            Server status string (e.g., "IN_SERVICE", "STOPPED", "INITIALIZING")
+
+        Raises:
+            JDCliError: If command fails
+            ValueError: If status cannot be parsed
+        """
+        result = self.run_command(["jupyter-deploy", "server", "status"])
+
+        # Parse output for line "Jupyter server status: <status>"
+        for line in result.stdout.splitlines():
+            if line.startswith("Jupyter server status:"):
+                # Extract status after the colon and color codes
+                status = line.split(":", 1)[1].strip()
+                # Remove ANSI color codes if present
+                status = re.sub(r"\x1b\[[0-9;]*m", "", status)
+                return status
+
+        raise ValueError("Could not parse server status from command output")
+
+    def get_jupyterlab_url(self) -> str:
+        """Get the JupyterLab URL from the 'jd open' command output.
+
+        This does not actually open the browser, but captures the URL that would be opened.
+
+        Returns:
+            JupyterLab URL string
+
+        Raises:
+            JDCliError: If command fails
+            ValueError: If URL cannot be parsed
+        """
+        # Run the open command but don't actually open the browser
+        # The output contains: "Opening Jupyter app at: {url}"
+        result = self.run_command(["jupyter-deploy", "open"])
+
+        # Parse output for the URL line
+        for line in result.stdout.splitlines():
+            if "Opening Jupyter app at:" in line:
+                # Extract URL after "Opening Jupyter app at:"
+                url = line.split("Opening Jupyter app at:", 1)[1].strip()
+                # Remove ANSI color codes if present
+                url = re.sub(r"\x1b\[[0-9;]*m", "", url)
+                if url.startswith("http"):
+                    return url
+
+        raise ValueError("Could not parse JupyterLab URL from command output")

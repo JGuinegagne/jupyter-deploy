@@ -25,11 +25,13 @@ dev-dependencies = [
     "mypy>=1.15.0",
     "pytest>=8.3.5",
     "pytest-cov>=6.1.1",
+    "pytest-playwright>=0.6.2",
     "ruff>=0.11.8",
     "typer>=0.15.4",
     "rich>=10.11.0",
     "parameterized>=0.9.0",
     "tomli-w>=1.2.0",
+    "python-dotenv>=1.2.1",
 ]
 
 [tool.mypy]
@@ -49,3 +51,7 @@ pythonpath = [
   "libs/jupyter-deploy-tf-aws-ec2-base",
   "libs/pytest-jupyter-deploy"
 ]
+markers = [
+  "e2e: marks tests as end-to-end tests (deselect with '-m \"not e2e\"')"
+]
+addopts = "-m 'not e2e'"

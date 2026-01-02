@@ -18,6 +18,8 @@ from jupyter_deploy.variables_config import (
     JupyterDeployVariablesConfig,
 )
 
+from pytest_jupyter_deploy import constants
+
 
 class SuiteConfig:
     """E2E test suite configuration."""
@@ -37,6 +39,10 @@ class SuiteConfig:
         self._existing_project_dir = existing_project_dir
         self._loaded = False
 
+    def references_existing_project(self) -> bool:
+        """Return True if the config points to an existing project, False if it owns the resources."""
+        return self._existing_project_dir is not None
+
     def load(self) -> None:
         """Locate, read and parse manifest, variable and env vars.
 
@@ -46,16 +52,20 @@ class SuiteConfig:
         if self._loaded:
             return
 
-        template_dir_path = self.find_template_dir_path()
-        self.manifest = retrieve_project_manifest(template_dir_path / jd_constants.MANIFEST_FILENAME)
-        self.variables_config = retrieve_variables_config(template_dir_path / jd_constants.VARIABLES_FILENAME)
-
         if self._existing_project_dir:
+            # Load from existing project directory
             self.project_dir = self._existing_project_dir
+            self.manifest = retrieve_project_manifest(self.project_dir / jd_constants.MANIFEST_FILENAME)
+            self.variables_config = retrieve_variables_config(self.project_dir / jd_constants.VARIABLES_FILENAME)
         else:
+            # Load from template directory
+            template_dir_path = self.find_template_dir_path()
+            self.manifest = retrieve_project_manifest(template_dir_path / jd_constants.MANIFEST_FILENAME)
+            self.variables_config = retrieve_variables_config(template_dir_path / jd_constants.VARIABLES_FILENAME)
+
             full_name = self.manifest.template.name
             timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            self.project_dir = Path(os.getcwd()) / "sandbox-e2e" / full_name / timestamp
+            self.project_dir = Path(os.getcwd()) / constants.SANDBOX_E2E_DIR / full_name / timestamp
         self._loaded = True
 
     def find_template_dir_path(self) -> Path:
@@ -71,8 +81,27 @@ class SuiteConfig:
         |__e2e
         |__unit
         """
-        # implement this
-        return Path(os.getcwd())
+        # suite_dir is tests/e2e, go up 2 levels to get to project root
+        project_root = self.suite_dir.parent.parent
+
+        # Find the package directory (project-name -> project_name)
+        project_name = project_root.name.replace("-", "_")
+        package_dir = project_root / project_name
+
+        if not package_dir.exists():
+            raise FileNotFoundError(
+                f"Package directory not found: {package_dir}. "
+                f"Expected directory structure: {project_root.name}/{project_name}/{constants.TEMPLATE_DIR}"
+            )
+
+        template_dir = package_dir / constants.TEMPLATE_DIR
+        if not template_dir.exists():
+            raise FileNotFoundError(
+                f"Template directory not found: {template_dir}. "
+                f"Expected directory structure: {project_root.name}/{project_name}/{constants.TEMPLATE_DIR}"
+            )
+
+        return template_dir
 
     @cached_property
     def template_engine(self) -> EngineType:
@@ -153,12 +182,12 @@ class SuiteConfig:
             ValidationError: If configuration is invalid
         """
         # Load environment file first if it exists
-        env_file_path = self.suite_dir / f"env.{config_name}"
+        env_file_path = self.suite_dir / f"{constants.ENV_FILE_PREFIX}{config_name}"
         if env_file_path.exists():
             load_dotenv(env_file_path)
 
         # Load configuration file
-        config_file = self.suite_dir / "configurations" / f"{config_name}.yaml"
+        config_file = self.suite_dir / constants.CONFIGURATIONS_DIR / f"{config_name}.yaml"
         if not config_file.exists():
             raise FileNotFoundError(f"Configuration not found at path: {config_file.absolute()}")
 

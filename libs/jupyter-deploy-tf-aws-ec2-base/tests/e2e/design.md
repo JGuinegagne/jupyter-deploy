@@ -147,17 +147,6 @@ def e2e_deployment(e2e_config, request):
     if not no_cleanup and e2e_config.should_cleanup(tests_failed):
         deployment.down()
 
-
-@pytest.fixture
-def jd_cli(e2e_deployment):
-    """
-    Provide CLI helper for jd commands.
-
-    Returns JDCli instance configured for the deployment working directory.
-    Provides command groups: users, teams, organization, host, server.
-    """
-    from .cli import JDCli  # Will be in plugin package
-    return JDCli(e2e_deployment.working_dir)
 ```
 
 ## Template E2E Tests Structure

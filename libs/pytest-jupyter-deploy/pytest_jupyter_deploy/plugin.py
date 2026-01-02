@@ -1,14 +1,15 @@
 """Pytest plugin - defines fixtures for E2E testing."""
 
-import os
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
 import pytest
+from playwright.sync_api import Page
 
-from pytest_jupyter_deploy.cli import JDCli
+from pytest_jupyter_deploy import constants
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
+from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
 from pytest_jupyter_deploy.suite_config import SuiteConfig
 
 
@@ -26,14 +27,20 @@ def pytest_addoption(parser: Any) -> None:
     parser.addoption(
         "--e2e-tests-dir",
         action="store",
-        default="tests/e2e",
+        default=f"{constants.TESTS_DIR}/{constants.E2E_TESTS_DIR}",
         help="Path to E2E tests directory",
     )
     parser.addoption(
         "--e2e-config-name",
         action="store",
         default="base",
-        help="Configuration name to use from configurations/ directory",
+        help=f"Configuration name to use from {constants.CONFIGURATIONS_DIR}/ directory",
+    )
+    parser.addoption(
+        "--e2e-existing-project",
+        action="store",
+        default=None,
+        help="Path to existing jupyter-deploy project (skips deployment, uses existing infrastructure)",
     )
     parser.addoption(
         "--deployment-timeout-seconds",
@@ -50,16 +57,10 @@ def pytest_addoption(parser: Any) -> None:
         help="Timeout in seconds for teardown (default: 600)",
     )
     parser.addoption(
-        "--cleanup-on-success",
-        action="store_true",
-        default=True,
-        help="Cleanup infrastructure after successful tests (default: True)",
-    )
-    parser.addoption(
-        "--cleanup-on-failure",
+        "--ci",
         action="store_true",
         default=False,
-        help="Cleanup infrastructure after failed tests (default: False)",
+        help="CI mode: use GITHUB_USERNAME/GITHUB_PASSWORD for authentication without 2FA",
     )
 
 
@@ -77,21 +78,25 @@ def e2e_suite_dir(request: pytest.FixtureRequest) -> Path:
     if isinstance(tests_dir, str) and tests_dir:
         return Path(tests_dir)
     else:
-        # implement: use the PATH pytest was called with, e.g. uv run pytest PATH
-        return Path(os.getcwd())
+        # Fallback: use pytest's invocation directory
+        return Path(request.config.invocation_params.dir)
 
 
 @pytest.fixture(scope="session")
-def e2e_config(e2e_suite_dir: Path) -> SuiteConfig:
+def e2e_config(e2e_suite_dir: Path, request: pytest.FixtureRequest) -> SuiteConfig:
     """Load E2E test configuration from suite.yaml.
 
     Args:
         e2e_suite_dir: E2E tests directory path
+        request: Pytest fixture request
 
     Returns:
         SuiteConfig instance with loaded configuration
     """
-    return SuiteConfig(suite_dir=e2e_suite_dir)
+    existing_project = request.config.getoption("--e2e-existing-project")
+
+    existing_project_dir = Path(existing_project) if isinstance(existing_project, str) and existing_project else None
+    return SuiteConfig(suite_dir=e2e_suite_dir, existing_project_dir=existing_project_dir)
 
 
 @pytest.fixture(scope="session")
@@ -101,7 +106,7 @@ def e2e_deployment(
     """Deploy infrastructure once per test session.
 
     This fixture:
-    1. Creates a sandbox directory (sandbox-e2e/<template-name>/<timestamp>/)
+    1. Creates a sandbox directory ({SANDBOX_E2E_DIR}/<template-name>/<timestamp>/)
     2. Manages deployment lifecycle (init, config, up, down)
     3. Yields an EndToEndDeployment instance
     4. Handles cleanup based on test results and configuration
@@ -134,28 +139,75 @@ def e2e_deployment(
 
     yield deployment
 
-    # Cleanup based on test results
+    # Cleanup only projects created by the deployment when --no-cleanup is not set.
     no_cleanup = request.config.getoption("--no-cleanup")
-    cleanup_on_success = request.config.getoption("--cleanup-on-success")
-    cleanup_on_failure = request.config.getoption("--cleanup-on-failure")
-    tests_failed = request.session.testsfailed
 
-    should_cleanup = cleanup_on_failure if tests_failed > 0 else cleanup_on_success
-
-    if not no_cleanup and should_cleanup:
+    if no_cleanup or e2e_config.references_existing_project():
+        return
+    else:
         deployment.ensure_destroyed()
 
 
-@pytest.fixture
-def jd_cli(e2e_deployment: EndToEndDeployment) -> JDCli:
-    """Provide CLI helper for jd commands.
+@pytest.fixture(scope="session")
+def browser_context_args(browser_context_args: dict[str, Any], request: pytest.FixtureRequest) -> dict[str, Any]:
+    """Configure browser context to load saved authentication state.
 
-    Returns the JDCli instance from the deployment for running jd commands.
+    This fixture is used by pytest-playwright to configure the browser context.
+    It loads the saved storage state if available, allowing tests to reuse
+    authentication without re-authenticating.
+
+    Note: This is a default fixture. Test suites can override it in their conftest.py
+    for custom behavior.
+    """
+    # Check if running in CI mode
+    is_ci = request.config.getoption("--ci", default=False)
+
+    # Skip loading storage state in CI mode (will use username/password login)
+    if is_ci:
+        return browser_context_args
+
+    # Load storage state if file exists
+    storage_state_path = Path.cwd() / ".auth" / "github-oauth-state.json"
+    if storage_state_path.exists():
+        return {
+            **browser_context_args,
+            "storage_state": str(storage_state_path),
+        }
+
+    return browser_context_args
+
+
+@pytest.fixture(scope="function")
+def github_oauth_app(
+    page: Page, e2e_deployment: EndToEndDeployment, request: pytest.FixtureRequest
+) -> GitHubOAuth2ProxyApplication:
+    """Create a GitHub OAuth2 Proxy application helper.
+
+    This fixture provides a helper for authenticating through GitHub OAuth2 Proxy
+    using passkeys. It requires the 'page' fixture from pytest-playwright.
+
+    The browser storage state (cookies, localStorage) is saved to `.auth/github-oauth-state.json`
+    after successful authentication, allowing reuse across test runs.
+
+    Note: This is function-scoped to match the 'page' fixture scope from pytest-playwright.
 
     Args:
+        page: Playwright Page fixture (from pytest-playwright plugin)
         e2e_deployment: E2E deployment fixture
+        request: Pytest fixture request
 
     Returns:
-        JDCli instance
+        GitHubOAuth2ProxyApplication instance configured with the JupyterLab URL
     """
-    return e2e_deployment.cli
+    e2e_deployment.ensure_deployed()
+    jupyterlab_url = e2e_deployment.cli.get_jupyterlab_url()
+
+    # Define storage state path for persisting authentication
+    storage_state_path = Path.cwd() / ".auth" / "github-oauth-state.json"
+
+    # Get CI mode from pytest option
+    is_ci = request.config.getoption("--ci")
+
+    return GitHubOAuth2ProxyApplication(
+        page=page, jupyterlab_url=jupyterlab_url, storage_state_path=storage_state_path, is_ci=is_ci
+    )
