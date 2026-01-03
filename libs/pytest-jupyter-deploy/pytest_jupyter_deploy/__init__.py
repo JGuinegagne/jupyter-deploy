@@ -1,5 +1,9 @@
 """Pytest plugin for E2E testing of jupyter-deploy templates."""
 
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 
-__version__ = version(__name__)
+try:
+    __version__ = version(__name__)
+except PackageNotFoundError:
+    # Package is not installed (development mode)
+    __version__ = "0.1.0"

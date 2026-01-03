@@ -148,33 +148,37 @@ def e2e_deployment(
         deployment.ensure_destroyed()
 
 
-@pytest.fixture(scope="session")
-def browser_context_args(browser_context_args: dict[str, Any], request: pytest.FixtureRequest) -> dict[str, Any]:
+def handle_browser_context_args(browser_context_args: dict[str, Any], request: pytest.FixtureRequest) -> dict[str, Any]:
     """Configure browser context to load saved authentication state.
 
-    This fixture is used by pytest-playwright to configure the browser context.
-    It loads the saved storage state if available, allowing tests to reuse
-    authentication without re-authenticating.
+    This helper function should be called from test suite's conftest.py browser_context_args fixture.
+    It loads the saved storage state if available, allowing tests to reuse authentication
+    without re-authenticating.
 
-    Note: This is a default fixture. Test suites can override it in their conftest.py
-    for custom behavior.
+    Args:
+        browser_context_args: The base browser context args from pytest-playwright
+        request: Pytest fixture request
+
+    Returns:
+        Updated browser context args with storage_state if available
     """
     # Check if running in CI mode
     is_ci = request.config.getoption("--ci", default=False)
 
     # Skip loading storage state in CI mode (will use username/password login)
     if is_ci:
-        return browser_context_args
+        return {**browser_context_args}
 
     # Load storage state if file exists
-    storage_state_path = Path.cwd() / ".auth" / "github-oauth-state.json"
+    storage_state_path = Path.cwd() / constants.AUTH_DIR / constants.GITHUB_OAUTH_STATE_FILE
+
     if storage_state_path.exists():
         return {
             **browser_context_args,
             "storage_state": str(storage_state_path),
         }
 
-    return browser_context_args
+    return {**browser_context_args}
 
 
 @pytest.fixture(scope="function")
@@ -203,7 +207,7 @@ def github_oauth_app(
     jupyterlab_url = e2e_deployment.cli.get_jupyterlab_url()
 
     # Define storage state path for persisting authentication
-    storage_state_path = Path.cwd() / ".auth" / "github-oauth-state.json"
+    storage_state_path = Path.cwd() / constants.AUTH_DIR / constants.GITHUB_OAUTH_STATE_FILE
 
     # Get CI mode from pytest option
     is_ci = request.config.getoption("--ci")

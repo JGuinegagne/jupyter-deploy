@@ -136,10 +136,7 @@ class GitHubOAuth2ProxyApplication:
             self.save_storage_state()
 
         # Verify we're authenticated and on JupyterLab
-        # Use 'attached' state first to check DOM presence, then check visibility
-        main_locator = self.page.locator("#main")
-        main_locator.wait_for(state="attached", timeout=30000)
-        expect(main_locator).to_be_visible(timeout=30000)
+        self.verify_jupyterlab_accessible()
 
     def login_without_2fa(self) -> None:
         """Login using username/password without 2FA (for CI environments).
@@ -194,11 +191,72 @@ class GitHubOAuth2ProxyApplication:
         # Wait for authentication to complete and redirect back to JupyterLab
         self.page.wait_for_url(f"{self.jupyterlab_url}**", timeout=60000)
 
-        # Verify we're on JupyterLab by checking for the main work area
-        expect(self.page.locator("#main")).to_be_visible(timeout=30000)
+        # Verify we're on JupyterLab
+        self.verify_jupyterlab_accessible()
 
         # Save storage state for future test runs in CI
         self.save_storage_state()
+
+    def verify_jupyterlab_accessible(self) -> None:
+        """Verify that JupyterLab is accessible and loaded.
+
+        This method checks for JupyterLab-specific DOM elements to confirm
+        the application has loaded successfully.
+
+        Raises:
+            AssertionError: If JupyterLab elements are not found within timeout
+        """
+        # Check for JupyterLab-specific elements in the DOM
+        # Use multiple selectors - whichever appears first
+        # These are JupyterLab-specific IDs that won't appear in generic HTML pages
+        jupyterlab_locator = self.page.locator("#jp-top-panel, #jp-main-dock-panel, #jp-main-content-panel")
+
+        # Wait for element to be attached to DOM
+        jupyterlab_locator.first.wait_for(state="attached", timeout=30000)
+
+        # Verify it's visible
+        expect(jupyterlab_locator.first).to_be_visible(timeout=30000)
+
+    def verify_server_unaccessible(self) -> None:
+        """Verify that the server is not accessible (connection refused).
+
+        This method attempts to navigate to the JupyterLab URL and expects
+        a connection error (NS_ERROR_CONNECTION_REFUSED or similar).
+
+        Raises:
+            RuntimeError: If the server is unexpectedly accessible
+        """
+        try:
+            # Attempt to navigate to JupyterLab URL
+            # Use a shorter timeout since we expect this to fail quickly
+            self.page.goto(self.jupyterlab_url, timeout=10000, wait_until="domcontentloaded")
+
+            # If we get here, the page loaded - server is accessible when it shouldn't be
+            raise RuntimeError(
+                f"Server is unexpectedly accessible at {self.jupyterlab_url}. Expected connection refused error."
+            )
+        except Exception as e:
+            error_msg = str(e).lower()
+            # Check for connection refused errors
+            # Playwright throws errors with messages like:
+            # - "net::ERR_CONNECTION_REFUSED"
+            # - "NS_ERROR_CONNECTION_REFUSED"
+            # - "Timeout" (if the connection times out)
+            if any(
+                indicator in error_msg
+                for indicator in [
+                    "connection refused",
+                    "err_connection_refused",
+                    "ns_error_connection_refused",
+                    "timeout",
+                    "net::err_",
+                ]
+            ):
+                # Expected behavior - server is not accessible
+                return
+
+            # Unexpected error - re-raise
+            raise RuntimeError(f"Unexpected error while verifying server is unaccessible: {e}") from e
 
     def is_authenticated(self) -> bool:
         """Check if the user is already authenticated.
@@ -212,8 +270,8 @@ class GitHubOAuth2ProxyApplication:
             return False
         if self.page.get_by_role("button", name="Sign in with GitHub").is_visible():
             return False
-        # If we see JupyterLab main element, we're authenticated
-        return bool(self.page.locator("#main").is_visible())
+        # If we see JupyterLab-specific elements, we're authenticated
+        return bool(self.page.locator("#jp-top-panel, #jp-main-dock-panel, #jp-main-content-panel").first.is_visible())
 
     def ensure_authenticated(self) -> None:
         """Ensure the user is authenticated, performing login if necessary.
@@ -238,3 +296,95 @@ class GitHubOAuth2ProxyApplication:
             self.storage_state_path.parent.mkdir(parents=True, exist_ok=True)
             # Save storage state from the page's context
             self.page.context.storage_state(path=str(self.storage_state_path))
+
+    def login_manually_with_2fa_oauth(self) -> None:
+        """One-time manual GitHub OAuth authentication with 2FA/passkey completion.
+
+        This method:
+        1. Navigates to the JupyterLab URL
+        2. Clicks "Sign in with GitHub"
+        3. Waits for user to manually complete authentication (including 2FA/passkey)
+        4. Waits for redirect back to JupyterLab
+        5. Saves the storage state for future test runs
+
+        This is intended for interactive use to set up authentication once.
+        After running this, automated tests can use login_with_auth_session().
+
+        Raises:
+            RuntimeError: If navigation fails or authentication doesn't complete
+        """
+        from urllib.parse import urlparse
+
+        # Navigate to JupyterLab URL
+        print(f"🔗 Navigating to {self.jupyterlab_url}")
+        try:
+            self.page.goto(self.jupyterlab_url, timeout=60000)
+        except Exception as e:
+            error_msg = f"Error navigating to {self.jupyterlab_url}: {e}"
+            print(error_msg)
+            raise RuntimeError(error_msg) from e
+
+        # Click "Sign in with GitHub" button
+        print("🔍 Looking for 'Sign in with GitHub' button...")
+        try:
+            sign_in_button = self.page.get_by_role("button", name="Sign in with GitHub")
+            sign_in_button.wait_for(timeout=10000)
+            print("✓ Found sign-in button, clicking...")
+            sign_in_button.click()
+        except Exception as e:
+            error_msg = f"Could not find 'Sign in with GitHub' button: {e}"
+            print(f"Error: {error_msg}")
+            raise RuntimeError(error_msg) from e
+
+        # Wait for GitHub login page
+        print("⏳ Waiting for GitHub login page...")
+        try:
+            self.page.wait_for_url("**/github.com/**", timeout=30000)
+            print("✓ Redirected to GitHub")
+        except Exception as e:
+            error_msg = f"Failed to redirect to GitHub: {e}"
+            print(f"Error: {error_msg}")
+            raise RuntimeError(error_msg) from e
+
+        # Manual 2FA/passkey completion
+        print("\n" + "=" * 60)
+        print("🔐 Please complete GitHub authentication in the browser")
+        print("=" * 60)
+        print(f"⏳ Waiting for redirect back to {self.jupyterlab_url}...\n")
+
+        # Wait for successful auth and redirect back to JupyterLab
+        # Extract the origin (scheme + host) for URL matching
+        parsed_url = urlparse(self.jupyterlab_url)
+        jupyterlab_origin = f"{parsed_url.scheme}://{parsed_url.netloc}"
+
+        try:
+            # Use a lambda to check if URL starts with the JupyterLab origin
+            # This handles redirects to /lab, /lab?, etc.
+            self.page.wait_for_url(
+                lambda url: url.startswith(jupyterlab_origin),
+                timeout=300000,
+                wait_until="commit",
+            )
+            print(f"✓ Successfully redirected to JupyterLab: {self.page.url}")
+        except Exception as e:
+            error_msg = f"Authentication did not complete: {e}"
+            print(f"Error: {error_msg}")
+            raise RuntimeError(error_msg) from e
+
+        # Wait for JupyterLab to initialize (verify it actually loaded)
+        print("⏳ Waiting for JupyterLab to initialize...")
+        try:
+            # Check for JupyterLab-specific elements in the DOM
+            # Use state='attached' instead of 'visible' since elements may be hidden during load
+            # Try multiple selectors - whichever appears first
+            self.page.locator("#jp-top-panel, #jp-main-dock-panel, #jp-main-content-panel").first.wait_for(
+                state="attached", timeout=15000
+            )
+            print("✓ JupyterLab initialized successfully")
+        except Exception as e:
+            print(f"⚠ Warning: Could not confirm JupyterLab loaded, but continuing: {e}")
+            # Don't fail - the auth already worked if we got redirected
+
+        # Save authentication state
+        self.save_storage_state()
+        print(f"\n✅ Authentication state saved to {self.storage_state_path}")

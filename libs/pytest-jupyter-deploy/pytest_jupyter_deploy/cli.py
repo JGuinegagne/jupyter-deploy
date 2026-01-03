@@ -54,7 +54,12 @@ class JDCli:
                 )
                 return result
             except subprocess.CalledProcessError as e:
-                raise JDCliError(f"Failed to run '{cmd}': {e}") from e
+                error_msg = f"Failed to run '{cmd}': Command '{e.cmd}' returned non-zero exit status {e.returncode}."
+                if e.stdout:
+                    error_msg += f"\nStdout: {e.stdout}"
+                if e.stderr:
+                    error_msg += f"\nStderr: {e.stderr}"
+                raise JDCliError(error_msg) from e
             except subprocess.TimeoutExpired as e:
                 raise JDCliTimeoutError(f"Timeout while trying to run '{cmd}") from e
 

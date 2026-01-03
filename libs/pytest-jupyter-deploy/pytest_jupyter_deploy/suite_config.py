@@ -1,12 +1,10 @@
 """Suite configuration models using Pydantic."""
 
 import os
-from datetime import datetime
 from functools import cached_property
 from pathlib import Path
 
 import yaml
-from dotenv import load_dotenv
 from jupyter_deploy import constants as jd_constants
 from jupyter_deploy import fs_utils as jd_fs_utils
 from jupyter_deploy.engine.enum import EngineType
@@ -63,9 +61,8 @@ class SuiteConfig:
             self.manifest = retrieve_project_manifest(template_dir_path / jd_constants.MANIFEST_FILENAME)
             self.variables_config = retrieve_variables_config(template_dir_path / jd_constants.VARIABLES_FILENAME)
 
-            full_name = self.manifest.template.name
-            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            self.project_dir = Path(os.getcwd()) / constants.SANDBOX_E2E_DIR / full_name / timestamp
+            # Use a fixed sandbox directory (mounted in container)
+            self.project_dir = Path(os.getcwd()) / constants.SANDBOX_E2E_DIR
         self._loaded = True
 
     def find_template_dir_path(self) -> Path:
@@ -149,10 +146,10 @@ class SuiteConfig:
 
     def prepare_configuration(self, config_name: str = "base") -> None:
         """Load variables yaml of specific configuration, applies substitution, copies to project dir."""
-        # first load the configuration file and dotenv file(s)
+        # Load the configuration file with environment variable expansion
         resolved_variables = self._load_configuration(config_name)
 
-        # second, write file to project dir
+        # Write resolved configuration to project dir
         variables_config_path = self.project_dir / jd_constants.VARIABLES_FILENAME
         jd_fs_utils.write_yaml_file_with_comments(
             variables_config_path,
@@ -166,10 +163,12 @@ class SuiteConfig:
 
         This function:
         1. Loads configurations/{config_name}.yaml
-        2. Loads env.{config_name} if it exists
-        3. Expands environment variables in the configuration
-        4. Validates the result using the CLI's JupyterDeployVariablesConfig model
-        5. Returns the validated config
+        2. Expands environment variables in the configuration
+        3. Validates the result using the CLI's JupyterDeployVariablesConfig model
+        4. Returns the validated config
+
+        Environment variables must be set in the environment (passed through
+        docker-compose in containerized environments).
 
         Args:
             config_name: Configuration name (e.g., "base")
@@ -181,11 +180,6 @@ class SuiteConfig:
             FileNotFoundError: If configuration file does not exist
             ValidationError: If configuration is invalid
         """
-        # Load environment file first if it exists
-        env_file_path = self.suite_dir / f"{constants.ENV_FILE_PREFIX}{config_name}"
-        if env_file_path.exists():
-            load_dotenv(env_file_path)
-
         # Load configuration file
         config_file = self.suite_dir / constants.CONFIGURATIONS_DIR / f"{config_name}.yaml"
         if not config_file.exists():

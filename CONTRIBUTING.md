@@ -78,25 +78,13 @@ Integration tests (also called E2E tests) verify the entire deployment workflow,
 
 #### Setup
 
-**Option 1: Using Docker (Recommended for reproducibility)**
-
-The repository includes a docker-compose setup for running E2E tests in a containerized environment. This ensures consistent dependencies and avoids GLIBC compatibility issues.
+The repository includes a containerized setup for running E2E tests. Each template has its own E2E image definition under `libs/<template>/tests/e2e/image/`. This ensures consistent dependencies and avoids GLIBC compatibility issues.
 
 Requirements:
-- Docker and docker-compose installed
+- Docker or Finch installed (automatically detected)
 - `just` command runner: `cargo install just` (or use homebrew/package manager)
 - For UI tests with authentication: SSH with X11 forwarding enabled (`ssh -X`)
 
-**Option 2: Local installation**
-
-For UI testing with Playwright, install additional dependencies:
-```bash
-# Install Playwright dependencies
-uv add pytest-playwright --dev
-uv run playwright install chromium
-```
-
-Note: This requires GLIBC 2.27+ (Amazon Linux 2 is not supported).
 
 #### Running E2E Tests
 
@@ -104,29 +92,28 @@ Note: This requires GLIBC 2.27+ (Amazon Linux 2 is not supported).
 
 First-time setup:
 ```bash
-# 1. Start E2E container in background
+# Start E2E container in background (builds image automatically if needed)
 just e2e-up
-
-# 2. Install dependencies (one-time, or after dependency changes)
-just e2e-setup
 ```
+
+**Note**: The E2E image copies project files and installs dependencies during build (excluding `.venv`). The `.auth/` directory is mounted at runtime to persist authentication state across container restarts. The image is built automatically by docker-compose on first `just e2e-up`.
+
+If you change dependencies in `pyproject.toml` or modify code, run `just e2e-sync`
 
 Run E2E tests against an existing deployment:
 ```bash
 # Run all E2E tests
-just test-e2e sandbox3
+just test-e2e <project-dir>
 
-# Run only application tests
+# Run only specific application tests
 just test-e2e sandbox3 test_application
-
-# Run only host tests
-just test-e2e sandbox3 test_host
 ```
 
-Full workflow (start container, setup, and run tests in one command):
+Full workflow (start container and run tests in one command):
 ```bash
-just e2e-all sandbox3 [test-filter]
+just e2e-all <project-dir> [test-filter]
 ```
+
 
 Setup authentication (one-time, requires X11 forwarding):
 ```bash
@@ -138,67 +125,6 @@ Stop the E2E container when done:
 just e2e-down
 ```
 
-CI mode (uses GITHUB_USERNAME/GITHUB_PASSWORD environment variables):
-```bash
-export GITHUB_USERNAME="ci-account"
-export GITHUB_PASSWORD="password"
-just test-e2e-ci sandbox3
-```
-
-**Using pytest directly**
-
-By default, E2E tests are excluded from regular test runs. Use the `-m e2e` marker to run them explicitly.
-
-**Against an Existing Deployment**
-
-To test against a manually deployed project without creating new infrastructure:
-
-```bash
-pytest -m e2e --e2e-existing-project=<path-to-project>
-```
-
-Example:
-```bash
-# Run tests against existing sandbox3 deployment
-pytest -m e2e --e2e-existing-project=sandbox3
-```
-
-**With Automatic Deployment**
-
-To automatically deploy infrastructure, run tests, and tear down:
-
-```bash
-pytest -m e2e
-```
-
-**Skip Cleanup (for debugging)**
-
-```bash
-pytest -m e2e --no-cleanup
-```
-
-Note: Cleanup is automatic when using `--e2e-existing-project` (won't destroy the existing project).
-
-#### Playwright Options
-
-Capture screenshots on test failures:
-```bash
-pytest -m e2e --screenshot only-on-failure --full-page-screenshot
-```
-
-Configure output directory (default: `test-results`):
-```bash
-pytest -m e2e --screenshot only-on-failure --output=test-results
-```
-
-#### Configuration Options
-
-- `--e2e-existing-project=PATH`: Use existing deployment instead of creating new one
-- `--e2e-tests-dir=DIR`: E2E tests directory (default: `tests/e2e`)
-- `--e2e-config-name=NAME`: Configuration name from `configurations/` directory (default: `base`)
-- `--deployment-timeout-seconds=N`: Deployment timeout in seconds (default: 1800)
-- `--teardown-timeout-seconds=N`: Teardown timeout in seconds (default: 600)
-- `--no-cleanup`: Skip infrastructure cleanup after tests
 
 #### Authentication Setup
 
@@ -208,7 +134,7 @@ E2E tests that interact with the JupyterLab UI require GitHub OAuth2 authenticat
 
 1. Ensure you're SSH'd with X11 forwarding enabled:
    ```bash
-   ssh -X your-host
+   ssh -X your-user@your-host
    ```
 
 2. Verify DISPLAY is set in your terminal:
@@ -218,11 +144,11 @@ E2E tests that interact with the JupyterLab UI require GitHub OAuth2 authenticat
 
    **Note**: If using VS Code's embedded terminal, it won't inherit X11 forwarding. Either:
    - Run commands from a regular SSH terminal, OR
-   - Manually export DISPLAY in VS Code terminal: `export DISPLAY=localhost:11.0`
+   - Manually export DISPLAY in VS Code terminal: `export DISPLAY=localhost:10.0`
 
 3. Run the authentication setup (a Firefox browser window will open via X11):
    ```bash
-   just auth-setup my-project
+   just auth-setup <project-dir>
    ```
 
    **Note**: The setup uses Firefox for better X11 forwarding compatibility.
@@ -233,24 +159,8 @@ E2E tests that interact with the JupyterLab UI require GitHub OAuth2 authenticat
 
 6. Run E2E tests - they will reuse the saved authentication:
    ```bash
-   just test-e2e my-project
+   just test-e2e <project-dir>
    ```
-
-**Alternative: Direct Script Execution**
-
-If not using Docker:
-```bash
-uv run python scripts/github_auth_setup.py --project-dir=my-project
-```
-
-**CI/CD**
-
-For CI/CD environments, use the `--ci` flag with GITHUB_USERNAME and GITHUB_PASSWORD environment variables:
-```bash
-export GITHUB_USERNAME="ci-account"
-export GITHUB_PASSWORD="password"
-just test-e2e-ci my-project
-```
 
 **Note**: The `.auth/` directory is excluded from version control to avoid committing sensitive authentication data.
 
@@ -261,3 +171,25 @@ just test-e2e-ci my-project
 4. Redirecting back to JupyterLab
 
 You only need to re-run `just auth-setup` when GitHub cookies have also expired (requiring manual 2FA/passkey authentication).
+
+#### Setup on Mac for Amazon cloud desktop
+You will need to install `xquartz`: `brew install --cask xquartz`
+- Open XQuartz: `Settings > Security > Allow connection from network client`
+- reboot XQuartz (or restart your laptop)
+
+Then, update `~/.ssh/config` on your mac as follow:
+```
+Host your-devdesktop-host
+    ForwardX11 yes
+    ForwardX11Trusted yes
+    XAuthLocation /opt/X11/bin/xauth
+```
+
+Open a terminal (on your mac), and run:
+```
+ssh -X username@your-devdesktop-host
+```
+Get the port xquartz is listening to: `echo $DISPLAY`
+
+Finally, verify that the xserver is running by running on that same mac terminal: `xset q`
+

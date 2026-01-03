@@ -6,6 +6,8 @@ CONFIGURATIONS_DIR = "configurations"
 TEMPLATE_DIR = "template"
 TESTS_DIR = "tests"
 E2E_TESTS_DIR = "e2e"
+AUTH_DIR = ".auth"
 
-# File name patterns
-ENV_FILE_PREFIX = ".env."
+# File names
+ENV_FILE = ".env"
+GITHUB_OAUTH_STATE_FILE = "github-oauth-state.json"

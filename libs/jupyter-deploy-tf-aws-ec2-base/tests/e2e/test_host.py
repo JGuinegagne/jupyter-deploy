@@ -6,7 +6,6 @@ from pytest_jupyter_deploy.deployment import EndToEndDeployment
 def test_host_running(e2e_deployment: EndToEndDeployment) -> None:
     """Test that the host is running."""
     # Prerequisites
-    e2e_deployment.ensure_deployed()
     e2e_deployment.ensure_host_running()
 
     # Get host status
@@ -17,7 +16,6 @@ def test_host_running(e2e_deployment: EndToEndDeployment) -> None:
 def test_host_stop(e2e_deployment: EndToEndDeployment) -> None:
     """Test that the host can be stopped from command line."""
     # Prerequisites
-    e2e_deployment.ensure_deployed()
     e2e_deployment.ensure_host_running()
 
     # Stop host and assert status
@@ -29,7 +27,6 @@ def test_host_stop(e2e_deployment: EndToEndDeployment) -> None:
 def test_host_start(e2e_deployment: EndToEndDeployment) -> None:
     """Test that the host can be started from command line."""
     # Prerequisites
-    e2e_deployment.ensure_deployed()
     e2e_deployment.ensure_host_stopped()
 
     # Stop host and assert status

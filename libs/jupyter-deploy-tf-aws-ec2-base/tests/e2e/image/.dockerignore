@@ -1,0 +1,30 @@
+# Exclude virtual environments
+.venv
+venv
+__pycache__
+
+# Exclude test artifacts
+test-results
+.pytest_cache
+*.pyc
+
+# Exclude git
+.git
+.gitignore
+
+# Exclude IDE files
+.vscode
+.idea
+*.swp
+*.swo
+
+# Exclude temporary files
+*.log
+*.tmp
+.DS_Store
+
+# Exclude authentication state (will be mounted at runtime)
+.auth
+
+# Exclude sandbox directories (mounted at runtime)
+sandbox*
