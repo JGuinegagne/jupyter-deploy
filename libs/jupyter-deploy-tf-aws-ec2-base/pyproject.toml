@@ -1,9 +1,8 @@
 [project]
 name = "jupyter-deploy-tf-aws-ec2-base"
-version = "0.2.5"
+version = "0.2.6"
 description = "Base terraform template to deploy a JupyterLab application on an AWS EC2 instance."
 readme = "README.md"
-license = { file = "LICENSE" }
 authors = [
     { name = "Jonathan Guinegagne", email = "jggg@amazon.com" },
     { name = "Michael Chin", email = "chnmch@amazon.com" },
@@ -17,8 +16,15 @@ dependencies = [
     "mypy-boto3-ssm",
 ]
 
+[project.license]
+file = "LICENSE"
+
 [project.entry-points."jupyter_deploy.terraform_templates"]
 aws_ec2_base = "jupyter_deploy_tf_aws_ec2_base.template:TEMPLATE_PATH"
+
+[project.urls]
+Homepage = "https://github.com/jupyter-infra/jupyter-deploy"
+github = "https://github.com/jupyter-infra/jupyter-deploy/tree/main/libs/jupyter-deploy-tf-aws-ec2-base"
 
 [build-system]
 requires = [
@@ -30,10 +36,6 @@ build-backend = "hatchling.build"
 packages = [
     "jupyter_deploy_tf_aws_ec2_base",
 ]
-
-[project.urls]
-Homepage = "https://github.com/jupyter-infra/jupyter-deploy"
-github = "https://github.com/jupyter-infra/jupyter-deploy/tree/main/libs/jupyter-deploy-tf-aws-ec2-base"
 
 [tool.mypy]
 warn_return_any = true
