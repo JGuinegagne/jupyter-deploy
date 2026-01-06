@@ -238,7 +238,7 @@ def github_oauth_app(
     storage_state_path = Path.cwd() / constants.AUTH_DIR / constants.GITHUB_OAUTH_STATE_FILE
 
     # Get CI mode from pytest option
-    is_ci = request.config.getoption("--ci")
+    is_ci = request.config.getoption("--ci", default=False)
 
     return GitHubOAuth2ProxyApplication(
         page=page, jupyterlab_url=jupyterlab_url, storage_state_path=storage_state_path, is_ci=is_ci
