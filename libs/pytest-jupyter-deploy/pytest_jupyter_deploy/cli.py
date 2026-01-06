@@ -184,3 +184,26 @@ class JDCli:
 
         # No line with colon found
         return []
+
+    def get_allowlisted_org(self) -> str | None:
+        """Return the allowlisted organization, or None if none set.
+
+        Raises:
+            JDCliError: If command fails
+        """
+        result = self.run_command(["jupyter-deploy", "organization", "get"])
+
+        # Parse output format: "Allowlisted organization: org_name"
+        # or "Allowlisted organization: None"
+        # Handle multi-line output by taking the last line with a colon
+        lines = result.stdout.strip().split("\n")
+        for line in reversed(lines):
+            if ":" in line:
+                org_str = line.split(":", 1)[1].strip()
+                # Check if the value after the colon is exactly "None"
+                if org_str == "None":
+                    return None
+                return org_str
+
+        # No line with colon found
+        return None

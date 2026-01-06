@@ -15,11 +15,11 @@ def test_admit_user_positive(
     # Prerequisites
     e2e_deployment.ensure_server_running()
 
-    # Clear org and teams
-    e2e_deployment.ensure_no_org_nor_teams_allowlisted()
-
     # Set users to logged user
     e2e_deployment.cli.run_command(["jupyter-deploy", "users", "set", logged_user])
+
+    # Clear org and teams
+    e2e_deployment.ensure_no_org_nor_teams_allowlisted()
 
     # Verify list users is correct
     users = e2e_deployment.get_allowlisted_users()
@@ -38,11 +38,11 @@ def test_admit_user_negative(
     # Prerequisites
     e2e_deployment.ensure_server_running()
 
-    # Clear org and teams
-    e2e_deployment.ensure_no_org_nor_teams_allowlisted()
-
     # Set users to safe user only
     e2e_deployment.cli.run_command(["jupyter-deploy", "users", "set", safe_user])
+
+    # Clear org and teams
+    e2e_deployment.ensure_no_org_nor_teams_allowlisted()
 
     # Verify list users is correct
     users = e2e_deployment.get_allowlisted_users()
@@ -61,11 +61,11 @@ def test_add_user(
     # Prerequisites
     e2e_deployment.ensure_server_running()
 
-    # Clear org and teams
-    e2e_deployment.ensure_no_org_nor_teams_allowlisted()
-
     # Set users to safe user only
     e2e_deployment.cli.run_command(["jupyter-deploy", "users", "set", safe_user])
+
+    # Clear org and teams
+    e2e_deployment.ensure_no_org_nor_teams_allowlisted()
 
     # Add logged user
     e2e_deployment.cli.run_command(["jupyter-deploy", "users", "add", logged_user])
@@ -87,11 +87,11 @@ def test_remove_user(
     # Prerequisites
     e2e_deployment.ensure_server_running()
 
-    # Clear org and teams
-    e2e_deployment.ensure_no_org_nor_teams_allowlisted()
-
     # Set users to both users
     e2e_deployment.cli.run_command(["jupyter-deploy", "users", "set", logged_user, safe_user])
+
+    # Clear org and teams
+    e2e_deployment.ensure_no_org_nor_teams_allowlisted()
 
     # Remove logged user
     e2e_deployment.cli.run_command(["jupyter-deploy", "users", "remove", logged_user])
@@ -121,9 +121,7 @@ def test_add_and_remove_multiple_users(
     e2e_deployment.ensure_org_allowlisted(safe_org)
 
     # Clear users
-    users = e2e_deployment.get_allowlisted_users()
-    if users:
-        e2e_deployment.cli.run_command(["jupyter-deploy", "users", "remove"] + users)
+    e2e_deployment.ensure_no_users_allowlisted()
 
     # Add both users
     e2e_deployment.cli.run_command(["jupyter-deploy", "users", "add", logged_user, safe_user])
@@ -146,3 +144,32 @@ def test_add_and_remove_multiple_users(
     # Verify logged user gets unauthorized page
     github_oauth_app.ensure_authenticated()
     verify_access_forbidden(github_oauth_app)
+
+
+@skip_if_testvars_not_set(["JD_E2E_SAFE_USER"])
+def test_disallow_to_remove_all_users_when_no_org_allowlisted(
+    e2e_deployment: EndToEndDeployment,
+    github_oauth_app: GitHubOAuth2ProxyApplication,
+    logged_user: str,
+) -> None:
+    """Test that the users remove command require an organization to be set."""
+    # Prerequisites
+    e2e_deployment.ensure_server_running()
+
+    # Allowlist the logged user
+    e2e_deployment.cli.run_command(["jupyter-deploy", "users", "set", logged_user])
+
+    # Clear organization and teams
+    e2e_deployment.ensure_no_org_nor_teams_allowlisted()
+
+    # Attempt to remove the user
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "users", "remove", logged_user])
+    assert "At least one user or an organization must remain specified." in result.stdout
+
+    # Verify list users still shows the user
+    users = e2e_deployment.get_allowlisted_users()
+    assert set(users) == {logged_user}, f"Expected {logged_user}, got {users}"
+
+    # Verify logged user can still access the app
+    github_oauth_app.ensure_authenticated()
+    github_oauth_app.verify_jupyterlab_accessible()

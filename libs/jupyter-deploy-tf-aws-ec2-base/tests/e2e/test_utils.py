@@ -8,7 +8,8 @@ def verify_access_forbidden(github_oauth_app: GitHubOAuth2ProxyApplication) -> N
 
     This is template-specific verification for the base template.
     The base template displays a custom error page with title "Authorization Failure"
-    from the oauth_error_500.html.tftpl template.
+    from the oauth_error_500.html.tftpl template when a user is authenticated
+    with GitHub but not in the allowlist.
 
     Args:
         github_oauth_app: GitHub OAuth2 Proxy application helper
@@ -17,8 +18,8 @@ def verify_access_forbidden(github_oauth_app: GitHubOAuth2ProxyApplication) -> N
         AssertionError: If the forbidden page is not displayed
 
     Note:
-        This function assumes the page is already on the application URL
-        (e.g., after calling ensure_authenticated()). It does not navigate.
+        This function assumes the user has already been authenticated via
+        ensure_authenticated(). It does not navigate or authenticate.
     """
     # Wait for page to load if needed
     github_oauth_app.page.wait_for_load_state("domcontentloaded", timeout=10000)

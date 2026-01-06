@@ -252,6 +252,14 @@ class EndToEndDeployment:
         if teams:
             self.cli.run_command(["jupyter-deploy", "teams", "remove"] + teams)
 
+    def ensure_no_teams_allowlisted(self) -> None:
+        """List then remove any allowlisted team."""
+
+        # Clear teams by removing all existing teams
+        teams = self.cli.get_allowlisted_teams()
+        if teams:
+            self.cli.run_command(["jupyter-deploy", "teams", "remove"] + teams)
+
     def ensure_org_allowlisted(self, org: str) -> None:
         """Set the specified organization."""
         self.ensure_deployed()
@@ -262,3 +270,19 @@ class EndToEndDeployment:
     def get_allowlisted_users(self) -> list[str]:
         """Return the list of allowlisted users, or empty list if none"""
         return self.cli.get_allowlisted_users()
+
+    def get_allowlisted_teams(self) -> list[str]:
+        """Return the list of allowlisted teams, or empty list if none"""
+        return self.cli.get_allowlisted_teams()
+
+    def get_allowlisted_org(self) -> str | None:
+        """Return the allowlisted organization, or None if none set"""
+        return self.cli.get_allowlisted_org()
+
+    def ensure_no_users_allowlisted(self) -> None:
+        """Remove all allowlisted users."""
+        self.ensure_deployed()
+
+        users = self.cli.get_allowlisted_users()
+        if users:
+            self.cli.run_command(["jupyter-deploy", "users", "remove"] + users)

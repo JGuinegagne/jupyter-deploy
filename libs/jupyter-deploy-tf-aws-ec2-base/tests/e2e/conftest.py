@@ -67,3 +67,42 @@ def safe_org() -> str:
     if not org:
         raise ValueError("JD_E2E_SAFE_ORG environment variable must be set")
     return org
+
+
+@pytest.fixture(scope="session")
+def logged_org() -> str:
+    """Return GitHub organization the browser user belongs to.
+
+    Raises:
+        ValueError: If JD_E2E_ORG is not set
+    """
+    org = os.getenv("JD_E2E_ORG")
+    if not org:
+        raise ValueError("JD_E2E_ORG environment variable must be set")
+    return org
+
+
+@pytest.fixture(scope="session")
+def logged_team() -> str:
+    """Return GitHub team the browser user belongs to.
+
+    Raises:
+        ValueError: If JD_E2E_TEAM is not set
+    """
+    team = os.getenv("JD_E2E_TEAM")
+    if not team:
+        raise ValueError("JD_E2E_TEAM environment variable must be set")
+    return team
+
+
+@pytest.fixture(scope="session")
+def safe_team() -> str:
+    """Returns a safe team name the logged user does not belong to.
+
+    Raises:
+        ValueError: If JD_E2E_SAFE_TEAM is not set
+    """
+    team = os.getenv("JD_E2E_SAFE_TEAM")
+    if not team:
+        raise ValueError("JD_E2E_SAFE_TEAM environment variable must be set")
+    return team
