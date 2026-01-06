@@ -1,0 +1,18 @@
+schema_version: 1
+required:
+  domain: "${JD_E2E_VAR_DOMAIN}"
+  letsencrypt_email: "${JD_E2E_VAR_EMAIL}"
+  oauth_app_client_id: "${JD_E2E_VAR_OAUTH_APP_CLIENT_ID}"
+  oauth_allowed_org: "${JD_E2E_VAR_OAUTH_ALLOWED_ORG}"
+  oauth_allowed_teams: "${JD_E2E_VAR_OAUTH_ALLOWED_TEAMS}"
+  oauth_allowed_usernames: "${JD_E2E_VAR_OAUTH_ALLOWED_USERNAMES}"
+  subdomain: "${JD_E2E_VAR_SUBDOMAIN}"
+required_sensitive:
+  oauth_app_client_secret: "${JD_E2E_VAR_OAUTH_APP_CLIENT_SECRET}"
+overrides:
+  # set variable values as <variable-name>: <variable-value>
+  # delete or comment out a line to use the default
+  # instance_type: t3.large
+defaults:
+  # read-only: do not modify this section
+  # instead add overrides in the override section

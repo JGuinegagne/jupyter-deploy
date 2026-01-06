@@ -73,9 +73,12 @@ docstring-code-format = true
 docstring-code-line-length = 40
 
 [tool.pytest.ini_options]
-addopts = "--cov=jupyter_deploy_tf_aws_ec2_base --cov-report=term-missing --cov-report=xml --cov-report=html"
+addopts = "--cov=jupyter_deploy_tf_aws_ec2_base --cov-report=term-missing --cov-report=xml --cov-report=html --browser firefox"
 testpaths = [
     "tests/unit",
+]
+markers = [
+    "e2e: End-to-end tests using playwright (deselect with '-m \"not e2e\"')",
 ]
 
 [tool.coverage.run]
@@ -101,9 +104,13 @@ show_missing = true
 [tool.uv.sources.jupyter-deploy]
 workspace = true
 
+[tool.uv.sources.pytest-jupyter-deploy]
+workspace = true
+
 [dependency-groups]
 dev = [
     "jupyter-deploy",
+    "pytest-jupyter-deploy[ui]",
     "mypy>=1.15.0",
     "pytest>=8.3.5",
     "pytest-cov>=6.1.1",

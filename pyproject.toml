@@ -15,6 +15,7 @@ jupyter-deploy = { workspace = true }
 members = [
     "libs/jupyter-deploy",
     "libs/jupyter-deploy-tf-aws-ec2-base",
+    "libs/pytest-jupyter-deploy",
     "images/uvbase"
 ]
 
@@ -24,6 +25,7 @@ dev-dependencies = [
     "mypy>=1.15.0",
     "pytest>=8.3.5",
     "pytest-cov>=6.1.1",
+    "pytest-playwright>=0.6.2",
     "ruff>=0.11.8",
     "typer>=0.15.4",
     "rich>=10.11.0",
@@ -38,11 +40,17 @@ disallow_untyped_defs = true
 check_untyped_defs = true
 files = [
     "libs/jupyter-deploy",
-    "libs/jupyter-deploy-tf-aws-ec2-base"
+    "libs/jupyter-deploy-tf-aws-ec2-base",
+    "libs/pytest-jupyter-deploy"
 ]
 
 [tool.pytest.ini_options]
 pythonpath = [
   "libs/jupyter-deploy",
-  "libs/jupyter-deploy-tf-aws-ec2-base"
+  "libs/jupyter-deploy-tf-aws-ec2-base",
+  "libs/pytest-jupyter-deploy"
 ]
+markers = [
+  "e2e: marks tests as end-to-end tests (deselect with '-m \"not e2e\"')"
+]
+addopts = "-m 'not e2e'"

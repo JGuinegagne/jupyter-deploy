@@ -1,0 +1,66 @@
+[project]
+name = "pytest-jupyter-deploy"
+version = "0.1.0"
+description = "Pytest plugin for E2E testing of jupyter-deploy templates"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Jonathan Guinegagne", email = "jggg@amazon.com" },
+    { name = "Michael Chin", email = "chnmch@amazon.com" },
+    { name = "Brian Granger", email = "brgrange@amazon.com" }
+]
+classifiers = [
+    "Framework :: Pytest",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+dependencies = [
+    "pytest>=8.3.5",
+    "pyyaml>=6.0.2",
+]
+
+[project.optional-dependencies]
+ui = [
+    "pytest-playwright>=0.7.2",
+]
+
+[project.entry-points.pytest11]
+jupyter_deploy = "pytest_jupyter_deploy.plugin"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pytest_jupyter_deploy"]
+
+[project.urls]
+Homepage = "https://github.com/jupyter-infra/jupyter-deploy"
+github = "https://github.com/jupyter-infra/jupyter-deploy/tree/main/libs/pytest-jupyter-deploy"
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",  # pydocstyle
+    "F",  # pyflakes
+    "UP",  # pyupgrade
+    "B",  # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "I"   # isort
+]
+
+[tool.mypy]
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+mypy_path = ["."]
+packages = ["pytest_jupyter_deploy"]
