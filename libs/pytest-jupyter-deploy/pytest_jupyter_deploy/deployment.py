@@ -239,3 +239,26 @@ class EndToEndDeployment:
                 else:
                     # Different error - don't retry
                     raise
+
+    def ensure_no_org_nor_teams_allowlisted(self) -> None:
+        """Unset the organization, list then remove any allowlisted team."""
+        self.ensure_deployed()
+
+        # Unset organization
+        self.cli.run_command(["jupyter-deploy", "organization", "unset"])
+
+        # Clear teams by removing all existing teams
+        teams = self.cli.get_allowlisted_teams()
+        if teams:
+            self.cli.run_command(["jupyter-deploy", "teams", "remove"] + teams)
+
+    def ensure_org_allowlisted(self, org: str) -> None:
+        """Set the specified organization."""
+        self.ensure_deployed()
+
+        # Set organization
+        self.cli.run_command(["jupyter-deploy", "organization", "set", org])
+
+    def get_allowlisted_users(self) -> list[str]:
+        """Return the list of allowlisted users, or empty list if none"""
+        return self.cli.get_allowlisted_users()

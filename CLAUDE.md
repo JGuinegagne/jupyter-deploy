@@ -55,3 +55,47 @@ After making code changes, always run from the root of the repository:
     - !IMPORTANT: never run `rm -rf` on any other dir than `sandbox-claude`
     - Edit the template project, and start again the end-to-end testing workflow
 - Finally, always go back to the project root directory (same dir as `CLAUDE.md`)
+
+# E2E Testing Workflow
+E2E tests validate the complete deployment with browser-based interactions using Playwright.
+
+## Prerequisites
+- A deployed project (e.g., `sandbox3`) that you want to test against
+- GitHub authentication setup for OAuth2 Proxy
+
+## Authentication Setup
+Before running E2E tests, set up GitHub OAuth authentication:
+```bash
+just auth-setup <project-dir>
+```
+Example: `just auth-setup sandbox3`
+
+This will:
+- Launch a browser for you to authenticate with GitHub
+- Save authentication state to `.auth/github-oauth-state.json`
+- Allow automated tests to reuse the session
+
+## Running E2E Tests
+Run E2E tests against an existing deployment:
+```bash
+just test-e2e <project-dir> [test-filter]
+```
+
+Examples:
+- Run all E2E tests: `just test-e2e sandbox3`
+- Run specific test file: `just test-e2e sandbox3 test_users`
+- Run specific test: `just test-e2e sandbox3 test_admit_user_positive`
+
+## Required Environment Variables
+Some E2E tests require environment variables to be set:
+- `JD_E2E_USER`: GitHub username the browser is logged in as
+- `JD_E2E_SAFE_USER`: A trusted GitHub username the browser is NOT logged in as
+- `JD_E2E_SAFE_ORG`: A safe GitHub organization name for testing
+
+Tests will be skipped if required environment variables are not set.
+
+## E2E Test Structure
+- E2E tests are located in `libs/<template-name>/tests/e2e/`
+- Use the `pytest-jupyter-deploy` package for test fixtures and helpers
+- Use `@skip_if_testvars_not_set([...])` decorator to skip tests when required env vars are missing
+- Template-specific utilities should be in `test_utils.py` within the template's e2e directory

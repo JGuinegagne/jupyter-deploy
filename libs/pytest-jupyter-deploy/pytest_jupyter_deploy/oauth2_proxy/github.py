@@ -78,16 +78,16 @@ class GitHubOAuth2ProxyApplication:
 
                 # Wait a moment for page to load and auto-submit
                 try:
-                    # Check if we're redirected automatically
-                    self.page.wait_for_url(f"{self.jupyterlab_url}**", timeout=5000)
+                    # Check if we're redirected automatically (back to app domain, not GitHub)
+                    self.page.wait_for_url(lambda url: "github.com" not in url, timeout=5000)
                 except Exception:
                     # Still on authorize page - check if there's an authorize button
                     authorize_button = self.page.get_by_role("button", name="Authorize")
                     try:
                         if authorize_button.is_visible(timeout=2000):
                             authorize_button.click()
-                            # Wait for redirect after clicking
-                            self.page.wait_for_url(f"{self.jupyterlab_url}**", timeout=10000)
+                            # Wait for redirect after clicking (back to app domain, not GitHub)
+                            self.page.wait_for_url(lambda url: "github.com" not in url, timeout=10000)
                         else:
                             # No authorize button visible, might need manual auth
                             error_msg = (
@@ -135,8 +135,12 @@ class GitHubOAuth2ProxyApplication:
             # Save the new OAuth2 Proxy session for future test runs
             self.save_storage_state()
 
-        # Verify we're authenticated and on JupyterLab
-        self.verify_jupyterlab_accessible()
+        # Verify we're back on the application domain (not GitHub)
+        # We don't verify JupyterLab is accessible here because the user might be
+        # authenticated but not authorized (403 Forbidden)
+        current_url = self.page.url
+        if "github.com" in current_url:
+            raise RuntimeError(f"Authentication did not complete successfully. Still on GitHub: {current_url}")
 
     def login_without_2fa(self) -> None:
         """Login using username/password without 2FA (for CI environments).
@@ -188,11 +192,8 @@ class GitHubOAuth2ProxyApplication:
         # Submit the form
         self.page.click('input[type="submit"]')
 
-        # Wait for authentication to complete and redirect back to JupyterLab
+        # Wait for authentication to complete and redirect back to application
         self.page.wait_for_url(f"{self.jupyterlab_url}**", timeout=60000)
-
-        # Verify we're on JupyterLab
-        self.verify_jupyterlab_accessible()
 
         # Save storage state for future test runs in CI
         self.save_storage_state()

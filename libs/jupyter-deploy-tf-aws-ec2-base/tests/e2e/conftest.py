@@ -6,6 +6,7 @@ The pytest-jupyter-deploy plugin provides these fixtures automatically:
 - github_oauth_app: GitHub OAuth2 Proxy authentication helper
 """
 
+import os
 from typing import Any
 
 import pytest
@@ -27,3 +28,42 @@ def browser_context_args(browser_context_args: dict[str, Any], request: pytest.F
     saved GitHub OAuth cookies from .auth/github-oauth-state.json.
     """
     return handle_browser_context_args(browser_context_args, request)
+
+
+@pytest.fixture(scope="session")
+def logged_user() -> str:
+    """Return GitHub username the browser is logged in as
+
+    Raises:
+        ValueError: If JD_E2E_USER is not set
+    """
+    user = os.getenv("JD_E2E_USER")
+    if not user:
+        raise ValueError("JD_E2E_USER environment variable must be set")
+    return user
+
+
+@pytest.fixture(scope="session")
+def safe_user() -> str:
+    """Returns a trusted GitHub username the browser is not logged in as.
+
+    Raises:
+        ValueError: If JD_E2E_SAFE_USER is not set
+    """
+    user = os.getenv("JD_E2E_SAFE_USER")
+    if not user:
+        raise ValueError("JD_E2E_SAFE_USER environment variable must be set")
+    return user
+
+
+@pytest.fixture(scope="session")
+def safe_org() -> str:
+    """Returns a safe organization name for testing.
+
+    Raises:
+        ValueError: If JD_E2E_SAFE_ORG is not set
+    """
+    org = os.getenv("JD_E2E_SAFE_ORG")
+    if not org:
+        raise ValueError("JD_E2E_SAFE_ORG environment variable must be set")
+    return org
