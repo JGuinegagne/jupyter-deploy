@@ -23,6 +23,8 @@ classifiers = [
 dependencies = [
     "pytest>=8.3.5",
     "pyyaml>=6.0.2",
+    "pexpect>=4.9.0",
+    "types-pexpect>=4.9.0",
 ]
 
 [project.optional-dependencies]

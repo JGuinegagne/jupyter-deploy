@@ -264,3 +264,86 @@ def test_disallow_to_unset_org_when_no_user_allowlisted(
     # Verify logged user can still access the app (via org membership)
     github_oauth_app.ensure_authenticated()
     github_oauth_app.verify_jupyterlab_accessible()
+
+
+@skip_if_testvars_not_set(["JD_E2E_ORG", "JD_E2E_SAFE_TEAM"])
+def test_add_team_when_there_was_none_restricts_access(
+    e2e_deployment: EndToEndDeployment,
+    github_oauth_app: GitHubOAuth2ProxyApplication,
+    logged_org: str,
+    safe_team: str,
+) -> None:
+    """Test that allowlisting whole org, then allowlisting only a team scopes down the auth."""
+    # Prerequisites
+    e2e_deployment.ensure_server_running()
+
+    # Set organization to logged user's org
+    e2e_deployment.cli.run_command(["jupyter-deploy", "organization", "set", logged_org])
+
+    # Clear users
+    e2e_deployment.ensure_no_users_allowlisted()
+
+    # Clear teams
+    e2e_deployment.ensure_no_teams_allowlisted()
+
+    # Verify logged user can access the app
+    github_oauth_app.ensure_authenticated()
+    github_oauth_app.verify_jupyterlab_accessible()
+
+    # Allowlist only a team the logged user is not a member of
+    e2e_deployment.cli.run_command(["jupyter-deploy", "teams", "add", safe_team])
+
+    # Verify logged user gets unauthorized page (org membership not sufficient)
+    github_oauth_app.ensure_authenticated()
+    verify_access_forbidden(github_oauth_app)
+
+
+@skip_if_testvars_not_set(["JD_E2E_ORG", "JD_E2E_TEAM", "JD_E2E_USER"])
+def test_org_team_and_user_match_all_grant_access(
+    e2e_deployment: EndToEndDeployment,
+    github_oauth_app: GitHubOAuth2ProxyApplication,
+    logged_org: str,
+    logged_team: str,
+    logged_user: str,
+) -> None:
+    """Test that org, org+team and user based auth work together."""
+
+    # Prerequisites
+    e2e_deployment.ensure_server_running()
+
+    # Set organization to logged user's org
+    e2e_deployment.cli.run_command(["jupyter-deploy", "organization", "set", logged_org])
+
+    # Set team to logged user's team within the org
+    e2e_deployment.cli.run_command(["jupyter-deploy", "teams", "set", logged_team])
+
+    # Set user to logged users' username
+    e2e_deployment.cli.run_command(["jupyter-deploy", "users", "set", logged_user])
+
+    # Verify logged user can access the app (via user OR org+team)
+    github_oauth_app.ensure_authenticated()
+    github_oauth_app.verify_jupyterlab_accessible()
+
+    # Remove user explicit allowlist
+    e2e_deployment.cli.run_command(["jupyter-deploy", "users", "remove", logged_user])
+
+    # Verify logged user can still access the app (via org+team)
+    github_oauth_app.ensure_authenticated()
+    github_oauth_app.verify_jupyterlab_accessible()
+
+    # Remove team allowlist
+    e2e_deployment.cli.run_command(["jupyter-deploy", "teams", "remove", logged_team])
+
+    # Verify logged user can still access the app (via org)
+    github_oauth_app.ensure_authenticated()
+    github_oauth_app.verify_jupyterlab_accessible()
+
+    # Add back the user explicit allowlist
+    e2e_deployment.cli.run_command(["jupyter-deploy", "users", "add", logged_user])
+
+    # Unset the organization
+    e2e_deployment.cli.run_command(["jupyter-deploy", "organization", "unset"])
+
+    # Verify logged user can still access the app (via user)
+    github_oauth_app.ensure_authenticated()
+    github_oauth_app.verify_jupyterlab_accessible()

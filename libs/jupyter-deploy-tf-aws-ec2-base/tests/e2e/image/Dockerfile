@@ -26,6 +26,11 @@ RUN curl -s 'https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip' -o 'awscl
     ./aws/install && \
     rm -rf aws awscliv2.zip
 
+# Install AWS Session Manager Plugin
+RUN curl -s 'https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb' -o 'session-manager-plugin.deb' && \
+    dpkg -i session-manager-plugin.deb && \
+    rm session-manager-plugin.deb
+
 # Set working directory
 WORKDIR /workspace
 
