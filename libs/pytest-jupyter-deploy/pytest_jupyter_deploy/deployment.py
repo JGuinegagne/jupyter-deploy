@@ -106,7 +106,7 @@ class EndToEndDeployment:
 
             # Wait for SSM agent to register after host start
             # TODO: this is too aws-specific, we should gate by a flag
-            self._wait_for_ssm_ready()
+            self.wait_for_ssm_ready()
 
         # Step 3: Attempt to restart the server
         self.cli.run_command(["jupyter-deploy", "server", "restart"])
@@ -208,7 +208,7 @@ class EndToEndDeployment:
         status = self.cli.get_server_status()
         return status == "STOPPED"
 
-    def _wait_for_ssm_ready(self, max_retries: int = 3) -> None:
+    def wait_for_ssm_ready(self, max_retries: int = 3) -> None:
         """Wait for SSM agent to be ready after host state change.
 
         SSM agent needs time to register with AWS Systems Manager after
@@ -239,3 +239,78 @@ class EndToEndDeployment:
                 else:
                     # Different error - don't retry
                     raise
+
+    def ensure_no_org_nor_teams_allowlisted(self) -> None:
+        """Unset the organization, list then remove any allowlisted team."""
+        self.ensure_deployed()
+
+        # Unset organization
+        self.cli.run_command(["jupyter-deploy", "organization", "unset"])
+
+        # Clear teams by removing all existing teams
+        teams = self.cli.get_allowlisted_teams()
+        if teams:
+            self.cli.run_command(["jupyter-deploy", "teams", "remove"] + teams)
+
+    def ensure_no_teams_allowlisted(self) -> None:
+        """List then remove any allowlisted team."""
+        self.ensure_deployed()
+
+        # Clear teams by removing all existing teams
+        teams = self.cli.get_allowlisted_teams()
+        if teams:
+            self.cli.run_command(["jupyter-deploy", "teams", "remove"] + teams)
+
+    def ensure_org_allowlisted(self, org: str) -> None:
+        """Set the specified organization."""
+        self.ensure_deployed()
+
+        # Set organization
+        self.cli.run_command(["jupyter-deploy", "organization", "set", org])
+
+    def get_allowlisted_users(self) -> list[str]:
+        """Return the list of allowlisted users, or empty list if none"""
+        return self.cli.get_allowlisted_users()
+
+    def get_allowlisted_teams(self) -> list[str]:
+        """Return the list of allowlisted teams, or empty list if none"""
+        return self.cli.get_allowlisted_teams()
+
+    def get_allowlisted_org(self) -> str | None:
+        """Return the allowlisted organization, or None if none set"""
+        return self.cli.get_allowlisted_org()
+
+    def ensure_no_users_allowlisted(self) -> None:
+        """Remove all allowlisted users."""
+        self.ensure_deployed()
+
+        users = self.cli.get_allowlisted_users()
+        if users:
+            self.cli.run_command(["jupyter-deploy", "users", "remove"] + users)
+
+    def ensure_authorized(self, users: list[str], org: str, teams: list[str]) -> None:
+        """Ensure authorization is set up with the specified users, organization, and teams.
+
+        Args:
+            users: List of GitHub usernames to allowlist (noop if empty list)
+            org: GitHub organization to allowlist (noop if empty string)
+            teams: List of GitHub teams to allowlist (noop if empty list or None)
+        """
+        self.ensure_deployed()
+
+        # Set users if provided
+        if users:
+            self.cli.run_command(["jupyter-deploy", "users", "set"] + users)
+
+        # Set organization if provided
+        if org:
+            self.cli.run_command(["jupyter-deploy", "organization", "set", org])
+
+        # Set teams if provided
+        if teams:
+            # First ensure organization is set (teams require org)
+            if not org:
+                current_org = self.get_allowlisted_org()
+                if not current_org:
+                    raise ValueError("Cannot set teams without an organization")
+            self.cli.run_command(["jupyter-deploy", "teams", "set"] + teams)

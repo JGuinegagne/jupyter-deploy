@@ -1,8 +1,10 @@
 """Pytest plugin - defines fixtures for E2E testing."""
 
-from collections.abc import Generator
+import contextlib
+import os
+from collections.abc import Callable, Generator
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import pytest
 from playwright.sync_api import Page
@@ -12,6 +14,25 @@ from pytest_jupyter_deploy.deployment import EndToEndDeployment
 from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
 from pytest_jupyter_deploy.suite_config import SuiteConfig
 
+# Type variable for function decorators
+F = TypeVar("F", bound=Callable[..., Any])
+
+
+def skip_if_testvars_not_set(required_vars: list[str]) -> Callable[[F], F]:
+    """Decorator that skips the test if any required vars are missing."""
+
+    def decorator(func: F) -> F:
+        missing_vars = [var for var in required_vars if not os.getenv(var)]
+
+        if missing_vars:
+            reason = f"Test requires environment variables: {', '.join(missing_vars)}"
+            # pytest.mark.skip returns a wrapper function with the same signature
+            return pytest.mark.skip(reason=reason)(func)  # type: ignore[return-value,no-any-return]
+
+        return func
+
+    return decorator
+
 
 def pytest_addoption(parser: Any) -> None:
     """Add custom command-line options.
@@ -19,44 +40,51 @@ def pytest_addoption(parser: Any) -> None:
     Args:
         parser: Pytest parser object
     """
-    parser.addoption(
+
+    # Helper to add option only if it doesn't exist
+    def add_option_if_not_exists(option_name: str, **kwargs: Any) -> None:
+        # Option already exists (e.g., in pytester inline runs) - suppress the ValueError
+        with contextlib.suppress(ValueError):
+            parser.addoption(option_name, **kwargs)
+
+    add_option_if_not_exists(
         "--no-cleanup",
         action="store_true",
         help="Skip infrastructure cleanup after tests",
     )
-    parser.addoption(
+    add_option_if_not_exists(
         "--e2e-tests-dir",
         action="store",
         default=f"{constants.TESTS_DIR}/{constants.E2E_TESTS_DIR}",
         help="Path to E2E tests directory",
     )
-    parser.addoption(
+    add_option_if_not_exists(
         "--e2e-config-name",
         action="store",
         default="base",
         help=f"Configuration name to use from {constants.CONFIGURATIONS_DIR}/ directory",
     )
-    parser.addoption(
+    add_option_if_not_exists(
         "--e2e-existing-project",
         action="store",
         default=None,
         help="Path to existing jupyter-deploy project (skips deployment, uses existing infrastructure)",
     )
-    parser.addoption(
+    add_option_if_not_exists(
         "--deployment-timeout-seconds",
         action="store",
         type=int,
         default=1800,
         help="Timeout in seconds for deployment (default: 1800)",
     )
-    parser.addoption(
+    add_option_if_not_exists(
         "--teardown-timeout-seconds",
         action="store",
         type=int,
         default=600,
         help="Timeout in seconds for teardown (default: 600)",
     )
-    parser.addoption(
+    add_option_if_not_exists(
         "--ci",
         action="store_true",
         default=False,
@@ -210,7 +238,7 @@ def github_oauth_app(
     storage_state_path = Path.cwd() / constants.AUTH_DIR / constants.GITHUB_OAUTH_STATE_FILE
 
     # Get CI mode from pytest option
-    is_ci = request.config.getoption("--ci")
+    is_ci = request.config.getoption("--ci", default=False)
 
     return GitHubOAuth2ProxyApplication(
         page=page, jupyterlab_url=jupyterlab_url, storage_state_path=storage_state_path, is_ci=is_ci

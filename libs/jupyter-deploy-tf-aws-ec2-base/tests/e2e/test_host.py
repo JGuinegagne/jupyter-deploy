@@ -29,7 +29,9 @@ def test_host_start(e2e_deployment: EndToEndDeployment) -> None:
     # Prerequisites
     e2e_deployment.ensure_host_stopped()
 
-    # Stop host and assert status
+    # Start host (this is what we're testing)
     e2e_deployment.cli.run_command(["jupyter-deploy", "host", "start"])
+
+    # Assert status
     host_status = e2e_deployment.cli.get_host_status()
     assert host_status == "running", f"Expected host status 'running', got '{host_status}'"

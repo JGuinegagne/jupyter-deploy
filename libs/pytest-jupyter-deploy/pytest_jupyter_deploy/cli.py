@@ -136,3 +136,74 @@ class JDCli:
                     return url
 
         raise ValueError("Could not parse JupyterLab URL from command output")
+
+    def get_allowlisted_users(self) -> list[str]:
+        """Return the list of allowlisted users, or empty list if none.
+
+        Raises:
+            JDCliError: If command fails
+        """
+        result = self.run_command(["jupyter-deploy", "users", "list"])
+
+        # Parse output format: "Allowlisted usernames: user1, user2, user3"
+        # or "Allowlisted usernames: None"
+        # Handle multi-line output by taking the last line with a colon
+        lines = result.stdout.strip().split("\n")
+        for line in reversed(lines):
+            if ":" in line:
+                users_str = line.split(":", 1)[1].strip()
+                # Check if the value after the colon is exactly "None"
+                if users_str == "None":
+                    return []
+                # Split by comma and strip whitespace
+                return [user.strip() for user in users_str.split(",") if user.strip()]
+
+        # No line with colon found
+        return []
+
+    def get_allowlisted_teams(self) -> list[str]:
+        """Return the list of allowlisted team names, or empty list if none.
+
+        Raises:
+            JDCliError: If command fails
+        """
+        result = self.run_command(["jupyter-deploy", "teams", "list"])
+
+        # Parse output format: "Allowlisted teams: team1, team2, team3"
+        # or "Allowlisted teams: None"
+        # Handle multi-line output by taking the last line with a colon
+        lines = result.stdout.strip().split("\n")
+        for line in reversed(lines):
+            if ":" in line:
+                teams_str = line.split(":", 1)[1].strip()
+                # Check if the value after the colon is exactly "None"
+                if teams_str == "None":
+                    return []
+                # Split by comma and strip whitespace
+                return [team.strip() for team in teams_str.split(",") if team.strip()]
+
+        # No line with colon found
+        return []
+
+    def get_allowlisted_org(self) -> str | None:
+        """Return the allowlisted organization, or None if none set.
+
+        Raises:
+            JDCliError: If command fails
+        """
+        result = self.run_command(["jupyter-deploy", "organization", "get"])
+
+        # Parse output format: "Allowlisted organization: org_name"
+        # or "Allowlisted organization: None"
+        # Handle multi-line output by taking the last line with a colon
+        lines = result.stdout.strip().split("\n")
+        for line in reversed(lines):
+            if ":" in line:
+                org_str = line.split(":", 1)[1].strip()
+                # Check if the value after the colon is exactly "None"
+                if org_str == "None":
+                    return None
+                return org_str
+
+        # No line with colon found
+        return None
