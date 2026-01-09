@@ -279,7 +279,7 @@ fi
 if [ "$AUTH_CHANGED" = true ]; then
     log_message "Recreating OAuth container to apply changes..."
     cd /opt/docker
-    OUTPUT=$(docker-compose up -d oauth 2>&1)
+    OUTPUT=$(docker compose up -d oauth 2>&1)
     log_message "Docker compose output:"
     log_message "$OUTPUT"
 else

@@ -45,7 +45,7 @@ start_services() {
     sh "$STARTUP_SCRIPT"
   else
     log_message "Starting $SERVICE container"
-    docker-compose up -d "$SERVICE"
+    docker compose up -d "$SERVICE"
   fi
   log_message "Services started successfully"
 }
@@ -55,10 +55,10 @@ stop_services() {
   cd "$DOCKER_DIR"
   if [ "$SERVICE" = "all" ]; then
     log_message "Stopping all containers"
-    docker-compose down
+    docker compose down
   else
     log_message "Stopping $SERVICE container"
-    docker-compose stop "$SERVICE"
+    docker compose stop "$SERVICE"
   fi
   log_message "Services stopped successfully"
 }
@@ -68,13 +68,13 @@ restart_services() {
   cd "$DOCKER_DIR"
   if [ "$SERVICE" = "all" ]; then
     log_message "Stopping all containers"
-    docker-compose down
+    docker compose down
     log_message "Starting all containers via startup script"
     sh "$STARTUP_SCRIPT"
   else
     log_message "Restarting $SERVICE container"
-    docker-compose stop "$SERVICE"
-    docker-compose up -d "$SERVICE"
+    docker compose stop "$SERVICE"
+    docker compose up -d "$SERVICE"
   fi
   
   log_message "Services restarted successfully"

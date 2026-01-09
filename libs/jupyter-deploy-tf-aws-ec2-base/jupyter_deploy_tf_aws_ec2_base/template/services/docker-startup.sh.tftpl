@@ -68,27 +68,27 @@ echo "Saved environment file /opt/docker/.env"
 
 echo "Generating OAuth cookie secret..."
 sh /usr/local/bin/refresh-oauth-cookie.sh
-if ! docker-compose -f docker-compose.yml config > /dev/null; then
+if ! docker compose -f docker-compose.yml config > /dev/null; then
     echo "Invalid docker-compose configuration"
     exit 1
 else
-    echo "Validated docker-compose file"
+    echo "Validated docker compose file"
 fi
 
-echo "Starting docker-compose"
-if ! docker-compose up -d --force-recreate --wait --wait-timeout 30; then
+echo "Starting docker compose"
+if ! docker compose up -d --force-recreate --wait --wait-timeout 30; then
     echo "First attempt failed, trying with cleanup..."
-    docker-compose down || true
+    docker compose down || true
     docker system prune -f --volumes || true
 
-    if ! docker-compose up -d --force-recreate --wait --wait-timeout 60; then
+    if ! docker compose up -d --force-recreate --wait --wait-timeout 60; then
         echo "Second attempt failed, restarting Docker daemon..."
         systemctl restart docker
         sleep 10
-        docker-compose up -d --force-recreate --wait --wait-timeout 90
+        docker compose up -d --force-recreate --wait --wait-timeout 90
     fi
 fi
-echo "Docker-compose complete"
+echo "docker compose complete"
 
 echo "Waiting for containers to stabilize..."
 sleep 2
