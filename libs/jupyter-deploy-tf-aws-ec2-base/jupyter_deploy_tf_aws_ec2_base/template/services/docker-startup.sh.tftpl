@@ -76,16 +76,16 @@ else
 fi
 
 echo "Starting docker compose"
-if ! docker compose up -d --force-recreate --wait --wait-timeout 30; then
+if ! docker compose up -d --force-recreate --wait --wait-timeout 300; then
     echo "First attempt failed, trying with cleanup..."
     docker compose down || true
     docker system prune -f --volumes || true
 
-    if ! docker compose up -d --force-recreate --wait --wait-timeout 60; then
+    if ! docker compose up -d --force-recreate --wait --wait-timeout 120; then
         echo "Second attempt failed, restarting Docker daemon..."
         systemctl restart docker
         sleep 10
-        docker compose up -d --force-recreate --wait --wait-timeout 90
+        docker compose up -d --force-recreate --wait --wait-timeout 120
     fi
 fi
 echo "docker compose complete"

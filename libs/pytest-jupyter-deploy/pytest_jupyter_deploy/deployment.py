@@ -67,7 +67,11 @@ class EndToEndDeployment:
         Raise:
             RuntimeError if the target container is not available.
         """
-        # first, load the config, which will identity if the user requested to test against
+        # First, abort early if already flagged as deployed
+        if self._is_deployed:
+            return
+
+        # Second, load the config, which will identity if the user requested to test against
         # an existing project or desires a deployment from scratch
         self.suite_config.load()
 
