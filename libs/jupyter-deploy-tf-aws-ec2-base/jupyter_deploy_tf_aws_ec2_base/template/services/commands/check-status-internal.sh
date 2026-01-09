@@ -22,6 +22,7 @@ check_started_flag() {
 
 check_docker_running() {
   if ! docker info >/dev/null 2>&1; then
+    log_message "Docker daemon is not running"
     return 1
   fi
   return 0
@@ -100,14 +101,14 @@ main() {
   if ! check_docker_running; then
     exit 20 # STOPPED
   fi
-  
+
   check_containers
   container_status=$?
-  
+
   check_certs
   cert_status=$?
   set -e
-  
+
   # Determine overall status
   if [ "$container_status" -eq 2 ]; then
     exit 20 # STOPPED
@@ -117,7 +118,7 @@ main() {
     log_message "In-service: containers are running and TLS certificates are available"
     exit 0 # IN_SERVICE
   else
-    echo 40 # OUT_OF_SERVICE
+    exit 40 # OUT_OF_SERVICE
   fi
 }
 

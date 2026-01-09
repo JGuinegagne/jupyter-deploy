@@ -69,10 +69,19 @@ def test_server_logs(e2e_deployment: EndToEndDeployment) -> None:
     assert "stdout" in result.stdout or "stderr" in result.stdout, "Expected log output markers"
 
 
-def test_all_service_logs(e2e_deployment: EndToEndDeployment) -> None:
+def test_all_service_logs(
+    e2e_deployment: EndToEndDeployment, github_oauth_app: GitHubOAuth2ProxyApplication, logged_user: str
+) -> None:
     """Test that logs can be retrieved for each individual service."""
     # Prerequisites
     e2e_deployment.ensure_server_running()
+    e2e_deployment.ensure_authorized([logged_user], "", [])
+
+    # Visit the application to ensure there are logs for all of the services
+    # otherwise, depending on the order of tests, traefik may not have any logs
+    # e.g., if the previous ran restarted the host
+    github_oauth_app.ensure_authenticated()
+    github_oauth_app.verify_jupyterlab_accessible()
 
     # Test logs for jupyter service
     result = e2e_deployment.cli.run_command(["jupyter-deploy", "server", "logs", "-s", "jupyter"])

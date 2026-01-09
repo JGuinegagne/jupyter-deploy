@@ -25,7 +25,7 @@ def test_e2e_suite_dir_fixture_available(pytester: Any) -> None:
             assert e2e_suite_dir is not None
         """
     )
-    result = pytester.runpytest()
+    result = pytester.runpytest("--e2e-tests-dir=/some/path")
     result.assert_outcomes(passed=1)
 
 
@@ -36,10 +36,10 @@ def test_e2e_suite_dir_uses_pytestopt(pytester: Any) -> None:
         from pathlib import Path
 
         def test_e2e_suite_dir_value(e2e_suite_dir):
-            assert e2e_suite_dir == Path("custom/test/path")
+            assert e2e_suite_dir == Path("/custom/test/path")
         """
     )
-    result = pytester.runpytest("--e2e-tests-dir=custom/test/path")
+    result = pytester.runpytest("--e2e-tests-dir=/custom/test/path")
     result.assert_outcomes(passed=1)
 
 
@@ -51,7 +51,7 @@ def test_e2e_config_fixture_available(pytester: Any) -> None:
             assert e2e_config is not None
         """
     )
-    result = pytester.runpytest()
+    result = pytester.runpytest("--e2e-tests-dir=/some/path")
     result.assert_outcomes(passed=1)
 
 
@@ -65,7 +65,7 @@ def test_e2e_config_fixture_returns_config(pytester: Any) -> None:
             assert isinstance(e2e_config, SuiteConfig)
         """
     )
-    result = pytester.runpytest()
+    result = pytester.runpytest("--e2e-tests-dir=/some/path")
     result.assert_outcomes(passed=1)
 
 
@@ -77,7 +77,7 @@ def test_e2e_deployment_fixture_available(pytester: Any) -> None:
             assert e2e_deployment is not None
         """
     )
-    result = pytester.runpytest()
+    result = pytester.runpytest("--e2e-tests-dir=/some/path")
     result.assert_outcomes(passed=1)
 
 
@@ -91,7 +91,7 @@ def test_e2e_deployment_fixture_yields_value(pytester: Any) -> None:
             assert isinstance(e2e_deployment, EndToEndDeployment)
         """
     )
-    result = pytester.runpytest()
+    result = pytester.runpytest("--e2e-tests-dir=/some/path")
     result.assert_outcomes(passed=1)
 
 

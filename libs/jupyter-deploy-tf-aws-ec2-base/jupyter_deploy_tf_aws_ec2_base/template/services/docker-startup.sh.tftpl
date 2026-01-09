@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 
+mkdir -p /var/log/jupyter-deploy
 exec > >(tee /var/log/jupyter-deploy/docker-compose.log) 2>&1
 
 echo "Running docker-startup script as: $(whoami)"
@@ -76,8 +77,23 @@ else
 fi
 
 echo "Starting docker-compose"
-docker-compose up -d
+if ! docker-compose up -d --force-recreate --wait --wait-timeout 30; then
+    echo "First attempt failed, trying with cleanup..."
+    docker-compose down || true
+    docker system prune -f --volumes || true
+
+    if ! docker-compose up -d --force-recreate --wait --wait-timeout 60; then
+        echo "Second attempt failed, restarting Docker daemon..."
+        systemctl restart docker
+        sleep 10
+        docker-compose up -d --force-recreate --wait --wait-timeout 90
+    fi
+fi
 echo "Docker-compose complete"
+
+# Wait for containers to be fully registered and starting
+echo "Waiting for containers to stabilize..."
+sleep 2
 
 touch /opt/docker/started.txt
 chmod 644 /opt/docker/started.txt
