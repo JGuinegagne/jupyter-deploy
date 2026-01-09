@@ -2,21 +2,10 @@
 set -e
 
 # Script to update the file containing the list of authorized GitHub entities (users, teams, orgs)
-# Usage: 
 #   sudo sh update-auth.sh users [add|remove|set] username1,username2
 #   sudo sh update-auth.sh teams [add|remove|set] team1,team2
 #   sudo sh update-auth.sh org an_org
 #   sudo sh update-auth.sh org [remove]
-
-# File content follows format:
-# [org]
-# Org1
-#
-# [teams]
-# Team1,Team2
-#
-# [users]
-# User1,User2
 
 LOG_FILE="/var/log/jupyter-deploy/update-auth.log"
 touch "$LOG_FILE"
@@ -62,18 +51,15 @@ update_section() {
     fi
 }
 
-# Check if an operation would remove all authentication restrictions
 check_would_remove_all_auth() {
     local entity_type=$1
     local action=$2
     local values=$3
-
-    # Get current values from each section
     local users_content=$(get_section_content "users")
     local org_content=$(get_section_content "org")
     local teams_content=$(get_section_content "teams")
 
-    # Simulate the operation based on entity type and action
+    # Simulate the operation
     case "$entity_type" in
         "org")
             if [ "$action" == "remove" ]; then
@@ -83,10 +69,7 @@ check_would_remove_all_auth() {
         "users")
             if [ "$action" == "remove" ]; then
                 IFS=',' read -ra input_values <<< "$values"
-
-                # Use explicit variables instead of variable indirection
                 IFS=',' read -ra current_values <<< "$users_content"
-
                 if [ "$action" == "remove" ]; then
                     # Simulate removal
                     local temp_array=()
@@ -137,9 +120,7 @@ if [ "$ACTION" == "remove" ]; then
     elif [ "$ENTITY_TYPE" == "users" ]; then
         check_would_remove_all_auth "$ENTITY_TYPE" "$ACTION" "$VALUES"
     fi
-    # Note: teams are irrelevant here: they only apply if an organization is set.
-    # Even if all teams are removed, the authorization checks that the users
-    # belong to the specified organization.
+    # Note: teams are irrelevant: they only apply if an organization is set
 fi
 
 if [ "$ENTITY_TYPE" == "org" ]; then
@@ -160,16 +141,14 @@ if [ "$ENTITY_TYPE" == "org" ]; then
         exit 1
     else
         CURRENT_ORG=$(get_section_content "org")
-        
         if [ "$CURRENT_ORG" != "$ACTION" ]; then
             REFRESH_OAUTH_COOKIE=true
             AUTH_CHANGED=true
         fi
-
         update_section "org" "$ACTION"
         log_message "Set organization to: $ACTION"
     fi
-    
+
 elif [ "$ENTITY_TYPE" == "users" ] || [ "$ENTITY_TYPE" == "teams" ]; then
     if [ -z "$ACTION" ] || [ -z "$VALUES" ]; then
         ERROR="Error: Missing required parameters."
@@ -186,9 +165,8 @@ elif [ "$ENTITY_TYPE" == "users" ] || [ "$ENTITY_TYPE" == "teams" ]; then
         echo "Usage: sudo update-auth.sh $ENTITY_TYPE [add|remove|set] value1,value2,..."
         exit 1
     fi
-    
+
     CURRENT_VALUES=$(get_section_content "$ENTITY_TYPE")
-    
     IFS=',' read -ra INPUT_VALUES <<< "$VALUES"
     IFS=',' read -ra CURRENT_VALUES_ARRAY <<< "$CURRENT_VALUES"
     INPUT_VALUES_SORTED=$(echo "$VALUES" | tr ',' '\n' | sort)
@@ -216,7 +194,6 @@ elif [ "$ENTITY_TYPE" == "users" ] || [ "$ENTITY_TYPE" == "teams" ]; then
         done
     elif [ "$ACTION" == "remove" ]; then
         TEMP_ARRAY=()
-        
         for remove_value in "${INPUT_VALUES[@]}"; do
             VALUE_EXISTS=false
             for value in "${CURRENT_VALUES_ARRAY[@]}"; do
@@ -231,7 +208,7 @@ elif [ "$ENTITY_TYPE" == "users" ] || [ "$ENTITY_TYPE" == "teams" ]; then
                 REFRESH_OAUTH_COOKIE=true
             fi
         done
-        
+
         # Removal
         for value in "${CURRENT_VALUES_ARRAY[@]}"; do
             KEEP=true
@@ -270,9 +247,9 @@ elif [ "$ENTITY_TYPE" == "users" ] || [ "$ENTITY_TYPE" == "teams" ]; then
     if [ ${#CURRENT_VALUES_ARRAY[@]} -gt 0 ]; then
         FINAL_VALUES=$(IFS=,; echo "${CURRENT_VALUES_ARRAY[*]}")
     fi
-    
+
     update_section "$ENTITY_TYPE" "$FINAL_VALUES"
-    
+
 else
     ERROR="Error: Invalid entity type."
     log_message "$ERROR"
@@ -289,10 +266,10 @@ sed -i "s/^AUTHED_USERS_CONTENT=.*/AUTHED_USERS_CONTENT=${AUTHED_USERS_CONTENT}/
 sed -i "s/^AUTHED_ORG_CONTENT=.*/AUTHED_ORG_CONTENT=${AUTHED_ORG_CONTENT}/" /opt/docker/.env
 sed -i "s/^AUTHED_TEAMS_CONTENT=.*/AUTHED_TEAMS_CONTENT=${AUTHED_TEAMS_CONTENT}/" /opt/docker/.env
 
-# The oauth sidecar vends cookies that get stored on user's webbrowser and linked to a server-side session. 
+# The oauth sidecar vends cookies stored on user's webbrowser. 
 # Such cookies are opaque to the users, they are encrypted with a secret string. 
-# When we remove a user from the allowlist, we need to invalidate their cookie/session so that they loose access 
-# immediately. We do so by updating the cookie secret. Note that this action invalidates all sessions/cookies.
+# When we remove a user from the allowlist, we need to invalidate the cookie/session immediately.
+# We update the cookie secret. Note that this action invalidates all sessions/cookies.
 if [ "$REFRESH_OAUTH_COOKIE" = true ]; then
     log_message "Update will result in removing access to some users: invalidating cookies..."
     sh /usr/local/bin/refresh-oauth-cookie.sh >/dev/null
@@ -302,9 +279,9 @@ fi
 if [ "$AUTH_CHANGED" = true ]; then
     log_message "Recreating OAuth container to apply changes..."
     cd /opt/docker
-    OUTPUT=$(docker-compose up -d oauth 2>&1)
+    OUTPUT=$(docker compose up -d oauth 2>&1)
     log_message "Docker compose output:"
     log_message "$OUTPUT"
 else
-    log_message "No changes detected, skipping OAuth container recreation."
+    log_message "No changes detected, no need to restart oauth container."
 fi

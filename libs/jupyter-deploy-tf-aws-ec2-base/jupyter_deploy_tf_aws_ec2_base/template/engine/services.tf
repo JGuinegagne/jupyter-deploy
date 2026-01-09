@@ -176,6 +176,35 @@ schemaVersion: '2.2'
 description: Setup docker, mount volumes, copy docker-compose, start docker services
 mainSteps:
   - action: aws:runShellScript
+    name: SaveUtilityScripts
+    inputs:
+      runCommand:
+        - |
+          # Save utility scripts first so they're available for status checks
+          mkdir -p /usr/local/bin
+          mkdir -p /var/log/jupyter-deploy
+          tee /usr/local/bin/update-auth.sh << 'EOF'
+          ${local.update_auth_indented}
+          EOF
+          chmod 644 /usr/local/bin/update-auth.sh
+          tee /usr/local/bin/refresh-oauth-cookie.sh << 'EOF'
+          ${local.refresh_oauth_cookie_indented}
+          EOF
+          chmod 644 /usr/local/bin/refresh-oauth-cookie.sh
+          tee /usr/local/bin/check-status-internal.sh << 'EOF'
+          ${local.check_status_indented}
+          EOF
+          tee /usr/local/bin/get-status.sh << 'EOF'
+          ${local.get_status_indented}
+          EOF
+          tee /usr/local/bin/get-auth.sh << 'EOF'
+          ${local.get_auth_indented}
+          EOF
+          tee /usr/local/bin/update-server.sh << 'EOF'
+          ${local.update_server_indented}
+          EOF
+
+  - action: aws:runShellScript
     name: CloudInit
     inputs:
       runCommand:
@@ -236,26 +265,6 @@ mainSteps:
           EOF
           tee /opt/docker/parsers.conf << 'EOF'
           ${local.parsers_conf_indented}
-          EOF
-          tee /usr/local/bin/update-auth.sh << 'EOF'
-          ${local.update_auth_indented}
-          EOF
-          chmod 644 /usr/local/bin/update-auth.sh
-          tee /usr/local/bin/refresh-oauth-cookie.sh << 'EOF'
-          ${local.refresh_oauth_cookie_indented}
-          EOF
-          chmod 644 /usr/local/bin/refresh-oauth-cookie.sh
-          tee /usr/local/bin/check-status-internal.sh << 'EOF'
-          ${local.check_status_indented}
-          EOF
-          tee /usr/local/bin/get-status.sh << 'EOF'
-          ${local.get_status_indented}
-          EOF
-          tee /usr/local/bin/get-auth.sh << 'EOF'
-          ${local.get_auth_indented}
-          EOF
-          tee /usr/local/bin/update-server.sh << 'EOF'
-          ${local.update_server_indented}
           EOF
 
   - action: aws:runShellScript
@@ -337,8 +346,8 @@ resource "aws_ssm_document" "instance_startup" {
       error_message = "One or more required files are empty"
     }
     precondition {
-      condition     = length(local.ssm_startup_content) < 64000 # leaving some buffer
-      error_message = "SSM document content exceeds size limit of 64KB"
+      condition     = length(local.ssm_startup_content) < 65400 # AWS limit is 65536 bytes, leaving small buffer
+      error_message = "SSM document content exceeds size limit of 64KB (current: ${length(local.ssm_startup_content)} bytes, max: 65400)"
     }
     precondition {
       condition     = local.ssm_content_valid

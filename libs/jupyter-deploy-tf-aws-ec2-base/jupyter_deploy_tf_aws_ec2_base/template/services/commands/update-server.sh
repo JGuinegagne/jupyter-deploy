@@ -2,10 +2,9 @@
 set -e
 
 # Script to control the Jupyter server container and related services
-# Usage: 
-#   sudo sh update-server.sh start [all|jupyter|traefik|oauth]    - Start all services or a specific service
-#   sudo sh update-server.sh stop [all|jupyter|traefik|oauth]     - Stop all services or a specific service
-#   sudo sh update-server.sh restart [all|jupyter|traefik|oauth]  - Restart all services or a specific service
+#   sudo sh update-server.sh start [all|jupyter|traefik|oauth]
+#   sudo sh update-server.sh stop [all|jupyter|traefik|oauth]
+#   sudo sh update-server.sh restart [all|jupyter|traefik|oauth]
 
 LOG_FILE="/var/log/jupyter-deploy/update-server.log"
 DOCKER_DIR="/opt/docker"
@@ -24,7 +23,6 @@ log_message() {
 }
 
 validate_args() {
-  # Validate action
   if [ "$ACTION" != "start" ] && [ "$ACTION" != "stop" ] && [ "$ACTION" != "restart" ]; then
     log_message "Error: Invalid action. Must be 'start', 'stop', or 'restart'"
     echo "Error: Invalid action. Must be 'start', 'stop', or 'restart'"
@@ -32,7 +30,6 @@ validate_args() {
     exit 1
   fi
 
-  # Validate service
   if [ "$SERVICE" != "all" ] && [ "$SERVICE" != "jupyter" ]; then
     log_message "Warning: Non-standard service specified: $SERVICE"
     echo "Warning: Non-standard service specified: $SERVICE"
@@ -43,47 +40,41 @@ validate_args() {
 start_services() {
   log_message "Starting services (service: $SERVICE)..."
   cd "$DOCKER_DIR"
-  
   if [ "$SERVICE" = "all" ]; then
     log_message "Running startup script to start all services"
     sh "$STARTUP_SCRIPT"
   else
     log_message "Starting $SERVICE container"
-    docker-compose up -d "$SERVICE"
+    docker compose up -d "$SERVICE"
   fi
-  
   log_message "Services started successfully"
 }
 
 stop_services() {
   log_message "Stopping services (service: $SERVICE)..."
   cd "$DOCKER_DIR"
-  
   if [ "$SERVICE" = "all" ]; then
     log_message "Stopping all containers"
-    docker-compose down
+    docker compose down
   else
     log_message "Stopping $SERVICE container"
-    docker-compose stop "$SERVICE"
+    docker compose stop "$SERVICE"
   fi
-  
   log_message "Services stopped successfully"
 }
 
 restart_services() {
   log_message "Restarting services (service: $SERVICE)..."
   cd "$DOCKER_DIR"
-  
   if [ "$SERVICE" = "all" ]; then
     log_message "Stopping all containers"
-    docker-compose down
-    
+    docker compose down
     log_message "Starting all containers via startup script"
     sh "$STARTUP_SCRIPT"
   else
     log_message "Restarting $SERVICE container"
-    docker-compose stop "$SERVICE"
-    docker-compose up -d "$SERVICE"
+    docker compose stop "$SERVICE"
+    docker compose up -d "$SERVICE"
   fi
   
   log_message "Services restarted successfully"
@@ -91,7 +82,6 @@ restart_services() {
 
 # Main execution
 validate_args
-
 case "$ACTION" in
   start)
     start_services
@@ -103,6 +93,5 @@ case "$ACTION" in
     restart_services
     ;;
 esac
-
 log_message "Server update completed: $ACTION $SERVICE"
 echo "Server update completed: $ACTION $SERVICE"

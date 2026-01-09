@@ -106,3 +106,29 @@ def safe_team() -> str:
     if not team:
         raise ValueError("JD_E2E_SAFE_TEAM environment variable must be set")
     return team
+
+
+@pytest.fixture(scope="session")
+def larger_instance_type() -> str:
+    """Returns a larger instance type for upgrade tests.
+
+    Raises:
+        ValueError: If JD_E2E_LARGER_INSTANCE is not set
+    """
+    larger_instance_type = os.getenv("JD_E2E_LARGER_INSTANCE")
+    if not larger_instance_type:
+        raise ValueError("JD_E2E_LARGER_INSTANCE environment variable must be set")
+    return larger_instance_type
+
+
+@pytest.fixture(scope="session")
+def larger_log_retention_days() -> int:
+    """Returns a larger log retention days value for config change tests.
+
+    Raises:
+        ValueError: If JD_E2E_LARGER_LOG_RETENTION_DAYS is not set
+    """
+    larger_log_retention_days = os.getenv("JD_E2E_LARGER_LOG_RETENTION_DAYS")
+    if not larger_log_retention_days:
+        raise ValueError("JD_E2E_LARGER_LOG_RETENTION_DAYS environment variable must be set")
+    return int(larger_log_retention_days)

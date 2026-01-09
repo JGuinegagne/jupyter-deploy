@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 
 INSTANCE_ID=${instance_id}
 INSTANCE_STARTUP_ASSOCIATION_ID=${association_id}
@@ -17,13 +18,13 @@ wait_for_instance(){
 
     echo "Found instance: $INSTANCE_ID, initial state: $INSTANCE_STATE"
 
-    if [ "$INSTANCE_STATE" == "running" ]; then
+    if [ "$INSTANCE_STATE" = "running" ]; then
         # shorter sleep here: the instance may have been running for a while
         sleep 15
         return 0
     fi
 
-    while [[ "$INSTANCE_STATE" == "pending" || "$INSTANCE_STATE" == "rebooting" ]]; do
+    while [ "$INSTANCE_STATE" = "pending" ] || [ "$INSTANCE_STATE" = "rebooting" ]; do
         if [ $total_wait_seconds -ge $MAX_WAIT_TIME_SECONDS ]; then
             echo "Timed out waiting for instance $INSTANCE_ID to complete after $MAX_WAIT_TIME_SECONDS seconds"
             return 1
@@ -50,14 +51,48 @@ wait_for_instance(){
     fi
 }
 
+wait_for_ssm_agent() {
+    local MAX_WAIT_TIME_SECONDS=180
+    local SLEEP_INTERVAL_SECONDS=10
+    local total_wait_seconds=0
+
+    echo "Waiting for SSM agent to connect..."
+
+    while true; do
+        # Check if the instance is managed by SSM (SSM agent connected)
+        SSM_PING_STATUS=$(aws ssm describe-instance-information \
+            --filters "Key=InstanceIds,Values=$INSTANCE_ID" \
+            --region "$REGION" \
+            --query "InstanceInformationList[0].PingStatus" \
+            --output text 2>/dev/null)
+
+        if [ "$SSM_PING_STATUS" = "Online" ]; then
+            echo "SSM agent is connected and online."
+            return 0
+        fi
+
+        if [ $total_wait_seconds -ge $MAX_WAIT_TIME_SECONDS ]; then
+            echo "Timed out waiting for SSM agent to connect after $MAX_WAIT_TIME_SECONDS seconds"
+            echo "SSM agent status: $SSM_PING_STATUS"
+            return 1
+        fi
+
+        echo "SSM agent not yet connected (status: $SSM_PING_STATUS), waiting..."
+        sleep $SLEEP_INTERVAL_SECONDS
+        total_wait_seconds=$((total_wait_seconds + SLEEP_INTERVAL_SECONDS))
+    done
+}
+
 wait_for_cloudinit_execution() {
-    # the SSM association may run twice, and fail the first time because the instance
-    # was not yet in state=running
+    # the SSM association may run multiple times, and fail the first few times because:
+    # - the instance was not yet in state=running
+    # - the instance was transitioning states (stop/start)
+    # - the SSM agent was overloaded or timing out with large documents
     # we look up the latest execution of the SSM association, and if we find one with state=Failed,
     # we sleep, and recursively retry to capture the SSM association execution that worked.
-    # In order to avoid going into an infinite retry stack though, we track if this function 
-    # execution corresponds to a retry or not.
-    local retried=$${1:-false}  # Default to false if not provided
+    # We allow up to 1 failure before giving up (2 total attempts)
+    local retry_count=$${1:-0}  # Default to 0 if not provided
+    local MAX_RETRIES=1
     local MAX_WAIT_TIME_SECONDS=300
     local SLEEP_INTERVAL_SECONDS=10
     local total_wait_seconds=0
@@ -108,16 +143,30 @@ wait_for_cloudinit_execution() {
 
     echo "Found latest execution: $LATEST_EXECUTION_ID, initial status: $LATEST_STATUS"
 
-    # Check if the status is Failed and we haven't retried yet
-    if [ "$LATEST_STATUS" = "Failed" ] && [ "$retried" = "false" ]; then
-        echo "Latest execution failed, retrying once..."
+    # Check if the status is Failed and we haven't exceeded retry limit
+    if [ "$LATEST_STATUS" = "Failed" ] && [ $retry_count -lt $MAX_RETRIES ]; then
+        retry_count=$((retry_count + 1))
+        echo "Latest execution failed (attempt $retry_count of $((MAX_RETRIES + 1))), waiting for next execution..."
+
+        # If this is the last retry, try to manually trigger the association
+        # This handles the case where stop/start doesn't auto-trigger a new execution
+        if [ $retry_count -eq $MAX_RETRIES ]; then
+            echo "Final retry - manually triggering association execution..."
+            aws ssm start-associations-once \
+                --association-ids "$INSTANCE_STARTUP_ASSOCIATION_ID" \
+                --region "$REGION" || echo "Warning: Could not manually trigger association"
+        fi
+
         sleep 30
-        wait_for_cloudinit_execution true  # Call self with retried=true to not retry anymore
+        wait_for_cloudinit_execution $retry_count  # Call self with incremented retry count
         return $?  # Return the result of the retry
+    elif [ "$LATEST_STATUS" = "Failed" ]; then
+        echo "Latest execution failed after $((retry_count + 1)) attempts, giving up"
+        return 1
     fi
 
     # If the status is InProgress or Pending, poll until completion
-    while [[ "$LATEST_STATUS" == "InProgress" || "$LATEST_STATUS" == "Pending" ]]; do
+    while [ "$LATEST_STATUS" = "InProgress" ] || [ "$LATEST_STATUS" = "Pending" ]; do
         if [ $total_wait_seconds -ge $MAX_WAIT_TIME_SECONDS ]; then
             echo "Timed out waiting for execution $LATEST_EXECUTION_ID to complete after $MAX_WAIT_TIME_SECONDS seconds"
             return 1
@@ -149,9 +198,10 @@ wait_for_cloudinit_execution() {
         # Check if status is None or empty, which means the association is still pending
         if [ "$ASSOC_STATUS" = "None" ] || [ "$ASSOC_STATUS" = "Failed" ] || [ "$ASSOC_STATUS" = "Queued" ] || [ "$ASSOC_STATUS" = "Pending" ] || [ -z "$ASSOC_STATUS" ] ; then
             echo "Association status not yet available or might have run too early (Failed), retrying..."
-            # Sleep and retry a few times (accelerated instances need more time)
+            # Sleep and retry a few times (accelerated instances need more time, Docker image pulls can take 2-3 minutes)
+            # With 5min docker-compose timeout, worst case: 5min + 2min retry + 2min retry = ~9min, so allow 10min
             local retry_count=0
-            local max_retries=5
+            local max_retries=30
             while [ "$ASSOC_STATUS" = "None" ] || [ "$ASSOC_STATUS" = "Failed" ] || [ "$ASSOC_STATUS" = "Queued" ] || [ "$ASSOC_STATUS" = "Pending" ] || [ -z "$ASSOC_STATUS" ]; do
                 if [ $retry_count -ge $max_retries ]; then
                     echo "Max retries reached, breaking."
@@ -172,8 +222,10 @@ wait_for_cloudinit_execution() {
             echo "Instance startup association did not complete successfully. Target status: $ASSOC_STATUS"
             return 1
         fi
-        
+
         echo "Instance startup association completed."
+        echo "Waiting 10s for SSM agent and docker services to stabilize..."
+        sleep 10
         return 0
     else
         echo "Instance startup association failed with status: $LATEST_STATUS"
@@ -189,13 +241,19 @@ get_status() {
         --region "$REGION" \
         --output text \
         --query "Command.CommandId")
-        
+
+    if [ -z "$COMMAND_ID" ]; then
+        return 1
+    fi
+
     # Wait for command to complete
-    aws ssm wait command-executed \
+    if ! aws ssm wait command-executed \
         --command-id "$COMMAND_ID" \
         --instance-id "$INSTANCE_ID" \
-        --region "$REGION"
-        
+        --region "$REGION"; then
+        return 1
+    fi
+
     # Get the command output
     STATUS=$(aws ssm get-command-invocation \
         --command-id "$COMMAND_ID" \
@@ -204,13 +262,18 @@ get_status() {
         --query "StandardOutputContent" \
         --output text | tr -d '\n\r')
 
-    echo $STATUS
+    if [ -z "$STATUS" ]; then
+        return 1
+    fi
+
+    echo "$STATUS"
     return 0
 }
 
 
 main(){
     wait_for_instance
+    wait_for_ssm_agent
     wait_for_cloudinit_execution
 
     local MAX_ATTEMPTS=60
@@ -241,7 +304,11 @@ main(){
             sleep 10
             attempts=$((attempts+1))
         else
-            echo "Instance was either stopped or became un-healthy; aborting."
+            echo "Instance was either stopped or became un-healthy."
+            echo ""
+            echo "Your deployment may still have succeeded."
+            echo "Try restarting the docker services within your instance:"
+            echo "jd server restart"
             exit 1
         fi
     done

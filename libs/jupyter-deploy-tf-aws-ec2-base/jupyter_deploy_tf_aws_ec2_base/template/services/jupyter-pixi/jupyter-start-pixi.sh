@@ -23,11 +23,9 @@ pixi run jupyter lab \
     --ip=0.0.0.0 \
     --IdentityProvider.token=
 
-# captures jupyterlab exit code
 jupyter_exit_code=$?
 set -e
 
-# Check if jupyter lab failed
 if [ $jupyter_exit_code -ne 0 ]; then
     echo "Jupyter lab failed to start, calling reset script..."
     /usr/local/bin/jupyter-reset.sh

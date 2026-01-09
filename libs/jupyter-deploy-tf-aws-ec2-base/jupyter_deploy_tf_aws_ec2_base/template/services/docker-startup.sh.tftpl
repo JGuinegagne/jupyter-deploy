@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 
+mkdir -p /var/log/jupyter-deploy
 exec > >(tee /var/log/jupyter-deploy/docker-compose.log) 2>&1
 
 echo "Running docker-startup script as: $(whoami)"
@@ -19,7 +20,7 @@ if [ -z "$GITHUB_CLIENT_SECRET" ]; then
     exit 1
 fi
 
-# memory management: attempt to allocate 95% of memory to jupyter
+# attempt to allocate 95% of memory to jupyter
 # while keeping enough memory for other containers
 TOTAL_MEMORY_MB=$(free -m | awk '/^Mem:/{print $2}')
 MAX_MEM_RESERVATION_MB=$((TOTAL_MEMORY_MB - 384))
@@ -44,7 +45,7 @@ else
     AUTHED_TEAMS_CONTENT=""
 fi
 
-# Safety check: If no auth restrictions are set (no users, no org, no teams), exit with error
+# Exit with error if no auth restrictions are set (no users nor org)
 # This prevents the dangerous configuration where any GitHub user could access the system
 if [ -z "$AUTHED_USERS_CONTENT" ] && [ -z "$AUTHED_ORG_CONTENT" ] && [ -z "$AUTHED_TEAMS_CONTENT" ]; then
     echo "ERROR: No authentication restrictions found!"
@@ -67,17 +68,30 @@ echo "Saved environment file /opt/docker/.env"
 
 echo "Generating OAuth cookie secret..."
 sh /usr/local/bin/refresh-oauth-cookie.sh
-
-if ! docker-compose -f docker-compose.yml config > /dev/null; then
+if ! docker compose -f docker-compose.yml config > /dev/null; then
     echo "Invalid docker-compose configuration"
     exit 1
 else
-    echo "Validated docker-compose file"
+    echo "Validated docker compose file"
 fi
 
-echo "Starting docker-compose"
-docker-compose up -d
-echo "Docker-compose complete"
+echo "Starting docker compose"
+if ! docker compose up -d --force-recreate --wait --wait-timeout 300; then
+    echo "First attempt failed, trying with cleanup..."
+    docker compose down || true
+    docker system prune -f --volumes || true
+
+    if ! docker compose up -d --force-recreate --wait --wait-timeout 120; then
+        echo "Second attempt failed, restarting Docker daemon..."
+        systemctl restart docker
+        sleep 10
+        docker compose up -d --force-recreate --wait --wait-timeout 120
+    fi
+fi
+echo "docker compose complete"
+
+echo "Waiting for containers to stabilize..."
+sleep 2
 
 touch /opt/docker/started.txt
 chmod 644 /opt/docker/started.txt

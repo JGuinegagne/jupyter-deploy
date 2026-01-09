@@ -32,6 +32,7 @@ resource "null_resource" "wait_for_instance_ready" {
     status_doc_version = aws_ssm_document.instance_status_check.default_version
   }
   provisioner "local-exec" {
+    quiet   = true
     command = <<DOC
       ${local.await_server_indented}
     DOC

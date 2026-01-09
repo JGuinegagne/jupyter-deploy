@@ -18,9 +18,10 @@ locals {
   template_version = "0.2.6"
 
   default_tags = {
-    Source   = "jupyter-deploy"
-    Template = local.template_name
-    Version  = local.template_version
+    Source       = "jupyter-deploy"
+    Template     = local.template_name
+    Version      = local.template_version
+    DeploymentId = random_id.postfix.hex
   }
   combined_tags = merge(
     local.default_tags,

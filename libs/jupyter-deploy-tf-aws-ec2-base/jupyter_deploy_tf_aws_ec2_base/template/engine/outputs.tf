@@ -37,6 +37,12 @@ output "region" {
   value       = data.aws_region.current.id
 }
 
+# Deployment identifier
+output "deployment_id" {
+  description = "Unique identifier for this deployment."
+  value       = local.doc_postfix
+}
+
 # server.status CLI handling
 output "server_status_check_document" {
   description = "Name of the SSM document to check the server status."

@@ -1,8 +1,25 @@
 """Deployment lifecycle management for E2E tests."""
 
+import subprocess
 import time
+from pathlib import Path
+from typing import Any
+
+import yaml
+from jupyter_deploy import fs_utils as jd_fs_utils
+from jupyter_deploy.variables_config import (
+    VARIABLES_CONFIG_V1_COMMENTS,
+    VARIABLES_CONFIG_V1_KEYS_ORDER,
+)
 
 from pytest_jupyter_deploy.cli import JDCli, JDCliError
+from pytest_jupyter_deploy.constants import (
+    CONFIGURATION_DEFAULT_NAME,
+    DEPLOY_TIMEOUT_SECONDS,
+    DESTROY_TIMEOUT_SECONDS,
+    E2E_DOWN_LOG_FILE,
+    E2E_UP_LOG_FILE,
+)
 from pytest_jupyter_deploy.suite_config import SuiteConfig
 
 
@@ -12,20 +29,22 @@ class EndToEndDeployment:
     def __init__(
         self,
         suite_config: SuiteConfig,
-        deployment_timeout_seconds: int = 1800,
-        teardown_timeout_seconds: int = 600,
+        config_name: str = CONFIGURATION_DEFAULT_NAME,
+        deploy_timeout_seconds: int = DEPLOY_TIMEOUT_SECONDS,
+        destroy_timeout_seconds: int = DESTROY_TIMEOUT_SECONDS,
     ) -> None:
         """Initialize the deployment manager.
 
         Args:
             suite_config: Suite configuration
             config_name: Configuration name to use (default: "base")
-            deployment_timeout_seconds: Timeout in seconds for deployment (default: 1800)
-            teardown_timeout_seconds: Timeout in seconds for teardown (default: 600)
+            deploy_timeout_seconds: Timeout in seconds for deployment (default: 1800)
+            destroy_timeout_seconds: Timeout in seconds for destroy (default: 600)
         """
         self.suite_config = suite_config
-        self.deployment_timeout_seconds = deployment_timeout_seconds
-        self.teardown_timeout_seconds = teardown_timeout_seconds
+        self.config_name = config_name
+        self.deploy_timeout_seconds = deploy_timeout_seconds
+        self.destroy_timeout_seconds = destroy_timeout_seconds
         self._cli: JDCli | None = None
         self._is_deployed = False
         self._owns_project_resources = False
@@ -43,19 +62,52 @@ class EndToEndDeployment:
         return self._cli
 
     def ensure_deployed(self) -> None:
-        """Ensure that the project is deployed."""
+        """Ensure that the project is deployed.
+
+        Raise:
+            RuntimeError if the target container is not available.
+        """
+        # First, abort early if already flagged as deployed
+        if self._is_deployed:
+            return
+
+        # Second, load the config, which will identity if the user requested to test against
+        # an existing project or desires a deployment from scratch
         self.suite_config.load()
 
-        # first, ensure the project exists at the target dir
+        # CASE 1: Test against an Existing Project
         if self.suite_config.references_existing_project():
+            # The dir MUST already exist, and be mounted on the container at the path.
             if not self.suite_config.project_dir.exists():
                 raise RuntimeError(
                     "Cannot run integration tests; referenced project does not exist "
                     f"at path: {self.suite_config.project_dir.absolute()}"
                 )
+        # CASE 2: Deploy from Scratch, then Test against it
         else:
+            # In this case also, the directory MUST already exist
+            # 1/ the tests run in a container
+            # 2/ the project directory lives in the developer's workspace
+            # 3/ therefore, the project directory mounts on the test container
+            # which is why it must exist!
             if not self.suite_config.project_dir.exists():
-                self._deploy_e2e_project()
+                raise RuntimeError(
+                    "Project directory does not exist: "
+                    f"{self.suite_config.project_dir.absolute()}\n"
+                    f"Create this directory first, and ensure it is empty."
+                )
+            # And this directory MUST be empty to avoid overwriting another deployment
+            elif any(self.suite_config.project_dir.iterdir()):
+                raise RuntimeError(
+                    f"Cannot deploy: project directory already exists and is not empty: "
+                    f"{self.suite_config.project_dir.absolute()}\n"
+                    f"This safety check prevents accidentally destroying terraform.state.\n"
+                    f"To redeploy, manually remove the directory first."
+                )
+            # If both conditions are satisfied, then the project directory is mounted
+            # (since the file system inside the container sees it), and it is clean (empty)
+            # we can proceed
+            self._deploy_e2e_project()
 
     def ensure_host_running(self) -> None:
         """Call host status, attempts to call host start if not running."""
@@ -148,34 +200,48 @@ class EndToEndDeployment:
 
     def _deploy_e2e_project(self) -> None:
         """Calls jd init, jd config, jd up."""
-
         # Initialize project
         engine = self.suite_config.template_engine.value
         provider = self.suite_config.template_provider
         infrastructure = self.suite_config.template_infrastructure
         base_name = self.suite_config.template_base_name
 
-        self.cli.run_command(
-            [
-                "jupyter-deploy",
-                "init",
-                "--engine",
-                engine,
-                "--provider",
-                provider,
-                "--infrastructure",
-                infrastructure,
-                "--template",
-                base_name,
-            ]
-        )
+        # Run jd init from parent directory, not from inside the target directory
+        # We use the absolute path and don't switch into the directory because
+        # the CLI module import evaluates decorators that call Path.cwd(), which
+        # can fail when run from an empty directory in a subprocess
+        init_cmd = [
+            "jupyter-deploy",
+            "init",
+            "--engine",
+            engine,
+            "--provider",
+            provider,
+            "--infrastructure",
+            infrastructure,
+            "--template",
+            base_name,
+            ".",  # cli.run_command() switch dirs to the project file already
+        ]
+        self.cli.run_command(init_cmd)
 
-        # Copy the variables.yaml
-        self.suite_config.prepare_configuration()
+        # Copy the variables.yaml with specified configuration
+        self.suite_config.prepare_configuration(self.config_name)
 
         # Call the CLI commands
-        self.cli.run_command(["jupyter-deploy", "config"])
-        self.cli.run_command(["jupyter-deploy", "up", "-y"])
+        self.cli.run_command(["jupyter-deploy", "config", "-s"])
+
+        # Run deployment and capture output
+        result = self.cli.run_command(["jupyter-deploy", "up", "-y"], timeout_seconds=self.deploy_timeout_seconds)
+
+        # Save deployment output to log file
+        log_file = self.suite_config.project_dir / E2E_UP_LOG_FILE
+        with open(log_file, "w") as f:
+            f.write("=== STDOUT ===\n")
+            f.write(result.stdout)
+            f.write("\n=== STDERR ===\n")
+            f.write(result.stderr)
+
         self._is_deployed = True
 
     def ensure_destroyed(self) -> None:
@@ -184,7 +250,18 @@ class EndToEndDeployment:
             return
 
         try:
-            self.cli.run_command(["jupyter-deploy", "down", "-y"])
+            # Run teardown and capture output
+            result = self.cli.run_command(
+                ["jupyter-deploy", "down", "-y"], timeout_seconds=self.destroy_timeout_seconds
+            )
+
+            # Save teardown output to log file
+            log_file = self.suite_config.project_dir / E2E_DOWN_LOG_FILE
+            with open(log_file, "w") as f:
+                f.write("=== STDOUT ===\n")
+                f.write(result.stdout)
+                f.write("\n=== STDERR ===\n")
+                f.write(result.stderr)
         finally:
             self._is_deployed = False
 
@@ -314,3 +391,69 @@ class EndToEndDeployment:
                 if not current_org:
                     raise ValueError("Cannot set teams without an organization")
             self.cli.run_command(["jupyter-deploy", "teams", "set"] + teams)
+
+    def save_command_logs(self, log_filename: str, result: subprocess.CompletedProcess[str]) -> None:
+        """Save command output to a log file in the project directory.
+
+        Args:
+            log_filename: Name of the log file (e.g., "e2e-upgrade-instance.log")
+            result: CompletedProcess instance from run_command
+        """
+        log_file = self.suite_config.project_dir / log_filename
+        with open(log_file, "w") as f:
+            f.write("=== STDOUT ===\n")
+            f.write(result.stdout)
+            f.write("\n=== STDERR ===\n")
+            f.write(result.stderr)
+
+    def get_variables_yaml_path(self) -> Path:
+        """Get the path to the variables.yaml file."""
+        return self.suite_config.project_dir / "variables.yaml"
+
+    def read_override_value(self, key: str) -> Any:
+        """Read a value from the overrides section of variables.yaml.
+
+        Args:
+            key: The key to read from overrides
+
+        Returns:
+            The value from overrides, or None if not set
+        """
+        variables_yaml = self.get_variables_yaml_path()
+        with open(variables_yaml) as f:
+            config = yaml.safe_load(f)
+
+        overrides = config.get("overrides", {})
+        return overrides.get(key)
+
+    def update_override_value(self, key: str, value: Any) -> None:
+        """Update a single override value in variables.yaml.
+
+        Args:
+            key: The override key to update (e.g., "instance_type")
+            value: The new value to set (any type - preserves int, str, bool, etc.)
+
+        Note:
+            Keep value typed as Any instead of str to preserve proper YAML types.
+            For example, passing int 50 writes as `50`, not `'50'` in YAML.
+        """
+        variables_yaml = self.get_variables_yaml_path()
+
+        # Read current config
+        with open(variables_yaml) as f:
+            config = yaml.safe_load(f)
+
+        # Ensure overrides section exists
+        if "overrides" not in config:
+            config["overrides"] = {}
+
+        # Update the specific key
+        config["overrides"][key] = value
+
+        # Write back with comments preserved
+        jd_fs_utils.write_yaml_file_with_comments(
+            variables_yaml,
+            config,
+            key_order=VARIABLES_CONFIG_V1_KEYS_ORDER,
+            comments=VARIABLES_CONFIG_V1_COMMENTS,
+        )

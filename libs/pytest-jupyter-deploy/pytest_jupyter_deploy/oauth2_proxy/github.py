@@ -2,6 +2,7 @@
 
 import contextlib
 import os
+import time
 from pathlib import Path
 
 from playwright.sync_api import Page, expect
@@ -26,6 +27,52 @@ class GitHubOAuth2ProxyApplication:
         self.storage_state_path = storage_state_path
         self.is_ci = is_ci
 
+    def _navigate_with_retry(
+        self, url: str, timeout: int = 60000, wait_until: str = "load", max_retries: int = 3
+    ) -> None:
+        """Navigate to URL with retry logic for DNS propagation delays.
+
+        This method wraps page.goto() with retry logic to handle DNS propagation
+        delays that can occur after Route53 records are created or updated.
+
+        Args:
+            url: The URL to navigate to
+            timeout: Navigation timeout in milliseconds (default: 60000)
+            wait_until: When to consider navigation successful (default: "load")
+            max_retries: Maximum number of retry attempts (default: 3)
+
+        Raises:
+            Exception: If navigation fails after max_retries
+        """
+        for attempt in range(max_retries):
+            try:
+                self.page.goto(url, timeout=timeout, wait_until=wait_until)  # type: ignore[arg-type]
+                return  # Success - navigation completed
+            except Exception as e:
+                error_msg = str(e).lower()
+                # Check for DNS/connection errors that indicate DNS propagation issues
+                is_dns_error = any(
+                    err in error_msg
+                    for err in [
+                        "net::err_name_not_resolved",
+                        "ns_error_unknown_host",
+                        "getaddrinfo eai_noname",
+                        "net::err_connection_refused",
+                        "ns_error_connection_refused",
+                        "err_connection_refused",
+                        "connection refused",
+                        "timeout",
+                    ]
+                )
+
+                if is_dns_error and attempt < max_retries - 1:
+                    # Wait with exponential backoff: 2s, 4s, 8s, 16s (max: 30s total)
+                    delay = min(2 ** (attempt + 1), 30)
+                    time.sleep(delay)
+                else:
+                    # Max retries exceeded or non-DNS error - raise original exception
+                    raise
+
     def login_with_auth_session(self) -> None:
         """Login using saved authentication session from storage state.
 
@@ -42,7 +89,7 @@ class GitHubOAuth2ProxyApplication:
         """
         # Navigate to the JupyterLab URL
         # Storage state should be loaded by browser context at this point
-        self.page.goto(self.jupyterlab_url, timeout=60000)
+        self._navigate_with_retry(self.jupyterlab_url, timeout=60000)
 
         # Check if we see the OAuth2 Proxy sign-in page
         sign_in_button = self.page.get_by_role("button", name="Sign in with GitHub")
@@ -145,13 +192,24 @@ class GitHubOAuth2ProxyApplication:
     def login_without_2fa(self) -> None:
         """Login using username/password without 2FA (for CI environments).
 
-        This method:
-        1. Navigates to the JupyterLab URL
-        2. Clicks "Sign in with GitHub"
-        3. Fills in username and password from environment variables
-        4. Submits the form
-        5. Waits for redirect back to JupyterLab
-        6. Saves storage state for future test runs
+        This method handles three scenarios:
+        1. OAuth2 Proxy session is valid (saved cookies) → goes straight to JupyterLab
+        2. OAuth2 Proxy session expired but GitHub cookies valid → clicks "Sign in with GitHub",
+           GitHub auto-authenticates via OAuth authorize page
+        3. Both sessions expired → performs full username/password login
+
+        The method:
+        1. Navigates to JupyterLab URL (with any existing cookies from storage state)
+        2. Checks if OAuth2 Proxy sign-in page is shown
+        3. If sign-in required:
+           - Clicks "Sign in with GitHub"
+           - If GitHub cookies valid: GitHub auto-authenticates (or clicks Authorize button)
+           - If GitHub cookies expired: enters username/password
+        4. If already authenticated: skips login (reuses valid OAuth2 Proxy session cookies)
+        5. Saves storage state with fresh cookies for future test runs
+
+        After first successful authentication, subsequent test runs will reuse the saved
+        session cookies (both OAuth2 Proxy and GitHub), avoiding unnecessary authentication.
 
         Requires environment variables:
         - GITHUB_USERNAME: GitHub username
@@ -172,30 +230,69 @@ class GitHubOAuth2ProxyApplication:
             )
 
         # Navigate to the JupyterLab URL
-        self.page.goto(self.jupyterlab_url, timeout=60000)
+        # Storage state should be loaded by browser context at this point
+        self._navigate_with_retry(self.jupyterlab_url, timeout=60000)
 
-        # Should land on OAuth2 Proxy sign-in page
-        # Look for the "Sign in with GitHub" button
+        # Check if we see the OAuth2 Proxy sign-in page
         sign_in_button = self.page.get_by_role("button", name="Sign in with GitHub")
-        expect(sign_in_button).to_be_visible(timeout=10000)
+        try:
+            sign_in_visible = sign_in_button.is_visible(timeout=2000)
+        except Exception:
+            sign_in_visible = False
 
-        # Click the sign-in button
-        sign_in_button.click()
+        if sign_in_visible:
+            # OAuth2 Proxy session expired, but GitHub cookies might still be valid
+            # Click "Sign in with GitHub" to attempt auto-authentication
+            sign_in_button.click()
 
-        # Should redirect to GitHub login page
-        self.page.wait_for_url("**/github.com/**", timeout=30000)
+            # Wait for redirect - either:
+            # 1. OAuth authorize page → callback → JupyterLab (GitHub cookies valid)
+            # 2. GitHub login page (GitHub cookies expired)
 
-        # Fill in GitHub credentials
-        self.page.fill('input[name="login"]', github_username)
-        self.page.fill('input[name="password"]', github_password)
+            # Wait for navigation to complete (GitHub OAuth flow)
+            with contextlib.suppress(Exception):
+                self.page.wait_for_load_state("networkidle", timeout=10000)
 
-        # Submit the form
-        self.page.click('input[type="submit"]')
+            # Check current URL
+            current_url = self.page.url
 
-        # Wait for authentication to complete and redirect back to application
-        self.page.wait_for_url(f"{self.jupyterlab_url}**", timeout=60000)
+            # Check if we're on GitHub OAuth authorize page
+            if "github.com/login/oauth/authorize" in current_url:
+                # With valid cookies, GitHub should either:
+                # 1. Auto-submit the authorization
+                # 2. Show an "Authorize" button that we need to click
 
-        # Save storage state for future test runs in CI
+                # Wait a moment for page to load and auto-submit
+                try:
+                    # Check if we're redirected automatically (back to app domain, not GitHub)
+                    self.page.wait_for_url(lambda url: "github.com" not in url, timeout=5000)
+                except Exception:
+                    # Still on authorize page - check if there's an authorize button
+                    authorize_button = self.page.get_by_role("button", name="Authorize")
+                    if authorize_button.is_visible(timeout=2000):
+                        authorize_button.click()
+                        # Wait for redirect after clicking (back to app domain, not GitHub)
+                        self.page.wait_for_url(lambda url: "github.com" not in url, timeout=10000)
+                    else:
+                        # No authorize button - might need username/password
+                        # Fall through to check if we're on login page below
+                        pass
+
+            # Check if we're on GitHub login page (GitHub cookies expired)
+            current_url = self.page.url
+            if "github.com/login" in current_url and "oauth" not in current_url:
+                # GitHub cookies expired, need to enter username/password
+                # Fill in GitHub credentials
+                self.page.fill('input[name="login"]', github_username)
+                self.page.fill('input[name="password"]', github_password)
+
+                # Submit the form
+                self.page.click('input[type="submit"]')
+
+                # Wait for authentication to complete and redirect back to application
+                self.page.wait_for_url(f"{self.jupyterlab_url}**", timeout=60000)
+
+        # Save storage state for future test runs (whether we authenticated or used existing session)
         self.save_storage_state()
 
     def verify_jupyterlab_accessible(self) -> None:
@@ -259,6 +356,24 @@ class GitHubOAuth2ProxyApplication:
             # Unexpected error - re-raise
             raise RuntimeError(f"Unexpected error while verifying server is unaccessible: {e}") from e
 
+    def verify_oauth_proxy_accessible(self) -> None:
+        """Verify that the OAuth2 Proxy page is accessible and responding.
+
+        This method navigates to the JupyterLab URL and verifies that the OAuth2 Proxy
+        sign-in page loads successfully (showing the "Sign in with GitHub" button).
+        It does NOT authenticate - just confirms the deployment is up and OAuth proxy
+        is responding.
+
+        Raises:
+            AssertionError: If OAuth2 Proxy sign-in page does not load within timeout
+        """
+        # Navigate to the JupyterLab URL
+        self._navigate_with_retry(self.jupyterlab_url, timeout=60000)
+
+        # Verify OAuth2 Proxy sign-in button is visible
+        sign_in_button = self.page.get_by_role("button", name="Sign in with GitHub")
+        expect(sign_in_button).to_be_visible(timeout=30000)
+
     def is_authenticated(self) -> bool:
         """Check if the user is already authenticated.
 
@@ -319,7 +434,7 @@ class GitHubOAuth2ProxyApplication:
         # Navigate to JupyterLab URL
         print(f"🔗 Navigating to {self.jupyterlab_url}")
         try:
-            self.page.goto(self.jupyterlab_url, timeout=60000)
+            self._navigate_with_retry(self.jupyterlab_url, timeout=60000)
         except Exception as e:
             error_msg = f"Error navigating to {self.jupyterlab_url}: {e}"
             print(error_msg)

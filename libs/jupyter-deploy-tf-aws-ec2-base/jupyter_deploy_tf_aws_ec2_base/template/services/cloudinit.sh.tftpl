@@ -5,9 +5,7 @@ set -e
 mkdir -p /var/log/jupyter-deploy
 exec > >(tee /var/log/jupyter-deploy/cloudinit.log) 2>&1
 
-echo "Running cloudinit script as: $(whoami)"
-
-# Detect Linux distribution
+# Detect OS
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     OS=$NAME
@@ -20,7 +18,7 @@ fi
 if [[ "$OS" == "Amazon Linux" ]]; then
     yum update -y
 
-    # Check if Docker is already installed
+    # docker
     if ! command -v docker &> /dev/null; then
         echo "Docker not found, installing..."
         yum install -y docker
@@ -32,29 +30,30 @@ if [[ "$OS" == "Amazon Linux" ]]; then
         echo "Docker is already installed"
     fi
 
-    # Get latest buildx version dynamically
+    # docker plugins
+    ARCH=$(uname -m)
+    BUILDX_ARCH=$(echo $${ARCH} | sed 's/x86_64/amd64/g' | sed 's/aarch64/arm64/g')
+    mkdir -p /usr/local/lib/docker/cli-plugins
+
+    # compose (uses x86_64, aarch64)
+    COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+    echo "Installing compose $${COMPOSE_VERSION}..."
+    curl -SL "https://github.com/docker/compose/releases/download/$${COMPOSE_VERSION}/docker-compose-linux-$${ARCH}" \
+        -o /usr/local/lib/docker/cli-plugins/docker-compose
+    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+    docker compose version
+
+    # buildx (uses amd64, arm64)
     BUILDX_VERSION=$(curl -s https://api.github.com/repos/docker/buildx/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
     echo "Installing buildx $${BUILDX_VERSION}..."
-
-    ARCH=$(uname -m | sed 's/x86_64/amd64/g' | sed 's/aarch64/arm64/g')
-
-    mkdir -p /usr/local/lib/docker/cli-plugins
-    curl -SL "https://github.com/docker/buildx/releases/download/$${BUILDX_VERSION}/buildx-$${BUILDX_VERSION}.linux-$${ARCH}" \
+    curl -SL "https://github.com/docker/buildx/releases/download/$${BUILDX_VERSION}/buildx-$${BUILDX_VERSION}.linux-$${BUILDX_ARCH}" \
         -o /usr/local/lib/docker/cli-plugins/docker-buildx
     chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
-
     docker buildx version
-    
-    # Check if docker-compose is already installed
-    if ! command -v docker-compose &> /dev/null; then
-        echo "docker-compose not found, installing..."
-        curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
-        chmod +x /usr/local/bin/docker-compose
-    else
-        echo "docker-compose is already installed"
-    fi
 
-    # Check if jq is already installed
+    echo "Docker plugins installation complete"
+
+    # jq
     if ! command -v jq &> /dev/null; then
         echo "jq not found, installing..."
         yum install -y jq
@@ -62,7 +61,7 @@ if [[ "$OS" == "Amazon Linux" ]]; then
         echo "jq is already installed"
     fi
 
-    # Check if SSM agent is installed and running
+    # ensure SSM agent is active
     if ! systemctl is-active --quiet amazon-ssm-agent; then
         echo "SSM agent not running, checking if installed..."
         if ! rpm -q amazon-ssm-agent &> /dev/null; then
@@ -70,8 +69,25 @@ if [[ "$OS" == "Amazon Linux" ]]; then
             yum install -y amazon-ssm-agent
         fi
         echo "Starting SSM agent..."
-        systemctl start amazon-ssm-agent
-        systemctl enable amazon-ssm-agent
+        # Retry logic for systemd transaction conflicts during boot
+        MAX_RETRIES=5
+        RETRY_COUNT=0
+        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if systemctl start amazon-ssm-agent; then
+                echo "SSM agent started successfully"
+                systemctl enable amazon-ssm-agent
+                break
+            else
+                RETRY_COUNT=$((RETRY_COUNT + 1))
+                if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                    echo "Failed to start SSM agent (attempt $RETRY_COUNT/$MAX_RETRIES), retrying in 5 seconds..."
+                    sleep 5
+                else
+                    echo "Failed to start SSM agent after $MAX_RETRIES attempts"
+                    exit 1
+                fi
+            fi
+        done
     else
         echo "SSM agent is already running"
     fi
@@ -80,10 +96,10 @@ else
     exit 1
 fi
 
-# create the service user and restrict permissions
-useradd -r -s /sbin/nologin -d /home/service-user -m service-user
-
-# revisit: granting access to the docker deamon is an avenue for elevation of privilege
+# service user (idempotent)
+if ! id service-user >/dev/null 2>&1; then
+    useradd -r -s /sbin/nologin -d /home/service-user -m service-user
+fi
 usermod -aG docker service-user
 
 tee /etc/sudoers.d/service-user << EOF
@@ -94,7 +110,6 @@ service-user ALL=(ALL) NOPASSWD: /usr/local/bin/update-auth.sh
 EOF
 chmod 440 /etc/sudoers.d/service-user
 
-# Set up specific PATH
 tee /home/service-user/.bash_profile << EOF
 PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin
 EOF
@@ -105,7 +120,6 @@ chmod 644 /home/service-user/.bash_profile
 mkdir -p /home/service-user/.aws
 chown -R service-user:service-user /home/service-user
 
-# Create limits configuration
 echo "Setting up resource limits..."
 tee /etc/security/limits.d/service-user.conf << EOF
 service-user soft nproc 1024
@@ -117,7 +131,6 @@ chmod 440 /etc/security/limits.d/service-user.conf
 
 # Allocate swap memory based on RAM amount
 TOTAL_MEMORY_MB=$(free -m | awk '/^Mem:/{print $2}')
-
 if [ $TOTAL_MEMORY_MB -le 1024 ]; then
     SWAP_SIZE_MB=2048
 elif [ $TOTAL_MEMORY_MB -le 8192 ]; then
@@ -128,41 +141,58 @@ fi
 
 CURRENT_SWAP_KB=$(free -k | awk '/^Swap:/{print $2}')
 NEEDED_SWAP_KB=$((SWAP_SIZE_MB * 1024))
+SWAP_CHANGED=false
 
 if [ $CURRENT_SWAP_KB -eq 0 ]; then
     echo "Creating new swap file of $${SWAP_SIZE_MB}MB..."
     fallocate -l $${SWAP_SIZE_MB}M /swapfile
+    SWAP_CHANGED=true
 elif [ $CURRENT_SWAP_KB -ne $NEEDED_SWAP_KB ]; then
     echo "Resizing swap file from $((CURRENT_SWAP_KB/1024))MB to $${SWAP_SIZE_MB}MB..."
     swapoff -a
     fallocate -l $${SWAP_SIZE_MB}M /swapfile
+    SWAP_CHANGED=true
+else
+    echo "Swap file is already configured correctly ($${SWAP_SIZE_MB}MB)"
 fi
 
-chmod 600 /swapfile
-mkswap /swapfile
-swapon /swapfile
-echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+# apply (idempotent)
+if [ "$SWAP_CHANGED" = true ]; then
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+fi
+if ! grep -q '/swapfile' /etc/fstab; then
+    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+fi
 
 # Mount the jupyter-data drive and save config to persist on reboots
-mkfs -t ext4 /dev/sdf
 mkdir -p /mnt/jupyter-data
-mount /dev/sdf /mnt/jupyter-data
+if ! blkid /dev/sdf | grep -q 'TYPE="ext4"'; then
+    echo "Formatting /dev/sdf as ext4..."
+    mkfs -t ext4 /dev/sdf
+else
+    echo "/dev/sdf is already formatted"
+fi
+if ! mountpoint -q /mnt/jupyter-data; then
+    mount /dev/sdf /mnt/jupyter-data
+fi
 
 chown service-user:service-user /mnt/jupyter-data
 chmod 750 /mnt/jupyter-data
+if ! grep -q '/mnt/jupyter-data' /etc/fstab; then
+    echo "/dev/sdf /mnt/jupyter-data ext4 defaults,nofail 0 2" | tee -a /etc/fstab
+fi
 
-echo "/dev/sdf /mnt/jupyter-data ext4 defaults,nofail 0 2" | tee -a /etc/fstab
-
-# Create the docker dir
+# Create dirs
 mkdir -p /opt/docker
 touch /opt/docker/acme.json
 chown service-user:service-user /opt/docker/acme.json
 chmod 600 /opt/docker/acme.json
 
-# Create the log dir
 mkdir -p /var/log/services
 
-# Create the AUTHED_ENTITIES file with the initial GitHub org/teams/users
+# Create the AUTHED_ENTITIES file
 echo "[org]" > /etc/AUTHED_ENTITIES
 echo "${allowed_github_org}" >> /etc/AUTHED_ENTITIES
 echo "" >> /etc/AUTHED_ENTITIES
@@ -173,5 +203,3 @@ echo "[users]" >> /etc/AUTHED_ENTITIES
 echo "${allowed_github_usernames}" >> /etc/AUTHED_ENTITIES
 chmod 600 /etc/AUTHED_ENTITIES
 chown service-user:service-user /etc/AUTHED_ENTITIES
-
-mkdir -p /usr/local/bin

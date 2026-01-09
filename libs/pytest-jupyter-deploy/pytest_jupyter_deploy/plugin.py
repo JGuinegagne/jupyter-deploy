@@ -10,12 +10,29 @@ import pytest
 from playwright.sync_api import Page
 
 from pytest_jupyter_deploy import constants
+from pytest_jupyter_deploy.constants import DEPLOY_TIMEOUT_SECONDS, DESTROY_TIMEOUT_SECONDS
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
 from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
 from pytest_jupyter_deploy.suite_config import SuiteConfig
 
 # Type variable for function decorators
 F = TypeVar("F", bound=Callable[..., Any])
+
+
+def pytest_configure(config: Any) -> None:
+    """Register custom markers.
+
+    Args:
+        config: Pytest config object
+    """
+    config.addinivalue_line(
+        "markers",
+        "mutating: mark test as mutating (changes infrastructure config like instance type or volume size)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "full_deployment: mark test as requiring full deployment from scratch",
+    )
 
 
 def skip_if_testvars_not_set(required_vars: list[str]) -> Callable[[F], F]:
@@ -48,11 +65,6 @@ def pytest_addoption(parser: Any) -> None:
             parser.addoption(option_name, **kwargs)
 
     add_option_if_not_exists(
-        "--no-cleanup",
-        action="store_true",
-        help="Skip infrastructure cleanup after tests",
-    )
-    add_option_if_not_exists(
         "--e2e-tests-dir",
         action="store",
         default=f"{constants.TESTS_DIR}/{constants.E2E_TESTS_DIR}",
@@ -61,7 +73,7 @@ def pytest_addoption(parser: Any) -> None:
     add_option_if_not_exists(
         "--e2e-config-name",
         action="store",
-        default="base",
+        default=constants.CONFIGURATION_DEFAULT_NAME,
         help=f"Configuration name to use from {constants.CONFIGURATIONS_DIR}/ directory",
     )
     add_option_if_not_exists(
@@ -71,18 +83,18 @@ def pytest_addoption(parser: Any) -> None:
         help="Path to existing jupyter-deploy project (skips deployment, uses existing infrastructure)",
     )
     add_option_if_not_exists(
-        "--deployment-timeout-seconds",
+        "--deploy-timeout-seconds",
         action="store",
         type=int,
-        default=1800,
-        help="Timeout in seconds for deployment (default: 1800)",
+        default=DEPLOY_TIMEOUT_SECONDS,
+        help=f"Timeout in seconds for deployment (default: {DEPLOY_TIMEOUT_SECONDS})",
     )
     add_option_if_not_exists(
-        "--teardown-timeout-seconds",
+        "--destroy-timeout-seconds",
         action="store",
         type=int,
-        default=600,
-        help="Timeout in seconds for teardown (default: 600)",
+        default=DESTROY_TIMEOUT_SECONDS,
+        help=f"Timeout in seconds for destroy (default: {DESTROY_TIMEOUT_SECONDS})",
     )
     add_option_if_not_exists(
         "--ci",
@@ -90,11 +102,60 @@ def pytest_addoption(parser: Any) -> None:
         default=False,
         help="CI mode: use GITHUB_USERNAME/GITHUB_PASSWORD for authentication without 2FA",
     )
+    add_option_if_not_exists(
+        "--with-mutating-cases",
+        action="store_true",
+        default=False,
+        help="Include mutating tests (tests that change infrastructure config)",
+    )
+    add_option_if_not_exists(
+        "--destroy-after",
+        action="store_true",
+        default=False,
+        help="Destroy deployment after tests complete (only for deployments from scratch)",
+    )
+
+
+def pytest_collection_modifyitems(config: Any, items: list) -> None:
+    """Skip full_deployment and mutating tests when appropriate.
+
+    Tests marked with @pytest.mark.full_deployment are only run when deploying
+    from scratch (no --e2e-existing-project flag). This allows full deployment
+    lifecycle tests to be automatically skipped when testing against existing
+    infrastructure.
+
+    Tests marked with @pytest.mark.mutating are only run when:
+    - Deploying from scratch (no --e2e-existing-project), OR
+    - Explicitly requested with --with-mutating-cases flag
+
+    Args:
+        config: Pytest config object
+        items: List of collected test items
+    """
+    existing_project = config.getoption("--e2e-existing-project")
+    with_mutating_cases = config.getoption("--with-mutating-cases")
+
+    if existing_project:
+        # Using existing project - skip deployment tests
+        skip_deployment = pytest.mark.skip(reason="Skipping full deployment test (using existing project)")
+        for item in items:
+            if "full_deployment" in item.keywords:
+                item.add_marker(skip_deployment)
+
+        # Also skip mutating tests unless explicitly requested
+        if not with_mutating_cases:
+            skip_mutating = pytest.mark.skip(reason="Skipping mutating test (use --with-mutating-cases to include)")
+            for item in items:
+                if "mutating" in item.keywords:
+                    item.add_marker(skip_mutating)
 
 
 @pytest.fixture(scope="session")
 def e2e_suite_dir(request: pytest.FixtureRequest) -> Path:
     """Get E2E tests directory path.
+
+    This fixture returns the path specified by the --e2e-tests-dir option.
+    This option must be provided when running e2e tests (typically via justfile).
 
     Args:
         request: Pytest fixture request
@@ -103,11 +164,7 @@ def e2e_suite_dir(request: pytest.FixtureRequest) -> Path:
         Path to E2E tests directory
     """
     tests_dir = request.config.getoption("--e2e-tests-dir")
-    if isinstance(tests_dir, str) and tests_dir:
-        return Path(tests_dir)
-    else:
-        # Fallback: use pytest's invocation directory
-        return Path(request.config.invocation_params.dir)
+    return Path(tests_dir)
 
 
 @pytest.fixture(scope="session")
@@ -151,28 +208,30 @@ def e2e_deployment(
         EndToEndDeployment instance
     """
     # Get configuration options
-    deployment_timeout = request.config.getoption("--deployment-timeout-seconds")
-    teardown_timeout = request.config.getoption("--teardown-timeout-seconds")
+    deploy_timeout = request.config.getoption("--deploy-timeout-seconds")
+    destroy_timeout = request.config.getoption("--destroy-timeout-seconds")
+    config_name = request.config.getoption("--e2e-config-name")
 
     # to keep mypy happy
-    deployment_timeout_seconds = deployment_timeout if isinstance(deployment_timeout, int) else 1800
-    teardown_timeout_seconds = teardown_timeout if isinstance(teardown_timeout, int) else 600
+    deploy_timeout_seconds = deploy_timeout if isinstance(deploy_timeout, int) else DEPLOY_TIMEOUT_SECONDS
+    destroy_timeout_seconds = destroy_timeout if isinstance(destroy_timeout, int) else DESTROY_TIMEOUT_SECONDS
+    config_name_str = config_name if isinstance(config_name, str) else constants.CONFIGURATION_DEFAULT_NAME
 
     # Create deployment manager (does not deploy yet)
     deployment = EndToEndDeployment(
         suite_config=e2e_config,
-        deployment_timeout_seconds=deployment_timeout_seconds,
-        teardown_timeout_seconds=teardown_timeout_seconds,
+        config_name=config_name_str,
+        deploy_timeout_seconds=deploy_timeout_seconds,
+        destroy_timeout_seconds=destroy_timeout_seconds,
     )
 
     yield deployment
 
-    # Cleanup only projects created by the deployment when --no-cleanup is not set.
-    no_cleanup = request.config.getoption("--no-cleanup")
+    # Cleanup only projects created by the deployment when --destroy-after is set.
+    # Never cleanup existing projects (referenced by --e2e-existing-project).
+    destroy_after = request.config.getoption("--destroy-after")
 
-    if no_cleanup or e2e_config.references_existing_project():
-        return
-    else:
+    if destroy_after and not e2e_config.references_existing_project():
         deployment.ensure_destroyed()
 
 

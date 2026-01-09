@@ -2,8 +2,11 @@
 
 import re
 import subprocess
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 
+import pexpect
 from jupyter_deploy import cmd_utils as jd_cmd_utils
 
 
@@ -207,3 +210,82 @@ class JDCli:
 
         # No line with colon found
         return None
+
+    @contextmanager
+    def spawn_interactive_session(
+        self,
+        command: str,
+        timeout: int = 30,
+        encoding: str = "utf-8",
+    ) -> Generator[pexpect.spawn, None, None]:
+        """Spawn an interactive command session using pexpect.
+
+        This context manager handles the lifecycle of a pexpect spawned process,
+        ensuring proper cleanup even if the test fails.
+
+        Args:
+            command: Command to spawn (e.g., "jupyter-deploy host connect")
+            timeout: Default timeout in seconds for expect operations
+            encoding: Character encoding for the session
+
+        Yields:
+            pexpect.spawn instance for interacting with the session
+
+        Example:
+            with cli.spawn_interactive_session("jupyter-deploy host connect") as session:
+                session.expect("Starting SSM session")
+                session.sendline("whoami")
+                session.expect("ssm-user")
+        """
+        child: pexpect.spawn | None = None
+        try:
+            child = pexpect.spawn(
+                command,
+                cwd=str(self.project_dir),
+                timeout=timeout,
+                encoding=encoding,
+            )
+            yield child
+        finally:
+            # Ensure the child process is terminated
+            if child is not None and child.isalive():
+                child.terminate(force=True)
+
+    def parse_log_entries_from_output(self, output: str, line_start_pattern: str = "[") -> list[str]:
+        """Return List of log entry lines from jd server logs using a specific line-start pattern.
+
+        The CLI formats logs output with separator lines (e.g., "─── stderr ───").
+        This method extracts the actual log entry lines between these separators.
+
+        Args:
+            output: The stdout from a logs command (e.g., "jupyter-deploy server logs")
+            line_start_pattern: Pattern that log entry lines start with (default: "[")
+                               Only lines starting with this pattern are counted as log entries.
+
+        Example:
+            result = cli.run_command(["jupyter-deploy", "server", "logs", "--", "--tail", "5"])
+            log_entries = cli.parse_log_entries_from_output(result.stdout)
+            assert len(log_entries) == 5
+        """
+        lines = output.splitlines()
+        in_log_section = False
+        log_entries: list[str] = []
+
+        for line in lines:
+            # Check if this is a separator line (contains only dashes, spaces, and optionally "stderr"/"stdout")
+            is_separator = line.strip() and all(c in "─ sterdiou" for c in line)
+
+            if is_separator and ("stderr" in line or "stdout" in line):
+                # Start of a log section
+                in_log_section = True
+                continue
+            elif is_separator and in_log_section:
+                # End of log section (bottom separator)
+                break
+            elif in_log_section and line.strip():
+                # Count lines that start with the specified pattern
+                # These are actual log entries (some may be wrapped across multiple lines)
+                if line.strip().startswith(line_start_pattern):
+                    log_entries.append(line)
+
+        return log_entries

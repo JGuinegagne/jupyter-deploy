@@ -3,7 +3,6 @@ set -e
 
 exec > >(tee -a /var/log/jupyter-deploy/check-status.log) 2>&1
 
-# Required containers that must be running
 REQUIRED_CONTAINERS=("jupyter" "traefik" "oauth")
 ACME_FILE="/opt/docker/acme.json"
 STARTED_FLAG="/opt/docker/started.txt"
@@ -22,6 +21,7 @@ check_started_flag() {
 
 check_docker_running() {
   if ! docker info >/dev/null 2>&1; then
+    log_message "Docker daemon is not running"
     return 1
   fi
   return 0
@@ -58,13 +58,13 @@ check_containers() {
       return 3
     fi
 
-    # If the container has a health check but isn't healthy yet, mark it as initializing until the health check passes.
+    # If the container has a health check but isn't healthy yet
+    # mark as initializing until the health check passes.
     if echo "$container_status" | grep -q "(health" && ! echo "$container_status" | grep -q "(healthy)"; then
       log_message "Starting: container $container is in transition health state"
       return 1  # Return 1 for starting state
     fi
-
-    # if we get here, this container is OK
+    # container is OK
   done
 
   return 0
@@ -75,17 +75,14 @@ check_certs() {
     log_message "Initializing: ACME file does not exist: $ACME_FILE"
     return 1
   fi
-  
   if [ ! -s "$ACME_FILE" ] || [ "$(stat -c%s "$ACME_FILE")" -lt 500 ]; then
     log_message "Initializing: ACME file exists but either empty or too small to contain certs"
     return 1
   fi
-  
-  # Parse the certs file, check that it has at least one cert
+  # check certs file has at least one cert
   if jq -e '.letsencrypt.Certificates | length > 0' "$ACME_FILE" >/dev/null 2>&1; then
     return 0
   fi
-  
   log_message "Initializing: ACME file does not have certificates yet"
   return 1
 }
@@ -100,15 +97,14 @@ main() {
   if ! check_docker_running; then
     exit 20 # STOPPED
   fi
-  
+
   check_containers
   container_status=$?
-  
+
   check_certs
   cert_status=$?
   set -e
-  
-  # Determine overall status
+
   if [ "$container_status" -eq 2 ]; then
     exit 20 # STOPPED
   elif [ "$cert_status" -eq 1 ]; then
@@ -117,7 +113,7 @@ main() {
     log_message "In-service: containers are running and TLS certificates are available"
     exit 0 # IN_SERVICE
   else
-    echo 40 # OUT_OF_SERVICE
+    exit 40 # OUT_OF_SERVICE
   fi
 }
 

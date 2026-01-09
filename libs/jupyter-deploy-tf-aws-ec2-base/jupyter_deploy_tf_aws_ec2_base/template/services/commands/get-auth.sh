@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Script to read the file containing the list of authorized GitHub entities (users, teams, orgs)
+# Script to read the file containing the authorized GitHub entities (users, teams, orgs)
 # Usage:
 #   sudo sh get-auth.sh [users|teams|org]
 

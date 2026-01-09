@@ -5,6 +5,10 @@ default:
 # Detect container tool (finch or docker)
 container-tool := `command -v finch >/dev/null 2>&1 && echo "finch" || echo "docker"`
 
+# Host user UID/GID for running containers with correct permissions
+export HOST_UID := `id -u`
+export HOST_GID := `id -g`
+
 # E2E image configuration
 e2e-compose-file := "libs/jupyter-deploy-tf-aws-ec2-base/tests/e2e/image/docker-compose.yml"
 e2e-image-name := "jupyter-deploy-e2e-aws-ec2-base"
@@ -13,13 +17,11 @@ e2e-image-tag := "latest"
 # Build E2E test image (optional - docker compose will build automatically on first up)
 e2e-build:
     @echo "Building E2E test image with {{container-tool}}..."
-    @mkdir -p {{justfile_directory()}}/sandbox-e2e
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} build --no-cache
 
 # Start E2E container in background (builds image if needed)
 e2e-up:
     @echo "Starting E2E container (will build image if needed)..."
-    @mkdir -p {{justfile_directory()}}/sandbox-e2e
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} up -d e2e
     @echo "E2E container started. Syncing latest code..."
     @just e2e-sync
@@ -65,6 +67,7 @@ e2e-sync:
         --exclude='.ruff_cache' \
         --exclude='.mypy_cache' \
         --exclude='sandbox*' \
+        --exclude='.auth' \
         -cf - . | \
     {{container-tool}} exec -i jupyter-deploy-e2e-aws-ec2-base tar -xf - -C /workspace
 
@@ -77,10 +80,15 @@ e2e-sync:
     echo "✓ E2E container synced successfully"
 
 # Run E2E tests in containerized environment
-# Usage: just test-e2e <project-dir> [test-filter]
-# Example: just test-e2e sandbox3
-# Example: just test-e2e sandbox3 test_application
-test-e2e project_dir test_filter="":
+# Usage: just test-e2e [project-dir] [test-filter] [options]
+# Options: comma-separated key=value pairs (e.g., mutate=true,destroy=true)
+# Example: just test-e2e                                      # deploy sandbox-e2e from scratch (includes mutating tests)
+# Example: just test-e2e sandbox-e2e                          # deploy sandbox-e2e from scratch (explicit)
+# Example: just test-e2e sandbox2                             # test existing project (skips mutating tests)
+# Example: just test-e2e sandbox2 test_users                  # test specific test on existing project
+# Example: just test-e2e sandbox2 test_config_changes mutate=true   # test existing project with mutating tests
+# Example: just test-e2e sandbox-e2e "" mutate=true,destroy=true    # deploy from scratch and destroy after tests
+test-e2e project_dir="sandbox-e2e" test_filter="" options="":
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -95,33 +103,53 @@ test-e2e project_dir test_filter="":
     # Ensure cleanup on exit
     trap cleanup EXIT
 
-    # Validate project directory exists
-    if [ ! -d "{{project_dir}}" ]; then
-        echo "Error: Project directory '{{project_dir}}' does not exist"
-        exit 1
+    # Determine if this is a deployment from scratch
+    IS_DEPLOYMENT_FROM_SCRATCH="false"
+    if [ "{{project_dir}}" = "sandbox-e2e" ]; then
+        # Check if sandbox-e2e exists and is not empty
+        if [ -d "{{project_dir}}" ] && [ -n "$(ls -A {{project_dir}} 2>/dev/null)" ]; then
+            # sandbox-e2e exists and is not empty - treat as existing project
+            IS_DEPLOYMENT_FROM_SCRATCH="false"
+            echo "Mode: Test existing project ({{project_dir}})"
+        else
+            # sandbox-e2e is empty or doesn't exist - deploy from scratch
+            IS_DEPLOYMENT_FROM_SCRATCH="true"
+            # Create empty directory for mounting (will be populated by tests)
+            mkdir -p "{{project_dir}}"
+            echo "Mode: Deploy from scratch ({{project_dir}})"
+        fi
+    else
+        # Validate existing project directory exists
+        if [ ! -d "{{project_dir}}" ]; then
+            echo "Error: Project directory '{{project_dir}}' does not exist"
+            exit 1
+        fi
+        echo "Mode: Test existing project ({{project_dir}})"
     fi
 
-    # Mount project directory if it's not sandbox-e2e (which is already mounted)
-    if [ "{{project_dir}}" != "sandbox-e2e" ]; then
-        echo "Mounting project directory: {{project_dir}}"
+    # Always mount project directory dynamically
+    echo "Mounting project directory: {{project_dir}}"
 
-        # Create temporary override file to mount the project directory
-        OVERRIDE_FILE="{{justfile_directory()}}/docker-compose.e2e-override.yml"
-        cat > "$OVERRIDE_FILE" <<EOF
+    # Create test-results directory if it doesn't exist (for screenshots)
+    mkdir -p "{{justfile_directory()}}/test-results"
+
+    # Create temporary override file to mount the project directory and test-results
+    OVERRIDE_FILE="{{justfile_directory()}}/docker-compose.e2e-override.yml"
+    cat > "$OVERRIDE_FILE" <<EOF
     services:
       e2e:
         volumes:
           - ./{{project_dir}}:/workspace/{{project_dir}}
+          - ./test-results:/workspace/test-results
     EOF
 
-        # Restart container with new mount
-        echo "Restarting E2E container with project mount..."
-        {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} -f "$OVERRIDE_FILE" up -d
+    # Restart container with new mount
+    echo "Restarting E2E container with project mount..."
+    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} -f "$OVERRIDE_FILE" up -d
 
-        # Re-sync files after restart (container loses synced files when restarted)
-        echo "Re-syncing project files after mount..."
-        just e2e-sync
-    fi
+    # Re-sync files after restart (container loses synced files when restarted)
+    echo "Re-syncing project files after mount..."
+    just e2e-sync
 
     # Check if container is running
     if ! ({{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} ps e2e) | grep -qE "(Up|running)"; then
@@ -130,12 +158,69 @@ test-e2e project_dir test_filter="":
         exit 1
     fi
 
-    # Build the pytest command
-    PYTEST_ARGS="-m e2e --e2e-existing-project={{project_dir}}"
+    # Build the pytest command based on deployment mode
+    if [ "$IS_DEPLOYMENT_FROM_SCRATCH" = "true" ]; then
+        # Deploy from scratch - don't pass --e2e-existing-project (uses default config "base")
+        PYTEST_ARGS="-m e2e --e2e-tests-dir=libs/jupyter-deploy-tf-aws-ec2-base/tests/e2e"
+    else
+        # Use existing project
+        PYTEST_ARGS="-m e2e --e2e-tests-dir=libs/jupyter-deploy-tf-aws-ec2-base/tests/e2e --e2e-existing-project={{project_dir}}"
+    fi
 
     # Add test filter if provided
     if [ -n "{{test_filter}}" ]; then
         PYTEST_ARGS="$PYTEST_ARGS -k {{test_filter}}"
+    fi
+
+    # Parse options (comma-separated key=value pairs)
+    OPTIONS_STR="{{options}}"
+    if [ -n "$OPTIONS_STR" ]; then
+        echo "Options: $OPTIONS_STR"
+
+        # List of recognized options (for validation)
+        RECOGNIZED_OPTIONS="mutate destroy"
+
+        # Validate all options are recognized
+        IFS=',' read -ra OPTS <<< "$OPTIONS_STR"
+        for opt in "${OPTS[@]}"; do
+            # Extract key from key=value
+            opt_key=$(echo "$opt" | cut -d'=' -f1)
+            if ! echo "$RECOGNIZED_OPTIONS" | grep -qw "$opt_key"; then
+                echo "Error: Unrecognized option '$opt_key'"
+                echo "Recognized options: $RECOGNIZED_OPTIONS"
+                exit 1
+            fi
+        done
+
+        # Check if destroy=true is used with existing project
+        if echo "$OPTIONS_STR" | grep -q "destroy=true"; then
+            if [ "$IS_DEPLOYMENT_FROM_SCRATCH" = "false" ]; then
+                echo "Error: destroy=true cannot be used when testing against an existing project"
+                echo "The destroy option only applies to deployments from scratch (e.g., sandbox-e2e)"
+                echo ""
+                echo "To destroy an existing project, manually run:"
+                echo "  cd {{project_dir}} && jd down -y"
+                exit 1
+            fi
+        fi
+
+        # Parse mutate=true option
+        if echo "$OPTIONS_STR" | grep -q "mutate=true"; then
+            PYTEST_ARGS="$PYTEST_ARGS --with-mutating-cases"
+            echo "  - mutating tests: enabled"
+        fi
+
+        # Parse destroy=true option
+        if echo "$OPTIONS_STR" | grep -q "destroy=true"; then
+            PYTEST_ARGS="$PYTEST_ARGS --destroy-after"
+            echo "  - destroy after tests: enabled"
+        fi
+
+        # Future options can be added here:
+        # if echo "$OPTIONS_STR" | grep -q "stream-logs=true"; then
+        #     RECOGNIZED_OPTIONS="$RECOGNIZED_OPTIONS stream-logs"
+        #     # handle stream-logs option
+        # fi
     fi
 
     # Add common pytest options
@@ -145,7 +230,7 @@ test-e2e project_dir test_filter="":
     echo "Test filter: {{test_filter}}"
     echo "================================================"
 
-    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} exec e2e bash -c "cd /workspace && uv run pytest $PYTEST_ARGS"
+    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} exec -e XAUTHORITY=/home/testuser/.Xauthority e2e bash -c "cd /workspace && uv run pytest $PYTEST_ARGS"
 
 # Setup GitHub OAuth authentication (one-time, requires X11 forwarding)
 # Usage: just auth-setup <project-dir> [display]
@@ -177,27 +262,29 @@ auth-setup project_dir display="${DISPLAY:-}":
         exit 1
     fi
 
-    # Mount project directory if it's not sandbox-e2e (which is already mounted)
-    if [ "{{project_dir}}" != "sandbox-e2e" ]; then
-        echo "Mounting project directory: {{project_dir}}"
+    # Always mount project directory dynamically
+    echo "Mounting project directory: {{project_dir}}"
 
-        # Create temporary override file to mount the project directory
-        OVERRIDE_FILE="{{justfile_directory()}}/docker-compose.e2e-override.yml"
-        cat > "$OVERRIDE_FILE" <<EOF
+    # Create test-results directory if it doesn't exist (for screenshots)
+    mkdir -p "{{justfile_directory()}}/test-results"
+
+    # Create temporary override file to mount the project directory and test-results
+    OVERRIDE_FILE="{{justfile_directory()}}/docker-compose.e2e-override.yml"
+    cat > "$OVERRIDE_FILE" <<EOF
     services:
       e2e:
         volumes:
           - ./{{project_dir}}:/workspace/{{project_dir}}
+          - ./test-results:/workspace/test-results
     EOF
 
-        # Restart container with new mount
-        echo "Restarting E2E container with project mount..."
-        {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} -f "$OVERRIDE_FILE" up -d
+    # Restart container with new mount
+    echo "Restarting E2E container with project mount..."
+    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} -f "$OVERRIDE_FILE" up -d
 
-        # Re-sync files after restart (container loses synced files when restarted)
-        echo "Re-syncing project files after mount..."
-        just e2e-sync
-    fi
+    # Re-sync files after restart (container loses synced files when restarted)
+    echo "Re-syncing project files after mount..."
+    just e2e-sync
 
     # Check if DISPLAY is set
     if [ -z "{{display}}" ]; then
@@ -240,8 +327,8 @@ auth-setup project_dir display="${DISPLAY:-}":
     xauth list | grep -q "127.0.0.1:$DISPLAY_NUM" || xauth add 127.0.0.1:$DISPLAY_NUM MIT-MAGIC-COOKIE-1 $COOKIE 2>/dev/null || true
 
     # Copy the host's .Xauthority file to container (preserves all cookie formats)
-    {{container-tool}} cp ~/.Xauthority jupyter-deploy-e2e-aws-ec2-base:/root/.Xauthority
-    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} exec e2e chmod 600 /root/.Xauthority
+    {{container-tool}} cp ~/.Xauthority jupyter-deploy-e2e-aws-ec2-base:/home/testuser/.Xauthority
+    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} exec e2e chmod 600 /home/testuser/.Xauthority
 
     echo "✓ X11 authentication cookies copied to container"
 
@@ -252,7 +339,7 @@ auth-setup project_dir display="${DISPLAY:-}":
         echo \"Container hostname: \$(hostname -f)\" && \
         echo \"\" && \
         echo \"Xauthority file:\" && \
-        ls -lh /root/.Xauthority 2>&1 || echo 'No .Xauthority' && \
+        ls -lh /home/testuser/.Xauthority 2>&1 || echo 'No .Xauthority' && \
         echo \"\" && \
         echo \"X11 cookies installed:\" && \
         xauth list 2>&1 || echo 'No xauth cookies' \
@@ -267,8 +354,9 @@ auth-setup project_dir display="${DISPLAY:-}":
         just e2e-sync
     fi
 
-    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} exec -e DISPLAY={{display}} e2e bash -c "\
+    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} exec -e DISPLAY={{display}} -e XAUTHORITY=/home/testuser/.Xauthority e2e bash -c "\
         export DISPLAY={{display}} && \
+        export XAUTHORITY=/home/testuser/.Xauthority && \
         cd /workspace && \
         uv run python scripts/github_auth_setup.py --project-dir={{project_dir}} \
     "
@@ -280,9 +368,9 @@ clean-e2e:
     {{container-tool}} rmi {{e2e-image-name}}:{{e2e-image-tag}} || true
 
 # Full workflow: start container (builds if needed) and run tests
-# Usage: just e2e-all <project-dir> [test-filter]
-e2e-all project_dir test_filter="":
+# Usage: just e2e-all <project-dir> [test-filter] [options]
+e2e-all project_dir test_filter="" options="":
     @echo "Starting E2E container (will build image if needed)..."
     @just e2e-up
     @echo ""
-    @just test-e2e {{project_dir}} {{test_filter}}
+    @just test-e2e {{project_dir}} {{test_filter}} {{options}}
