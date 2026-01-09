@@ -2,6 +2,7 @@
 
 import contextlib
 import os
+import time
 from pathlib import Path
 
 from playwright.sync_api import Page, expect
@@ -26,6 +27,52 @@ class GitHubOAuth2ProxyApplication:
         self.storage_state_path = storage_state_path
         self.is_ci = is_ci
 
+    def _navigate_with_retry(
+        self, url: str, timeout: int = 60000, wait_until: str = "load", max_retries: int = 3
+    ) -> None:
+        """Navigate to URL with retry logic for DNS propagation delays.
+
+        This method wraps page.goto() with retry logic to handle DNS propagation
+        delays that can occur after Route53 records are created or updated.
+
+        Args:
+            url: The URL to navigate to
+            timeout: Navigation timeout in milliseconds (default: 60000)
+            wait_until: When to consider navigation successful (default: "load")
+            max_retries: Maximum number of retry attempts (default: 3)
+
+        Raises:
+            Exception: If navigation fails after max_retries
+        """
+        for attempt in range(max_retries):
+            try:
+                self.page.goto(url, timeout=timeout, wait_until=wait_until)  # type: ignore[arg-type]
+                return  # Success - navigation completed
+            except Exception as e:
+                error_msg = str(e).lower()
+                # Check for DNS/connection errors that indicate DNS propagation issues
+                is_dns_error = any(
+                    err in error_msg
+                    for err in [
+                        "net::err_name_not_resolved",
+                        "ns_error_unknown_host",
+                        "getaddrinfo eai_noname",
+                        "net::err_connection_refused",
+                        "ns_error_connection_refused",
+                        "err_connection_refused",
+                        "connection refused",
+                        "timeout",
+                    ]
+                )
+
+                if is_dns_error and attempt < max_retries - 1:
+                    # Wait with exponential backoff: 2s, 4s, 8s, 16s (max: 30s total)
+                    delay = min(2 ** (attempt + 1), 30)
+                    time.sleep(delay)
+                else:
+                    # Max retries exceeded or non-DNS error - raise original exception
+                    raise
+
     def login_with_auth_session(self) -> None:
         """Login using saved authentication session from storage state.
 
@@ -42,7 +89,7 @@ class GitHubOAuth2ProxyApplication:
         """
         # Navigate to the JupyterLab URL
         # Storage state should be loaded by browser context at this point
-        self.page.goto(self.jupyterlab_url, timeout=60000)
+        self._navigate_with_retry(self.jupyterlab_url, timeout=60000)
 
         # Check if we see the OAuth2 Proxy sign-in page
         sign_in_button = self.page.get_by_role("button", name="Sign in with GitHub")
@@ -184,7 +231,7 @@ class GitHubOAuth2ProxyApplication:
 
         # Navigate to the JupyterLab URL
         # Storage state should be loaded by browser context at this point
-        self.page.goto(self.jupyterlab_url, timeout=60000)
+        self._navigate_with_retry(self.jupyterlab_url, timeout=60000)
 
         # Check if we see the OAuth2 Proxy sign-in page
         sign_in_button = self.page.get_by_role("button", name="Sign in with GitHub")
@@ -321,7 +368,7 @@ class GitHubOAuth2ProxyApplication:
             AssertionError: If OAuth2 Proxy sign-in page does not load within timeout
         """
         # Navigate to the JupyterLab URL
-        self.page.goto(self.jupyterlab_url, timeout=60000)
+        self._navigate_with_retry(self.jupyterlab_url, timeout=60000)
 
         # Verify OAuth2 Proxy sign-in button is visible
         sign_in_button = self.page.get_by_role("button", name="Sign in with GitHub")
@@ -387,7 +434,7 @@ class GitHubOAuth2ProxyApplication:
         # Navigate to JupyterLab URL
         print(f"🔗 Navigating to {self.jupyterlab_url}")
         try:
-            self.page.goto(self.jupyterlab_url, timeout=60000)
+            self._navigate_with_retry(self.jupyterlab_url, timeout=60000)
         except Exception as e:
             error_msg = f"Error navigating to {self.jupyterlab_url}: {e}"
             print(error_msg)

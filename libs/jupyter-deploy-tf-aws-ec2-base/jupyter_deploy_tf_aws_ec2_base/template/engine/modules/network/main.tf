@@ -45,7 +45,12 @@ resource "aws_security_group" "ec2_jupyter_server_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = var.combined_tags
+  tags = merge(
+    var.combined_tags,
+    {
+      Name = "jupyter-sg-${var.postfix}"
+    }
+  )
 }
 
 # Allocate an Elastic IP address
@@ -97,5 +102,10 @@ resource "aws_security_group" "efs_security_group" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = var.combined_tags
+  tags = merge(
+    var.combined_tags,
+    {
+      Name = "jupyter-efs-sg-${var.postfix}"
+    }
+  )
 }

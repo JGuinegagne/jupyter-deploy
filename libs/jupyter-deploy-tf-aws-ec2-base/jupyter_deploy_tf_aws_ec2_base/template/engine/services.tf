@@ -346,8 +346,8 @@ resource "aws_ssm_document" "instance_startup" {
       error_message = "One or more required files are empty"
     }
     precondition {
-      condition     = length(local.ssm_startup_content) < 64000 # leaving some buffer
-      error_message = "SSM document content exceeds size limit of 64KB"
+      condition     = length(local.ssm_startup_content) < 65400 # AWS limit is 65536 bytes, leaving small buffer
+      error_message = "SSM document content exceeds size limit of 64KB (current: ${length(local.ssm_startup_content)} bytes, max: 65400)"
     }
     precondition {
       condition     = local.ssm_content_valid
