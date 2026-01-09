@@ -17,3 +17,7 @@ E2E_UPGRADE_INSTANCE_LOG_FILE = "e2e-upgrade-instance.log"
 
 # Configuration
 CONFIGURATION_DEFAULT_NAME = "base"
+
+# Timeouts (in seconds)
+DEPLOY_TIMEOUT_SECONDS = 1800  # 30 minutes
+DESTROY_TIMEOUT_SECONDS = 600  # 10 minutes

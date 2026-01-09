@@ -81,12 +81,13 @@ e2e-sync:
 
 # Run E2E tests in containerized environment
 # Usage: just test-e2e [project-dir] [test-filter] [options]
-# Options: comma-separated key=value pairs (e.g., mutate=true,stream-logs=true)
+# Options: comma-separated key=value pairs (e.g., mutate=true,destroy=true)
 # Example: just test-e2e                                      # deploy sandbox-e2e from scratch (includes mutating tests)
 # Example: just test-e2e sandbox-e2e                          # deploy sandbox-e2e from scratch (explicit)
 # Example: just test-e2e sandbox2                             # test existing project (skips mutating tests)
 # Example: just test-e2e sandbox2 test_users                  # test specific test on existing project
 # Example: just test-e2e sandbox2 test_config_changes mutate=true   # test existing project with mutating tests
+# Example: just test-e2e sandbox-e2e "" mutate=true,destroy=true    # deploy from scratch and destroy after tests
 test-e2e project_dir="sandbox-e2e" test_filter="" options="":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -177,7 +178,7 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="":
         echo "Options: $OPTIONS_STR"
 
         # List of recognized options (for validation)
-        RECOGNIZED_OPTIONS="mutate"
+        RECOGNIZED_OPTIONS="mutate destroy"
 
         # Validate all options are recognized
         IFS=',' read -ra OPTS <<< "$OPTIONS_STR"
@@ -191,10 +192,28 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="":
             fi
         done
 
+        # Check if destroy=true is used with existing project
+        if echo "$OPTIONS_STR" | grep -q "destroy=true"; then
+            if [ "$IS_DEPLOYMENT_FROM_SCRATCH" = "false" ]; then
+                echo "Error: destroy=true cannot be used when testing against an existing project"
+                echo "The destroy option only applies to deployments from scratch (e.g., sandbox-e2e)"
+                echo ""
+                echo "To destroy an existing project, manually run:"
+                echo "  cd {{project_dir}} && jd down -y"
+                exit 1
+            fi
+        fi
+
         # Parse mutate=true option
         if echo "$OPTIONS_STR" | grep -q "mutate=true"; then
             PYTEST_ARGS="$PYTEST_ARGS --with-mutating-cases"
             echo "  - mutating tests: enabled"
+        fi
+
+        # Parse destroy=true option
+        if echo "$OPTIONS_STR" | grep -q "destroy=true"; then
+            PYTEST_ARGS="$PYTEST_ARGS --destroy-after"
+            echo "  - destroy after tests: enabled"
         fi
 
         # Future options can be added here:

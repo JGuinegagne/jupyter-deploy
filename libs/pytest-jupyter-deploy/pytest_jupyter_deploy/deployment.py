@@ -15,6 +15,8 @@ from jupyter_deploy.variables_config import (
 from pytest_jupyter_deploy.cli import JDCli, JDCliError
 from pytest_jupyter_deploy.constants import (
     CONFIGURATION_DEFAULT_NAME,
+    DEPLOY_TIMEOUT_SECONDS,
+    DESTROY_TIMEOUT_SECONDS,
     E2E_DOWN_LOG_FILE,
     E2E_UP_LOG_FILE,
 )
@@ -28,21 +30,21 @@ class EndToEndDeployment:
         self,
         suite_config: SuiteConfig,
         config_name: str = CONFIGURATION_DEFAULT_NAME,
-        deployment_timeout_seconds: int = 1800,
-        teardown_timeout_seconds: int = 600,
+        deploy_timeout_seconds: int = DEPLOY_TIMEOUT_SECONDS,
+        destroy_timeout_seconds: int = DESTROY_TIMEOUT_SECONDS,
     ) -> None:
         """Initialize the deployment manager.
 
         Args:
             suite_config: Suite configuration
             config_name: Configuration name to use (default: "base")
-            deployment_timeout_seconds: Timeout in seconds for deployment (default: 1800)
-            teardown_timeout_seconds: Timeout in seconds for teardown (default: 600)
+            deploy_timeout_seconds: Timeout in seconds for deployment (default: 1800)
+            destroy_timeout_seconds: Timeout in seconds for destroy (default: 600)
         """
         self.suite_config = suite_config
         self.config_name = config_name
-        self.deployment_timeout_seconds = deployment_timeout_seconds
-        self.teardown_timeout_seconds = teardown_timeout_seconds
+        self.deploy_timeout_seconds = deploy_timeout_seconds
+        self.destroy_timeout_seconds = destroy_timeout_seconds
         self._cli: JDCli | None = None
         self._is_deployed = False
         self._owns_project_resources = False
@@ -226,7 +228,7 @@ class EndToEndDeployment:
         self.cli.run_command(["jupyter-deploy", "config", "-s"])
 
         # Run deployment and capture output
-        result = self.cli.run_command(["jupyter-deploy", "up", "-y"])
+        result = self.cli.run_command(["jupyter-deploy", "up", "-y"], timeout_seconds=self.deploy_timeout_seconds)
 
         # Save deployment output to log file
         log_file = self.suite_config.project_dir / E2E_UP_LOG_FILE
@@ -245,7 +247,9 @@ class EndToEndDeployment:
 
         try:
             # Run teardown and capture output
-            result = self.cli.run_command(["jupyter-deploy", "down", "-y"])
+            result = self.cli.run_command(
+                ["jupyter-deploy", "down", "-y"], timeout_seconds=self.destroy_timeout_seconds
+            )
 
             # Save teardown output to log file
             log_file = self.suite_config.project_dir / E2E_DOWN_LOG_FILE
