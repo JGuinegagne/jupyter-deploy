@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import Mock, patch
 
+import typer
+
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.handlers.project.show_handler import ShowHandler
 from jupyter_deploy.manifest import JupyterDeployManifestV1
@@ -291,3 +293,491 @@ class TestShowHandler(unittest.TestCase):
             mock_basic.assert_called_once()
             mock_outputs.assert_called_once()
             mock_variables.assert_not_called()
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_single_variable_success(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        mock_var = Mock()
+        mock_var.sensitive = False
+        mock_var.assigned_value = "test_value"
+        mock_vars = {"test_var": mock_var}
+
+        with (
+            patch.object(handler._variables_handler, "get_template_variables", return_value=mock_vars),
+            patch.object(handler._variables_handler, "sync_engine_varfiles_with_project_variables_config"),
+        ):
+            handler.show_single_variable("test_var")
+
+        mock_console_fns["print"].assert_called_once_with("[bold cyan]test_value[/]")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_single_variable_sensitive(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        mock_var = Mock()
+        mock_var.sensitive = True
+        mock_var.assigned_value = "secret_value"
+        mock_vars = {"secret_var": mock_var}
+
+        with (
+            patch.object(handler._variables_handler, "get_template_variables", return_value=mock_vars),
+            patch.object(handler._variables_handler, "sync_engine_varfiles_with_project_variables_config"),
+        ):
+            handler.show_single_variable("secret_var")
+
+        mock_console_fns["print"].assert_called_once_with("[bold cyan]****[/]")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_single_variable_not_found(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        mock_vars = {"other_var": Mock()}
+
+        with (
+            patch.object(handler._variables_handler, "get_template_variables", return_value=mock_vars),
+            patch.object(handler._variables_handler, "sync_engine_varfiles_with_project_variables_config"),
+            self.assertRaises(typer.Exit),
+        ):
+            handler.show_single_variable("nonexistent_var")
+
+        # Verify error message contains key components
+        call_args = mock_console_fns["print"].call_args
+        error_message = call_args[0][0]
+        self.assertIn(":x:", error_message)
+        self.assertIn("nonexistent_var", error_message)
+        self.assertEqual(call_args[1]["style"], "red")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_single_variable_description(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        mock_var = Mock()
+        mock_var.get_cli_description = Mock(return_value="The instance type for the deployment")
+        mock_vars = {"instance_type": mock_var}
+
+        with (
+            patch.object(handler._variables_handler, "get_template_variables", return_value=mock_vars),
+            patch.object(handler._variables_handler, "sync_engine_varfiles_with_project_variables_config"),
+        ):
+            handler.show_single_variable("instance_type", show_description=True)
+
+        mock_console_fns["print"].assert_called_once_with("[bold cyan]The instance type for the deployment[/]")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_single_variable_exception(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        with (
+            patch.object(
+                handler._variables_handler,
+                "sync_engine_varfiles_with_project_variables_config",
+                side_effect=Exception("Test error"),
+            ),
+            self.assertRaises(typer.Exit),
+        ):
+            handler.show_single_variable("test_var")
+
+        # Verify error message contains key components
+        call_args = mock_console_fns["print"].call_args
+        error_message = call_args[0][0]
+        self.assertIn(":x:", error_message)
+        self.assertIn("test_var", error_message)
+        self.assertIn("Test error", error_message)
+        self.assertEqual(call_args[1]["style"], "red")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_single_output_success(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        mock_output = Mock()
+        mock_output.value = "https://example.com"
+        mock_outputs = {"jupyter_url": mock_output}
+
+        with patch.object(handler._outputs_handler, "get_full_project_outputs", return_value=mock_outputs):
+            handler.show_single_output("jupyter_url")
+
+        mock_console_fns["print"].assert_called_once_with("[bold cyan]https://example.com[/]")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_single_output_description(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        mock_output = Mock()
+        mock_output.description = "URL for accessing Jupyter server"
+        mock_outputs = {"jupyter_url": mock_output}
+
+        with patch.object(handler._outputs_handler, "get_full_project_outputs", return_value=mock_outputs):
+            handler.show_single_output("jupyter_url", show_description=True)
+
+        mock_console_fns["print"].assert_called_once_with("[bold cyan]URL for accessing Jupyter server[/]")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_single_output_not_found(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        mock_outputs = {"other_output": Mock()}
+
+        with (
+            patch.object(handler._outputs_handler, "get_full_project_outputs", return_value=mock_outputs),
+            self.assertRaises(typer.Exit),
+        ):
+            handler.show_single_output("nonexistent_output")
+
+        # Verify error message contains key components
+        call_args = mock_console_fns["print"].call_args
+        error_message = call_args[0][0]
+        self.assertIn(":x:", error_message)
+        self.assertIn("nonexistent_output", error_message)
+        self.assertEqual(call_args[1]["style"], "red")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_single_output_no_outputs(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        with (
+            patch.object(handler._outputs_handler, "get_full_project_outputs", return_value={}),
+            self.assertRaises(typer.Exit),
+        ):
+            handler.show_single_output("test_output")
+
+        # Verify two warning messages were printed with yellow style
+        self.assertEqual(mock_console_fns["print"].call_count, 2)
+
+        # Check first message contains warning and mentions no outputs
+        first_call = mock_console_fns["print"].call_args_list[0]
+        self.assertIn(":warning:", first_call[0][0])
+        self.assertEqual(first_call[1]["style"], "yellow")
+
+        # Check second message mentions deployment
+        second_call = mock_console_fns["print"].call_args_list[1]
+        self.assertIn("deployed", second_call[0][0].lower())
+        self.assertEqual(second_call[1]["style"], "yellow")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_single_output_exception(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        with (
+            patch.object(handler._outputs_handler, "get_full_project_outputs", side_effect=Exception("Test error")),
+            self.assertRaises(typer.Exit),
+        ):
+            handler.show_single_output("test_output")
+
+        # Verify error message contains key components
+        call_args = mock_console_fns["print"].call_args
+        error_message = call_args[0][0]
+        self.assertIn(":x:", error_message)
+        self.assertIn("test_output", error_message)
+        self.assertIn("Test error", error_message)
+        self.assertEqual(call_args[1]["style"], "red")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_single_variable_text_mode(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        mock_var = Mock()
+        mock_var.sensitive = False
+        mock_var.assigned_value = "test_value"
+        mock_vars = {"test_var": mock_var}
+
+        with (
+            patch.object(handler._variables_handler, "get_template_variables", return_value=mock_vars),
+            patch.object(handler._variables_handler, "sync_engine_varfiles_with_project_variables_config"),
+        ):
+            handler.show_single_variable("test_var", plain_text=True)
+
+        mock_console_fns["print"].assert_called_once_with("test_value")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_single_variable_description_text_mode(
+        self, mock_console_cls: Mock, mock_retrieve_manifest: Mock
+    ) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        mock_var = Mock()
+        mock_var.get_cli_description = Mock(return_value="The instance type for the deployment")
+        mock_vars = {"instance_type": mock_var}
+
+        with (
+            patch.object(handler._variables_handler, "get_template_variables", return_value=mock_vars),
+            patch.object(handler._variables_handler, "sync_engine_varfiles_with_project_variables_config"),
+        ):
+            handler.show_single_variable("instance_type", show_description=True, plain_text=True)
+
+        mock_console_fns["print"].assert_called_once_with("The instance type for the deployment")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_single_output_text_mode(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        mock_output = Mock()
+        mock_output.value = "https://example.com"
+        mock_outputs = {"jupyter_url": mock_output}
+
+        with patch.object(handler._outputs_handler, "get_full_project_outputs", return_value=mock_outputs):
+            handler.show_single_output("jupyter_url", plain_text=True)
+
+        mock_console_fns["print"].assert_called_once_with("https://example.com")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_single_output_description_text_mode(
+        self, mock_console_cls: Mock, mock_retrieve_manifest: Mock
+    ) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        mock_output = Mock()
+        mock_output.description = "URL for accessing Jupyter server"
+        mock_outputs = {"jupyter_url": mock_output}
+
+        with patch.object(handler._outputs_handler, "get_full_project_outputs", return_value=mock_outputs):
+            handler.show_single_output("jupyter_url", show_description=True, plain_text=True)
+
+        mock_console_fns["print"].assert_called_once_with("URL for accessing Jupyter server")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_template_name(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_manifest = self.get_mock_manifest()
+        mock_manifest.template.name = "base"
+        mock_retrieve_manifest.return_value = mock_manifest
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        handler.show_template_name()
+
+        mock_console_fns["print"].assert_called_once()
+        call_args = mock_console_fns["print"].call_args[0][0]
+        self.assertIn("base", call_args)
+        self.assertIn("[bold cyan]", call_args)
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_template_name_text_mode(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_manifest = self.get_mock_manifest()
+        mock_manifest.template.name = "base"
+        mock_retrieve_manifest.return_value = mock_manifest
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        handler.show_template_name(plain_text=True)
+
+        mock_console_fns["print"].assert_called_once_with("base")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_template_version(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_manifest = self.get_mock_manifest()
+        mock_manifest.template.version = "0.2.7"
+        mock_retrieve_manifest.return_value = mock_manifest
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        handler.show_template_version()
+
+        mock_console_fns["print"].assert_called_once()
+        call_args = mock_console_fns["print"].call_args[0][0]
+        self.assertIn("0.2.7", call_args)
+        self.assertIn("[bold cyan]", call_args)
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_template_version_text_mode(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_manifest = self.get_mock_manifest()
+        mock_manifest.template.version = "0.2.7"
+        mock_retrieve_manifest.return_value = mock_manifest
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        handler.show_template_version(plain_text=True)
+
+        mock_console_fns["print"].assert_called_once_with("0.2.7")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_template_engine(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_manifest = self.get_mock_manifest()
+        mock_retrieve_manifest.return_value = mock_manifest
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        handler.show_template_engine()
+
+        mock_console_fns["print"].assert_called_once()
+        call_args = mock_console_fns["print"].call_args[0][0]
+        self.assertIn("terraform", call_args)
+        self.assertIn("[bold cyan]", call_args)
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_show_template_engine_text_mode(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_manifest = self.get_mock_manifest()
+        mock_retrieve_manifest.return_value = mock_manifest
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        handler.show_template_engine(plain_text=True)
+
+        mock_console_fns["print"].assert_called_once_with("terraform")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_list_variable_names(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        mock_var1 = Mock()
+        mock_var2 = Mock()
+        mock_var3 = Mock()
+        mock_vars = {"instance_type": mock_var1, "ami_id": mock_var2, "key_name": mock_var3}
+
+        with (
+            patch.object(handler._variables_handler, "get_template_variables", return_value=mock_vars),
+            patch.object(handler._variables_handler, "sync_engine_varfiles_with_project_variables_config"),
+        ):
+            handler.list_variable_names()
+
+        # Should print each name on a separate line with Rich markup
+        self.assertEqual(mock_console_fns["print"].call_count, 3)
+        calls = [call[0][0] for call in mock_console_fns["print"].call_args_list]
+        self.assertIn("[bold cyan]instance_type[/]", calls)
+        self.assertIn("[bold cyan]ami_id[/]", calls)
+        self.assertIn("[bold cyan]key_name[/]", calls)
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_list_variable_names_text_mode(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        mock_var1 = Mock()
+        mock_var2 = Mock()
+        mock_var3 = Mock()
+        mock_vars = {"instance_type": mock_var1, "ami_id": mock_var2, "key_name": mock_var3}
+
+        with (
+            patch.object(handler._variables_handler, "get_template_variables", return_value=mock_vars),
+            patch.object(handler._variables_handler, "sync_engine_varfiles_with_project_variables_config"),
+        ):
+            handler.list_variable_names(plain_text=True)
+
+        # Should print comma-separated without spaces
+        mock_console_fns["print"].assert_called_once()
+        output = mock_console_fns["print"].call_args[0][0]
+        self.assertIn("instance_type", output)
+        self.assertIn("ami_id", output)
+        self.assertIn("key_name", output)
+        # Check it's comma-separated (no space after comma)
+        self.assertIn(",", output)
+        self.assertNotIn(", ", output)
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_list_output_names(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        mock_output1 = Mock()
+        mock_output2 = Mock()
+        mock_outputs = {"jupyter_url": mock_output1, "instance_id": mock_output2}
+
+        with patch.object(handler._outputs_handler, "get_full_project_outputs", return_value=mock_outputs):
+            handler.list_output_names()
+
+        # Should print each name on a separate line with Rich markup
+        self.assertEqual(mock_console_fns["print"].call_count, 2)
+        calls = [call[0][0] for call in mock_console_fns["print"].call_args_list]
+        self.assertIn("[bold cyan]jupyter_url[/]", calls)
+        self.assertIn("[bold cyan]instance_id[/]", calls)
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("rich.console.Console")
+    def test_list_output_names_text_mode(self, mock_console_cls: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_console, mock_console_fns = self.get_mock_console_and_fns()
+        mock_console_cls.return_value = mock_console
+        handler = ShowHandler()
+
+        mock_output1 = Mock()
+        mock_output2 = Mock()
+        mock_outputs = {"jupyter_url": mock_output1, "instance_id": mock_output2}
+
+        with patch.object(handler._outputs_handler, "get_full_project_outputs", return_value=mock_outputs):
+            handler.list_output_names(plain_text=True)
+
+        # Should print comma-separated without spaces
+        mock_console_fns["print"].assert_called_once()
+        output = mock_console_fns["print"].call_args[0][0]
+        self.assertIn("jupyter_url", output)
+        self.assertIn("instance_id", output)
+        # Check it's comma-separated (no space after comma)
+        self.assertIn(",", output)
+        self.assertNotIn(", ", output)

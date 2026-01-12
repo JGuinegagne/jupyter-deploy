@@ -40,3 +40,24 @@ def test_show_does_not_error(e2e_deployment: EndToEndDeployment) -> None:
         # Verify it doesn't error and provides helpful message
         assert result.returncode == 0, f"jd show should not fail, got: {result.stderr}"
         assert "No outputs available." in result.stdout, "Expected 'No outputs available.' message in output"
+
+
+def test_show_variable_instance_type_does_not_error(e2e_deployment: EndToEndDeployment) -> None:
+    """Test that jd show --variable instance_type returns None when project is not deployed.
+
+    This test:
+    1. Creates a temporary project directory
+    2. Runs `jd init` but NOT `jd config` or `jd up`
+    3. Runs `jd show --variable instance_type --text`
+    4. Verifies the output is "None" (since the project isn't configured/deployed yet)
+    """
+    with undeployed_project(e2e_deployment.suite_config) as (project_path, cli):
+        # Run jd show --variable instance_type --text
+        result = cli.run_command(["jupyter-deploy", "show", "--variable", "instance_type", "--text"])
+
+        # Verify command succeeded
+        assert result.returncode == 0, f"jd show --variable should succeed, got: {result.stderr}"
+
+        # Verify the output is "None" for an undeployed project
+        actual_instance_type = result.stdout.strip()
+        assert actual_instance_type == "None", f"Expected 'None' for undeployed project, got '{actual_instance_type}'"

@@ -6,10 +6,14 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from jupyter_deploy import constants as jd_constants
 from jupyter_deploy import fs_utils as jd_fs_utils
+from jupyter_deploy.handlers.base_project_handler import retrieve_project_manifest, retrieve_variables_config
+from jupyter_deploy.manifest import JupyterDeployManifest
 from jupyter_deploy.variables_config import (
     VARIABLES_CONFIG_V1_COMMENTS,
     VARIABLES_CONFIG_V1_KEYS_ORDER,
+    JupyterDeployVariablesConfig,
 )
 
 from pytest_jupyter_deploy.cli import JDCli, JDCliError
@@ -408,7 +412,27 @@ class EndToEndDeployment:
 
     def get_variables_yaml_path(self) -> Path:
         """Get the path to the variables.yaml file."""
-        return self.suite_config.project_dir / "variables.yaml"
+        return self.suite_config.project_dir / jd_constants.VARIABLES_FILENAME
+
+    def get_variables_config(self) -> JupyterDeployVariablesConfig:
+        """Parse and return the variables config.
+
+        Raises:
+            FileNotFoundError: If variables.yaml doesn't exist
+            ValidationError: If variables.yaml is invalid
+        """
+        variables_yaml_path = self.get_variables_yaml_path()
+        return retrieve_variables_config(variables_yaml_path)
+
+    def get_manifest(self) -> JupyterDeployManifest:
+        """Parsed and return the project manifest.
+
+        Raises:
+            FileNotFoundError: If manifest.yaml doesn't exist
+            ValidationError: If manifest.yaml is invalid
+        """
+        manifest_path = self.suite_config.project_dir / jd_constants.MANIFEST_FILENAME
+        return retrieve_project_manifest(manifest_path)
 
     def read_override_value(self, key: str) -> Any:
         """Read a value from the overrides section of variables.yaml.

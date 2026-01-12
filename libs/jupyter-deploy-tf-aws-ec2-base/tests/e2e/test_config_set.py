@@ -1,5 +1,7 @@
 """E2E tests for configuration help and update without deployment."""
 
+import ast
+
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
 from pytest_jupyter_deploy.plugin import skip_if_testvars_not_set
 
@@ -47,9 +49,11 @@ def test_config_set_string_variable(e2e_deployment: EndToEndDeployment) -> None:
         f"Expected jupyter_package_manager to be '{new_value}', but got '{updated_value}'"
     )
 
-    # Also verify it appears in jd show --variables output
-    result = e2e_deployment.cli.run_command(["jupyter-deploy", "show", "--variables"])
-    assert new_value in result.stdout, f"Expected to find '{new_value}' in jd show --variables output"
+    # Also verify it appears in jd show output for the specific variable
+    result = e2e_deployment.cli.run_command(
+        ["jupyter-deploy", "show", "--variable", "jupyter_package_manager", "--text"]
+    )
+    assert new_value in result.stdout, f"Expected to find '{new_value}' in variable value"
 
     # Switch back to the original value via file
     e2e_deployment.update_override_value("jupyter_package_manager", current_value)
@@ -86,10 +90,20 @@ def test_config_set_list_string_variable(e2e_deployment: EndToEndDeployment, log
         ]
     )
 
-    # Step 3: Verify with jd show --variables
-    result = e2e_deployment.cli.run_command(["jupyter-deploy", "show", "--variables"])
-    assert logged_user in result.stdout, f"Expected to find '{logged_user}' in jd show --variables output"
-    assert safe_user in result.stdout, f"Expected to find '{safe_user}' in jd show --variables output"
+    # Step 3: Verify with jd show for the specific variable
+    result = e2e_deployment.cli.run_command(
+        ["jupyter-deploy", "show", "--variable", "oauth_allowed_usernames", "--text"]
+    )
+    # Check command succeeded
+    assert result.returncode == 0, f"Command failed with: {result.stderr or result.stdout}"
+    # Parse the list from the output
+    users_list = ast.literal_eval(result.stdout.strip())
+    assert isinstance(users_list, list), f"Expected list, got {type(users_list)}"
+    assert logged_user in users_list, f"Expected '{logged_user}' in users list"
+    assert safe_user in users_list, f"Expected '{safe_user}' in users list"
+    assert set(users_list) == {logged_user, safe_user}, (
+        f"Expected exactly [{logged_user}, {safe_user}], got {users_list}"
+    )
 
     # Step 4: Use jd config to set only the safe user
     e2e_deployment.cli.run_command(
@@ -102,9 +116,15 @@ def test_config_set_list_string_variable(e2e_deployment: EndToEndDeployment, log
     )
 
     # Step 5: Verify that logged user is removed and only safe user remains
-    result = e2e_deployment.cli.run_command(["jupyter-deploy", "show", "--variables"])
-    assert safe_user in result.stdout, f"Expected to find '{safe_user}' in jd show --variables output"
-    assert logged_user not in result.stdout, f"Expected '{logged_user}' to be removed from jd show --variables output"
+    result = e2e_deployment.cli.run_command(
+        ["jupyter-deploy", "show", "--variable", "oauth_allowed_usernames", "--text"]
+    )
+    # Check command succeeded
+    assert result.returncode == 0, f"Command failed with: {result.stderr or result.stdout}"
+    # Parse the list from the output
+    users_list = ast.literal_eval(result.stdout.strip())
+    assert isinstance(users_list, list), f"Expected list, got {type(users_list)}"
+    assert users_list == [safe_user], f"Expected only [{safe_user}], got {users_list}"
 
     # Step 6: Leave as is (no revert)
 
@@ -117,11 +137,12 @@ def test_config_set_list_of_dict_variable(e2e_deployment: EndToEndDeployment) ->
     current_mounts = e2e_deployment.read_override_value("additional_ebs_mounts") or []
 
     # Set additional EBS mounts with two entries by updating variables.yaml
-    # Entry 1: name=data, mount_point=external/data, size_gb=50
-    # Entry 2: name=work, mount_point=external/work
+    # Entry 1: name=data, mount_point=external-data, size_gb="50"
+    # Entry 2: name=work, mount_point=external-work
+    # Note: All values must be strings since the type is list(map(string))
     new_mounts = [
-        {"name": "data", "mount_point": "external/data", "size_gb": 50},
-        {"name": "work", "mount_point": "external/work"},
+        {"name": "data", "mount_point": "external-data", "size_gb": "50"},
+        {"name": "work", "mount_point": "external-work"},
     ]
     e2e_deployment.update_override_value("additional_ebs_mounts", new_mounts)
 
@@ -134,22 +155,39 @@ def test_config_set_list_of_dict_variable(e2e_deployment: EndToEndDeployment) ->
     # Verify the first mount (data)
     data_mount = next((m for m in updated_mounts if m.get("name") == "data"), None)
     assert data_mount is not None, "Expected to find mount with name 'data'"
-    assert data_mount.get("mount_point") == "external/data", (
-        f"Expected mount_point 'external/data', got '{data_mount.get('mount_point')}'"
+    assert data_mount.get("mount_point") == "external-data", (
+        f"Expected mount_point 'external-data', got '{data_mount.get('mount_point')}'"
     )
-    assert data_mount.get("size_gb") == 50, f"Expected size_gb 50, got {data_mount.get('size_gb')}"
+    assert data_mount.get("size_gb") == "50", f"Expected size_gb '50', got {data_mount.get('size_gb')}"
 
     # Verify the second mount (work)
     work_mount = next((m for m in updated_mounts if m.get("name") == "work"), None)
     assert work_mount is not None, "Expected to find mount with name 'work'"
-    assert work_mount.get("mount_point") == "external/work", (
-        f"Expected mount_point 'external/work', got '{work_mount.get('mount_point')}'"
+    assert work_mount.get("mount_point") == "external-work", (
+        f"Expected mount_point 'external-work', got '{work_mount.get('mount_point')}'"
     )
 
-    # Also verify they appear in jd show --variables output
-    result = e2e_deployment.cli.run_command(["jupyter-deploy", "show", "--variables"])
-    assert "data" in result.stdout, "Expected to find 'data' in jd show --variables output"
-    assert "work" in result.stdout, "Expected to find 'work' in jd show --variables output"
+    # Also verify they appear in jd show output for the specific variable
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "show", "--variable", "additional_ebs_mounts", "--text"])
+
+    # Parse the list of dicts from the output
+    mounts_list = ast.literal_eval(result.stdout.strip())
+    assert isinstance(mounts_list, list), f"Expected list, got {type(mounts_list)}"
+    assert len(mounts_list) == 2, f"Expected 2 mounts, got {len(mounts_list)}"
+
+    # Verify the data mount
+    data_mount = next((m for m in mounts_list if m.get("name") == "data"), None)
+    assert data_mount is not None, "Expected to find mount with name 'data'"
+    assert data_mount == {"name": "data", "mount_point": "external-data", "size_gb": "50"}, (
+        f"Expected data mount to match exactly, got {data_mount}"
+    )
+
+    # Verify the work mount
+    work_mount = next((m for m in mounts_list if m.get("name") == "work"), None)
+    assert work_mount is not None, "Expected to find mount with name 'work'"
+    assert work_mount == {"name": "work", "mount_point": "external-work"}, (
+        f"Expected work mount to match exactly, got {work_mount}"
+    )
 
     # Revert to the original value via the file experience
     e2e_deployment.update_override_value("additional_ebs_mounts", current_mounts)

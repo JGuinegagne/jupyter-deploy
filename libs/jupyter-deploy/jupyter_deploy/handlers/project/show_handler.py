@@ -1,3 +1,4 @@
+import typer
 from rich.table import Table
 
 from jupyter_deploy.engine.engine_outputs import EngineOutputsHandler
@@ -125,3 +126,179 @@ class ShowHandler(BaseProjectHandler):
             variables_table.add_row(variable_name, assigned_value, description)
 
         console.print(variables_table)
+
+    def show_single_variable(
+        self, variable_name: str, show_description: bool = False, plain_text: bool = False
+    ) -> None:
+        """Display the value or description of a single variable.
+
+        Args:
+            variable_name: The name of the variable to display
+            show_description: If True, show description instead of value
+            plain_text: If True, output plain text without Rich markup
+        """
+        console = self.get_console()
+        try:
+            self._variables_handler.sync_engine_varfiles_with_project_variables_config()
+            variables = self._variables_handler.get_template_variables()
+        except Exception as e:
+            console.print(f":x: Could not retrieve variable '{variable_name}': {str(e)}", style="red")
+            raise typer.Exit(code=1) from None
+
+        if variable_name not in variables:
+            console.print(f":x: Variable '{variable_name}' not found.", style="red")
+            raise typer.Exit(code=1)
+
+        variable_def = variables[variable_name]
+
+        if show_description:
+            description = variable_def.get_cli_description()
+            if plain_text:
+                console.print(description)
+            else:
+                console.print(f"[bold cyan]{description}[/]")
+        else:
+            value = (
+                "****"
+                if variable_def.sensitive
+                else str(variable_def.assigned_value)
+                if hasattr(variable_def, "assigned_value")
+                else "None"
+            )
+            if plain_text:
+                console.print(value)
+            else:
+                console.print(f"[bold cyan]{value}[/]")
+
+    def show_single_output(self, output_name: str, show_description: bool = False, plain_text: bool = False) -> None:
+        """Display the value or description of a single output.
+
+        Args:
+            output_name: The name of the output to display
+            show_description: If True, show description instead of value
+            plain_text: If True, output plain text without Rich markup
+        """
+        console = self.get_console()
+        try:
+            outputs = self._outputs_handler.get_full_project_outputs()
+        except Exception as e:
+            console.print(f":x: Could not retrieve output '{output_name}': {str(e)}", style="red")
+            raise typer.Exit(code=1) from None
+
+        if not outputs:
+            console.print(":warning: No outputs available.", style="yellow")
+            console.print("This is normal if the project has not been deployed yet.", style="yellow")
+            raise typer.Exit(code=1)
+
+        if output_name not in outputs:
+            console.print(f":x: Output '{output_name}' not found.", style="red")
+            raise typer.Exit(code=1)
+
+        output_def = outputs[output_name]
+
+        if show_description:
+            description = getattr(output_def, "description", "") or "No description"
+            if plain_text:
+                console.print(description)
+            else:
+                console.print(f"[bold cyan]{description}[/]")
+        else:
+            value = str(output_def.value) if hasattr(output_def, "value") and output_def.value is not None else "None"
+            if plain_text:
+                console.print(value)
+            else:
+                console.print(f"[bold cyan]{value}[/]")
+
+    def list_variable_names(self, plain_text: bool = False) -> None:
+        """List all variable names.
+
+        Args:
+            plain_text: If False, output newline-separated with Rich markup.
+                       If True, output comma-separated without Rich markup.
+        """
+        console = self.get_console()
+        try:
+            self._variables_handler.sync_engine_varfiles_with_project_variables_config()
+            variables = self._variables_handler.get_template_variables()
+        except Exception as e:
+            console.print(f":x: Could not retrieve variables: {str(e)}", style="red")
+            raise typer.Exit(code=1) from None
+
+        if not variables:
+            console.print(":x: No variables available.", style="red")
+            raise typer.Exit(code=1)
+
+        if plain_text:
+            variable_names = ",".join(variables.keys())
+            console.print(variable_names)
+        else:
+            for variable_name in variables:
+                console.print(f"[bold cyan]{variable_name}[/]")
+
+    def list_output_names(self, plain_text: bool = False) -> None:
+        """List all output names.
+
+        Args:
+            plain_text: If False, output newline-separated with Rich markup.
+                       If True, output comma-separated without Rich markup.
+        """
+        console = self.get_console()
+        try:
+            outputs = self._outputs_handler.get_full_project_outputs()
+        except Exception as e:
+            console.print(f":x: Could not retrieve outputs: {str(e)}", style="red")
+            raise typer.Exit(code=1) from None
+
+        if not outputs:
+            console.print(":warning: No outputs available.", style="yellow")
+            console.print("This is normal if the project has not been deployed yet.", style="yellow")
+            raise typer.Exit(code=1)
+
+        if plain_text:
+            output_names = ",".join(outputs.keys())
+            console.print(output_names)
+        else:
+            for output_name in outputs:
+                console.print(f"[bold cyan]{output_name}[/]")
+
+    def show_template_name(self, plain_text: bool = False) -> None:
+        """Display the template name.
+
+        Args:
+            plain_text: If True, output plain text without Rich markup
+        """
+        console = self.get_console()
+        template_name = self.project_manifest.template.name
+
+        if plain_text:
+            console.print(template_name)
+        else:
+            console.print(f"[bold cyan]{template_name}[/]")
+
+    def show_template_version(self, plain_text: bool = False) -> None:
+        """Display the template version.
+
+        Args:
+            plain_text: If True, output plain text without Rich markup
+        """
+        console = self.get_console()
+        template_version = self.project_manifest.template.version
+
+        if plain_text:
+            console.print(template_version)
+        else:
+            console.print(f"[bold cyan]{template_version}[/]")
+
+    def show_template_engine(self, plain_text: bool = False) -> None:
+        """Display the template engine.
+
+        Args:
+            plain_text: If True, output plain text without Rich markup
+        """
+        console = self.get_console()
+        engine = self.engine.value
+
+        if plain_text:
+            console.print(engine)
+        else:
+            console.print(f"[bold cyan]{engine}[/]")
