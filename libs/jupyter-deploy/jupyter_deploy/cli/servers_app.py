@@ -1,6 +1,7 @@
 from typing import Annotated
 
 import typer
+from rich.console import Console
 
 from jupyter_deploy import cmd_utils
 from jupyter_deploy.handlers.resource import server_handler
@@ -185,3 +186,96 @@ def logs(
             console.rule("stderr")
             console.print(err_logs)
             console.rule()
+
+
+@servers_app.command(context_settings={"allow_extra_args": True, "allow_interspersed_args": False})
+def exec(
+    ctx: typer.Context,
+    project_dir: Annotated[
+        str | None,
+        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
+    ] = None,
+    service: Annotated[
+        str, typer.Option("--service", "-s", help="Name of the service in which to execute the command.")
+    ] = "default",
+) -> None:
+    """Execute a non-interactive command inside a service container.
+
+    By default, executes in your main application service. Specify --service to target a specific service.
+
+    Run either from a jupyter-deploy project directory that you created with `jd init`;
+    or pass a --path PATH to such a directory.
+
+    Pass the command after '--', for example:
+
+    jd server exec -s SERVICE -- pwd
+
+    jd server exec -s SERVICE -- "df -h"
+
+    Note: the commands you can execute depend on the service;
+    distroless images in particular expose very limited commands.
+    """
+    # Arguments after -- are in ctx.args
+    command_args = ctx.args
+
+    if not command_args:
+        console = Console()
+        console.print(":x: No command provided. Pass a command after '--'", style="red")
+        console.print("Example: jd server exec -s SERVICE -- pwd", style="red")
+        raise typer.Exit(code=1)
+
+    with cmd_utils.project_dir(project_dir):
+        handler = server_handler.ServerHandler()
+        console = handler.get_console()
+
+        try:
+            stdout, stderr = handler.exec_command(service=service, command_args=command_args)
+        except InvalidServiceError as e:
+            console.print(f":x: {e}", style="red")
+            raise typer.Exit(code=1) from e
+
+        if stdout:
+            console.rule("stdout")
+            console.print(stdout)
+            if not stderr:
+                console.rule()
+
+        if stderr:
+            console.rule("stderr")
+            console.print(stderr)
+            console.rule()
+
+
+@servers_app.command()
+def connect(
+    project_dir: Annotated[
+        str | None,
+        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
+    ] = None,
+    service: Annotated[str, typer.Option("--service", "-s", help="Name of the service to connect to.")] = "default",
+) -> None:
+    """Start an interactive shell session inside a service container.
+
+    By default, connects to your main application service. Specify --service to target a specific service.
+
+    Run either from a jupyter-deploy project directory that you created with `jd init`;
+    or pass a --path PATH to such a directory.
+
+    Example:
+
+    jd server connect
+
+    jd server connect -s SERVICE
+
+    Note: you may not be able to connect to all services;
+    some containers do not have any shell installed.
+    """
+    with cmd_utils.project_dir(project_dir):
+        handler = server_handler.ServerHandler()
+        console = handler.get_console()
+
+        try:
+            handler.connect(service=service)
+        except InvalidServiceError as e:
+            console.print(f":x: {e}", style="red")
+            raise typer.Exit(code=1) from e

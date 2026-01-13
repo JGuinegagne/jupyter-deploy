@@ -91,6 +91,18 @@ output "server_logs_document" {
   value       = aws_ssm_document.server_logs.name
 }
 
+# server.exec CLI handling
+output "server_exec_document" {
+  description = "Name of the SSM document to execute commands inside server containers."
+  value       = aws_ssm_document.server_exec.name
+}
+
+# server.connect CLI handling
+output "server_connect_document" {
+  description = "Name of the SSM document to start interactive shell sessions inside server containers (jupyter or traefik)."
+  value       = aws_ssm_document.server_connect.name
+}
+
 # Resources that should not be destroyed by `jd down`
 output "persisting_resources" {
   description = "List of identifiers of resources that should not be destroyed (have persist=true)."

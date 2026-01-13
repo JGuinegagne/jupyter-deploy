@@ -25,7 +25,7 @@ data "local_file" "update_server" {
 
 # Define SSM documents for all commands
 locals {
-  ssm_status_check  = <<DOC
+  ssm_status_check   = <<DOC
 schemaVersion: '2.2'
 description: Check the status of the docker services and TLS certs in the instance.
 mainSteps:
@@ -37,7 +37,7 @@ mainSteps:
           sh /usr/local/bin/get-status.sh
 
 DOC
-  ssm_auth_check    = <<DOC
+  ssm_auth_check     = <<DOC
 schemaVersion: '2.2'
 description: Retrieve and print the auth settings.
 parameters:
@@ -57,7 +57,7 @@ mainSteps:
         - |
           sh /usr/local/bin/get-auth.sh {{category}}
 DOC
-  ssm_users_update  = <<DOC
+  ssm_users_update   = <<DOC
 schemaVersion: '2.2'
 description: Update allowlisted GitHub usernames
 parameters:
@@ -80,7 +80,7 @@ mainSteps:
         - |
           sh /usr/local/bin/update-auth.sh users {{action}} {{users}}
 DOC
-  ssm_teams_update  = <<DOC
+  ssm_teams_update   = <<DOC
 schemaVersion: '2.2'
 description: Update allowlisted GitHub teams; you must have allowlisted a GitHub organization.
 parameters:
@@ -102,7 +102,7 @@ mainSteps:
       runCommand:
         - "sh /usr/local/bin/update-auth.sh teams {{action}} {{teams}}"
 DOC
-  ssm_org_set       = <<DOC
+  ssm_org_set        = <<DOC
 schemaVersion: '2.2'
 description: Set the GitHub organization to allowlist; only one organization may be allowlisted at a time.
 parameters:
@@ -116,7 +116,7 @@ mainSteps:
       runCommand:
         - "sh /usr/local/bin/update-auth.sh org {{organization}}"
 DOC
-  ssm_org_unset     = <<DOC
+  ssm_org_unset      = <<DOC
 schemaVersion: '2.2'
 description: Remove the GitHub organization; rely exclusively on username allowlisting.
 mainSteps:
@@ -127,7 +127,7 @@ mainSteps:
         - |
           sh /usr/local/bin/update-auth.sh org remove
 DOC
-  ssm_server_update = <<DOC
+  ssm_server_update  = <<DOC
 schemaVersion: '2.2'
 description: Control the server containers (start, stop, restart).
 parameters:
@@ -156,7 +156,7 @@ mainSteps:
         - |
           sh /usr/local/bin/update-server.sh {{action}} {{service}}
 DOC
-  ssm_server_logs   = <<DOC
+  ssm_server_logs    = <<DOC
 schemaVersion: '2.2'
 description: Returns the container logs.
 parameters:
@@ -184,6 +184,46 @@ mainSteps:
             EXTRA="{{extra}}"
           fi
           docker logs {{service}} $EXTRA
+DOC
+  ssm_server_exec    = <<DOC
+schemaVersion: '2.2'
+description: Execute a command inside a service container.
+parameters:
+  service:
+    type: String
+    description: "The service in which to execute the command (jupyter, traefik or oauth)."
+    default: jupyter
+    allowedValues:
+      - jupyter
+      - traefik
+      - oauth
+  commands:
+    type: String
+    description: "The command to execute inside the container."
+mainSteps:
+  - action: aws:runShellScript
+    name: ExecCommand
+    inputs:
+      runCommand:
+        - |
+          docker exec {{service}} {{commands}}
+DOC
+  ssm_server_connect = <<DOC
+schemaVersion: '1.0'
+description: Start an interactive shell session inside a service container.
+sessionType: InteractiveCommands
+parameters:
+  service:
+    type: String
+    description: "The service container to connect to (jupyter or traefik)."
+    default: jupyter
+    allowedValues:
+      - jupyter
+      - traefik
+properties:
+  linux:
+    commands: "case {{service}} in jupyter) docker exec -it {{service}} /bin/bash;; traefik) docker exec -it {{service}} /bin/sh;; esac"
+    runAsElevated: true
 DOC
 }
 
@@ -261,5 +301,23 @@ resource "aws_ssm_document" "server_logs" {
   document_format = "YAML"
 
   content = local.ssm_server_logs
+  tags    = local.combined_tags
+}
+
+resource "aws_ssm_document" "server_exec" {
+  name            = "server-exec-${local.doc_postfix}"
+  document_type   = "Command"
+  document_format = "YAML"
+
+  content = local.ssm_server_exec
+  tags    = local.combined_tags
+}
+
+resource "aws_ssm_document" "server_connect" {
+  name            = "server-connect-${local.doc_postfix}"
+  document_type   = "Session"
+  document_format = "YAML"
+
+  content = local.ssm_server_connect
   tags    = local.combined_tags
 }

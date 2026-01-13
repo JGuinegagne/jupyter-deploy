@@ -102,3 +102,42 @@ class ServerHandler(BaseProjectHandler):
         stdout = runner.get_result_value(command, "server.logs", str)
         stderr = runner.get_result_value(command, "server.errors", str)
         return stdout, stderr
+
+    def exec_command(self, service: str, command_args: list[str]) -> tuple[str, str]:
+        """Execute a command inside a service container, return the stdout and stderr."""
+        command = self.project_manifest.get_command("server.exec")
+        validated_service = self.project_manifest.get_validated_service(service, allow_all=False)
+        console = self.get_console()
+        runner = cmd_runner.ManifestCommandRunner(
+            console=console, output_handler=self._output_handler, variable_handler=self._variable_handler
+        )
+
+        # Join command arguments into a single command string for docker exec
+        command_string = " ".join(command_args)
+
+        runner.run_command_sequence(
+            command,
+            cli_paramdefs={
+                "service": StrResolvedCliParameter(parameter_name="service", value=validated_service),
+                "commands": StrResolvedCliParameter(parameter_name="commands", value=command_string),
+            },
+        )
+        stdout = runner.get_result_value(command, "server.exec.stdout", str)
+        stderr = runner.get_result_value(command, "server.exec.stderr", str)
+        return stdout, stderr
+
+    def connect(self, service: str) -> None:
+        """Start an interactive shell session inside a service container."""
+        command = self.project_manifest.get_command("server.connect")
+        validated_service = self.project_manifest.get_validated_service(service, allow_all=False)
+        console = self.get_console()
+        runner = cmd_runner.ManifestCommandRunner(
+            console=console, output_handler=self._output_handler, variable_handler=self._variable_handler
+        )
+
+        runner.run_command_sequence(
+            command,
+            cli_paramdefs={
+                "service": StrResolvedCliParameter(parameter_name="service", value=validated_service),
+            },
+        )
