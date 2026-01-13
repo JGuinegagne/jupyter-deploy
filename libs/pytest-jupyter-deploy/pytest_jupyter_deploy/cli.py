@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pexpect
 from jupyter_deploy import cmd_utils as jd_cmd_utils
+from jupyter_deploy import constants as jd_constants
+from jupyter_deploy.handlers.base_project_handler import retrieve_project_manifest
 
 
 class JDCliError(RuntimeError):
@@ -113,32 +115,31 @@ class JDCli:
         raise ValueError("Could not parse server status from command output")
 
     def get_jupyterlab_url(self) -> str:
-        """Get the JupyterLab URL from the 'jd open' command output.
+        """Get the JupyterLab URL by querying the open_url value's terraform output.
 
-        This does not actually open the browser, but captures the URL that would be opened.
+        This follows the same pattern as OpenHandler:
+        1. Get the manifest
+        2. Look up the "open_url" declared value
+        3. Get the source_key (terraform output name) from the value definition
+        4. Query that output using jd show
 
         Returns:
             JupyterLab URL string
 
         Raises:
             JDCliError: If command fails
-            ValueError: If URL cannot be parsed
         """
-        # Run the open command but don't actually open the browser
-        # The output contains: "Opening Jupyter app at: {url}"
-        result = self.run_command(["jupyter-deploy", "open"])
+        # Get manifest and look up the declared value for "open_url"
+        manifest_path = self.project_dir / jd_constants.MANIFEST_FILENAME
+        manifest = retrieve_project_manifest(manifest_path)
 
-        # Parse output for the URL line
-        for line in result.stdout.splitlines():
-            if "Opening Jupyter app at:" in line:
-                # Extract URL after "Opening Jupyter app at:"
-                url = line.split("Opening Jupyter app at:", 1)[1].strip()
-                # Remove ANSI color codes if present
-                url = re.sub(r"\x1b\[[0-9;]*m", "", url)
-                if url.startswith("http"):
-                    return url
+        # Get the value definition for "open_url" which tells us which terraform output to query
+        value_def = manifest.get_declared_value("open_url")
+        output_name = value_def.source_key
 
-        raise ValueError("Could not parse JupyterLab URL from command output")
+        # Query the actual terraform output using jd show
+        result = self.run_command(["jupyter-deploy", "show", "--output", output_name, "--text"])
+        return result.stdout.strip()
 
     def get_allowlisted_users(self) -> list[str]:
         """Return the list of allowlisted users, or empty list if none.

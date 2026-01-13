@@ -345,6 +345,27 @@ def show(
     info: Annotated[bool, typer.Option("--info", help="Display core project and template information.")] = False,
     outputs: Annotated[bool, typer.Option("--outputs", help="Display outputs information.")] = False,
     variables: Annotated[bool, typer.Option("--variables", help="Display variables information.")] = False,
+    variable: Annotated[
+        str | None, typer.Option("--variable", "-v", help="Get the value of a specific variable by name.")
+    ] = None,
+    output: Annotated[
+        str | None, typer.Option("--output", "-o", help="Get the value of a specific output by name.")
+    ] = None,
+    template_name: Annotated[bool, typer.Option("--template-name", help="Display the template name.")] = False,
+    template_version: Annotated[bool, typer.Option("--template-version", help="Display the template version.")] = False,
+    template_engine: Annotated[bool, typer.Option("--template-engine", help="Display the template engine.")] = False,
+    description: Annotated[
+        bool,
+        typer.Option("--description", "-d", help="Show description instead of value (with --variable or --output)."),
+    ] = False,
+    list_names: Annotated[
+        bool,
+        typer.Option("--list", help="List names only (with --variables or --outputs)."),
+    ] = False,
+    text: Annotated[
+        bool,
+        typer.Option("--text", help="Output plain text without Rich markup."),
+    ] = False,
 ) -> None:
     """Display information about the jupyter-deploy project.
 
@@ -353,18 +374,94 @@ def show(
 
     If the project is up, shows the values of the output as defined in
     the infrastructure as code project.
+
+    Pass --variable <variable-name> to display the value of a single variable, or
+    -v <variable-name> --description to display its description.
+
+    Pass --output <output-name> to display the value of a single output, or
+    -o <output-name> --description to display its description.
+
+    Pass --variables --list or --outputs --list to display the list of variable or output names.
     """
-    if not info and not outputs and not variables:
-        show_info = True
-        show_outputs = True
-        show_variables = True
-    else:
-        show_info = info
-        show_outputs = outputs
-        show_variables = variables
+    # Validate parameter combinations
+    query_flags = [variable, output, template_name, template_version, template_engine]
+    query_flags_set = sum([bool(f) for f in query_flags])
+
+    if query_flags_set > 1:
+        err_console = Console(stderr=True)
+        err_console.print(
+            ":x: Cannot use multiple query flags "
+            "(--variable, --output, --template-name, --template-version, --template-engine) at the same time.",
+            style="red",
+        )
+        raise typer.Exit(code=1)
+
+    if description and not (variable or output):
+        err_console = Console(stderr=True)
+        err_console.print(":x: --description can only be used with --variable or --output.", style="red")
+        raise typer.Exit(code=1)
+
+    if list_names and not (variables or outputs):
+        err_console = Console(stderr=True)
+        err_console.print(":x: --list can only be used with --variables or --outputs.", style="red")
+        raise typer.Exit(code=1)
+
+    # Validate that display mode flags are not used with query flags
+    display_flags_set = info or outputs or variables
+    if query_flags_set > 0 and display_flags_set:
+        err_console = Console(stderr=True)
+        err_console.print(
+            ":x: Cannot use display mode flags (--info, --outputs, --variables) "
+            "with query flags (--variable, --output, --template-name, --template-version, --template-engine).",
+            style="red",
+        )
+        raise typer.Exit(code=1)
 
     with cmd_utils.project_dir(project_dir):
         handler = ShowHandler()
+
+        # Handle single variable query
+        if variable:
+            handler.show_single_variable(variable, show_description=description, plain_text=text)
+            return
+
+        # Handle single output query
+        if output:
+            handler.show_single_output(output, show_description=description, plain_text=text)
+            return
+
+        # Handle template queries
+        if template_name:
+            handler.show_template_name(plain_text=text)
+            return
+
+        if template_version:
+            handler.show_template_version(plain_text=text)
+            return
+
+        if template_engine:
+            handler.show_template_engine(plain_text=text)
+            return
+
+        # Handle list mode with --variables or --outputs (list names only)
+        if list_names:
+            if variables and not info and not outputs:
+                handler.list_variable_names(plain_text=text)
+                return
+            if outputs and not info and not variables:
+                handler.list_output_names(plain_text=text)
+                return
+
+        # Handle normal display mode
+        if not info and not outputs and not variables:
+            show_info = True
+            show_outputs = True
+            show_variables = True
+        else:
+            show_info = info
+            show_outputs = outputs
+            show_variables = variables
+
         handler.show_project_info(show_info=show_info, show_outputs=show_outputs, show_variables=show_variables)
 
 
