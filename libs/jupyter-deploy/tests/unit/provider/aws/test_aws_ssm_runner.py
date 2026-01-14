@@ -810,6 +810,11 @@ class TestExecuteInstructions(unittest.TestCase):
                     "document_name": StrResolvedInstructionArgument(argument_name="document_name", value="test-doc"),
                     "instance_id": StrResolvedInstructionArgument(argument_name="instance_id", value="i-12345"),
                 }
+            elif instruction == AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC:
+                base_resolved_arguments = {
+                    "instance_id": StrResolvedInstructionArgument(argument_name="instance_id", value="i-12345"),
+                    "commands": ListStrResolvedInstructionArgument(argument_name="commands", value=["echo test"]),
+                }
             elif instruction == AwsSsmInstruction.START_SESSION:
                 base_resolved_arguments = {
                     "target_id": StrResolvedInstructionArgument(argument_name="target_id", value="i-12345"),
@@ -823,7 +828,10 @@ class TestExecuteInstructions(unittest.TestCase):
             )
 
             # Simple verification that the instruction was executed correctly
-            if instruction == AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC:
+            if (
+                instruction == AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC
+                or instruction == AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC
+            ):
                 mock_send_cmd.assert_called_once()
                 mock_verify_ec2.assert_called_once()
                 self.assertEqual(result["Status"].value, "Success")
@@ -850,3 +858,167 @@ class TestExecuteInstructions(unittest.TestCase):
             )
 
         self.assertIn(f"aws.ssm.{invalid_instruction}", str(context.exception))
+
+
+class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
+    @patch("jupyter_deploy.provider.aws.aws_ssm_runner.ssm_command.send_cmd_to_one_instance_and_wait_sync")
+    @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
+    def test_uses_aws_run_shell_script_by_default(self, mock_verify: Mock, mock_send_cmd: Mock) -> None:
+        # Arrange
+        runner = AwsSsmRunner(region_name="us-west-2")
+        console = Mock(spec=Console)
+        instance_id = "i-1234567890abcdef0"
+
+        mock_verify.return_value = True
+        mock_send_cmd.return_value = {
+            "Status": "Success",
+            "StandardOutputContent": "output",
+            "StandardErrorContent": "",
+        }
+
+        resolved_arguments: dict[str, ResolvedInstructionArgument] = {
+            "instance_id": StrResolvedInstructionArgument(argument_name="instance_id", value=instance_id),
+            "commands": ListStrResolvedInstructionArgument(argument_name="commands", value=["whoami"]),
+        }
+
+        # Act
+        result = runner.execute_instruction(
+            instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
+            resolved_arguments=resolved_arguments,
+            console=console,
+        )
+
+        # Assert
+        mock_send_cmd.assert_called_once_with(
+            runner.client,
+            document_name="AWS-RunShellScript",
+            instance_id=instance_id,
+            timeout_seconds=30,
+            wait_after_send_seconds=2,
+            commands=["whoami"],
+        )
+        self.assertEqual(result["StandardOutputContent"].value, "output")
+
+    @patch("jupyter_deploy.provider.aws.aws_ssm_runner.ssm_command.send_cmd_to_one_instance_and_wait_sync")
+    @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
+    def test_passes_commands_parameter(self, mock_verify: Mock, mock_send_cmd: Mock) -> None:
+        # Arrange
+        runner = AwsSsmRunner(region_name="us-west-2")
+        console = Mock(spec=Console)
+        instance_id = "i-1234567890abcdef0"
+        commands = ["df", "-h"]
+
+        mock_verify.return_value = True
+        mock_send_cmd.return_value = {
+            "Status": "Success",
+            "StandardOutputContent": "output",
+            "StandardErrorContent": "",
+        }
+
+        resolved_arguments: dict[str, ResolvedInstructionArgument] = {
+            "instance_id": StrResolvedInstructionArgument(argument_name="instance_id", value=instance_id),
+            "commands": ListStrResolvedInstructionArgument(argument_name="commands", value=commands),
+        }
+
+        # Act
+        runner.execute_instruction(
+            instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
+            resolved_arguments=resolved_arguments,
+            console=console,
+        )
+
+        # Assert
+        mock_send_cmd.assert_called_once()
+        call_kwargs = mock_send_cmd.call_args[1]
+        self.assertEqual(call_kwargs["commands"], commands)
+
+    @patch("jupyter_deploy.provider.aws.aws_ssm_runner.ssm_command.send_cmd_to_one_instance_and_wait_sync")
+    @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
+    def test_returns_stdout_and_stderr(self, mock_verify: Mock, mock_send_cmd: Mock) -> None:
+        # Arrange
+        runner = AwsSsmRunner(region_name="us-west-2")
+        console = Mock(spec=Console)
+        instance_id = "i-1234567890abcdef0"
+
+        mock_verify.return_value = True
+        mock_send_cmd.return_value = {
+            "Status": "Success",
+            "StandardOutputContent": "stdout content",
+            "StandardErrorContent": "stderr content",
+        }
+
+        resolved_arguments: dict[str, ResolvedInstructionArgument] = {
+            "instance_id": StrResolvedInstructionArgument(argument_name="instance_id", value=instance_id),
+            "commands": ListStrResolvedInstructionArgument(argument_name="commands", value=["echo", "test"]),
+        }
+
+        # Act
+        result = runner.execute_instruction(
+            instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
+            resolved_arguments=resolved_arguments,
+            console=console,
+        )
+
+        # Assert
+        self.assertEqual(result["StandardOutputContent"].value, "stdout content")
+        self.assertEqual(result["StandardErrorContent"].value, "stderr content")
+        self.assertEqual(result["Status"].value, "Success")
+
+    @patch("jupyter_deploy.provider.aws.aws_ssm_runner.ssm_command.send_cmd_to_one_instance_and_wait_sync")
+    @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
+    def test_handles_failed_commands(self, mock_verify: Mock, mock_send_cmd: Mock) -> None:
+        # Arrange
+        runner = AwsSsmRunner(region_name="us-west-2")
+        console = Mock(spec=Console)
+        instance_id = "i-1234567890abcdef0"
+
+        mock_verify.return_value = True
+        mock_send_cmd.return_value = {
+            "Status": "Failed",
+            "StandardOutputContent": "",
+            "StandardErrorContent": "command not found",
+        }
+
+        resolved_arguments: dict[str, ResolvedInstructionArgument] = {
+            "instance_id": StrResolvedInstructionArgument(argument_name="instance_id", value=instance_id),
+            "commands": ListStrResolvedInstructionArgument(
+                argument_name="commands", value=["command_that_does_not_exist"]
+            ),
+        }
+
+        # Act
+        result = runner.execute_instruction(
+            instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
+            resolved_arguments=resolved_arguments,
+            console=console,
+        )
+
+        # Assert
+        self.assertEqual(result["Status"].value, "Failed")
+        self.assertEqual(result["StandardErrorContent"].value, "command not found")
+        # Verify that error was printed to console
+        console.print.assert_called()
+
+    @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
+    def test_raises_when_verification_fails(self, mock_verify: Mock) -> None:
+        # Arrange
+        runner = AwsSsmRunner(region_name="us-west-2")
+        console = Mock(spec=Console)
+        instance_id = "i-1234567890abcdef0"
+
+        mock_verify.return_value = False
+
+        resolved_arguments: dict[str, ResolvedInstructionArgument] = {
+            "instance_id": StrResolvedInstructionArgument(argument_name="instance_id", value=instance_id),
+            "commands": ListStrResolvedInstructionArgument(argument_name="commands", value=["whoami"]),
+        }
+
+        # Act & Assert
+        with self.assertRaises(InterruptInstructionError):
+            runner.execute_instruction(
+                instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
+                resolved_arguments=resolved_arguments,
+                console=console,
+            )
+
+        mock_verify.assert_called_once_with(instance_id=instance_id, console=console)

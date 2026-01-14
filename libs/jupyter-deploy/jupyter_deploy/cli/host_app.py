@@ -1,6 +1,7 @@
 from typing import Annotated
 
 import typer
+from rich.console import Console
 
 from jupyter_deploy import cmd_utils
 from jupyter_deploy.handlers.resource import host_handler
@@ -97,3 +98,49 @@ def connect(
     with cmd_utils.project_dir(project_dir):
         handler = host_handler.HostHandler()
         handler.connect()
+
+
+@host_app.command(context_settings={"allow_extra_args": True, "allow_interspersed_args": False})
+def exec(
+    ctx: typer.Context,
+    project_dir: Annotated[
+        str | None,
+        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
+    ] = None,
+) -> None:
+    """Execute a non-interactive command on the host machine.
+
+    Run either from a jupyter-deploy project directory that you created with `jd init`;
+    or pass a --path PATH to such a directory.
+
+    Pass the command after '--', for example:
+
+    jd host exec -- df -h
+
+    jd host exec -- "docker container list | grep jupyter"
+    """
+    # Arguments after -- are in ctx.args
+    command_args = ctx.args
+
+    if not command_args:
+        console = Console()
+        console.print(":x: No command provided. Pass a command after '--'", style="red")
+        console.print("Example: jd host exec -- df -h", style="red")
+        raise typer.Exit(code=1)
+
+    with cmd_utils.project_dir(project_dir):
+        handler = host_handler.HostHandler()
+        console = handler.get_console()
+
+        stdout, stderr = handler.exec_command(command_args)
+
+        if stdout:
+            console.rule("stdout")
+            console.print(stdout)
+            if not stderr:
+                console.rule()
+
+        if stderr:
+            console.rule("stderr")
+            console.print(stderr)
+            console.rule()

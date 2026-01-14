@@ -76,6 +76,23 @@ commands:
     - api-attribute: target_id
       source: output
       source-key: instance_id
+- cmd: host.exec
+  sequence:
+  - api-name: aws.ssm.wait-default-shell-command-sync
+    arguments:
+    - api-attribute: instance_id
+      source: output
+      source-key: instance_id
+    - api-attribute: commands
+      source: cli
+      source-key: commands
+  results:
+  - result-name: host.exec.stdout
+    source: result
+    source-key: '[0].StandardOutputContent'
+  - result-name: host.exec.stderr
+    source: result
+    source-key: '[0].StandardErrorContent'
 - cmd: server.status
   sequence:
   - api-name: aws.ssm.wait-command-sync
@@ -161,6 +178,42 @@ commands:
   - result-name: server.errors
     source: result
     source-key: '[0].StandardErrorContent'
+- cmd: server.exec
+  sequence:
+  - api-name: aws.ssm.wait-command-sync
+    arguments:
+    - api-attribute: document_name
+      source: output
+      source-key: server_exec_document
+    - api-attribute: instance_id
+      source: output
+      source-key: instance_id
+    - api-attribute: service
+      source: cli
+      source-key: service
+    - api-attribute: commands
+      source: cli
+      source-key: commands
+  results:
+  - result-name: server.exec.stdout
+    source: result
+    source-key: '[0].StandardOutputContent'
+  - result-name: server.exec.stderr
+    source: result
+    source-key: '[0].StandardErrorContent'
+- cmd: server.connect
+  sequence:
+  - api-name: aws.ssm.start-session
+    arguments:
+    - api-attribute: target_id
+      source: output
+      source-key: instance_id
+    - api-attribute: document_name
+      source: output
+      source-key: server_connect_document
+    - api-attribute: service
+      source: cli
+      source-key: service
 - cmd: users.add
   sequence:
   - api-name: aws.ssm.wait-command-sync

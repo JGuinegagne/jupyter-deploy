@@ -3,6 +3,7 @@ from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.engine.terraform import tf_outputs, tf_variables
 from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
 from jupyter_deploy.provider import manifest_command_runner as cmd_runner
+from jupyter_deploy.provider.resolved_clidefs import ListStrResolvedCliParameter
 
 
 class HostHandler(BaseProjectHandler):
@@ -78,3 +79,22 @@ class HostHandler(BaseProjectHandler):
             command,
             cli_paramdefs={},
         )
+
+    def exec_command(self, command_args: list[str]) -> tuple[str, str]:
+        """Execute a command on the host, return the stdout and stderr."""
+        command = self.project_manifest.get_command("host.exec")
+        console = self.get_console()
+        runner = cmd_runner.ManifestCommandRunner(
+            console=console, output_handler=self._output_handler, variable_handler=self._variable_handler
+        )
+        # Join command arguments into a single command string for AWS-RunShellScript
+        command_string = " ".join(command_args)
+        runner.run_command_sequence(
+            command,
+            cli_paramdefs={
+                "commands": ListStrResolvedCliParameter(parameter_name="commands", value=[command_string]),
+            },
+        )
+        stdout = runner.get_result_value(command, "host.exec.stdout", str)
+        stderr = runner.get_result_value(command, "host.exec.stderr", str)
+        return stdout, stderr
