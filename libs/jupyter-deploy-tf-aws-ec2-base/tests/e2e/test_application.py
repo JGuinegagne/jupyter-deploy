@@ -29,7 +29,7 @@ def test_application_simple_python(
     upload_notebook(e2e_deployment, notebook_path, "e2e-test/application_simple.ipynb")
 
     # Restart server to ensure clean session (prevents "Document session error" dialogs)
-    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "restart", "-s", "jupyter"])
+    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "restart"])
 
     # Re-authenticate after server restart
     github_oauth_app.ensure_authenticated()
