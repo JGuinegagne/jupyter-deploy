@@ -2,9 +2,6 @@
 set -e
 
 echo "Setting up uv environment..."
-cp /opt/uv/jupyter/pyproject.toml /home/jovyan/
-cp /opt/uv/jupyter/uv.lock /home/jovyan/
-
 if [ ! -f "/home/jovyan/pyproject.toml" ] || [ ! -f "/home/jovyan/uv.lock" ]; then
     echo "Did not find uv environment files in /home/jovyan."
     cp /opt/uv/jupyter/pyproject.toml /home/jovyan/

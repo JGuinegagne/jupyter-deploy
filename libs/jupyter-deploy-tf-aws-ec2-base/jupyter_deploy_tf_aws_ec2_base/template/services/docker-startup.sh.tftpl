@@ -75,17 +75,33 @@ else
     echo "Validated docker compose file"
 fi
 
+SHOULD_BUILD=""
+if [ -f /opt/docker/.build-manifest.prev ]; then
+    if ! diff -q /opt/docker/.build-manifest /opt/docker/.build-manifest.prev > /dev/null 2>&1; then
+        echo "Build manifest changed: rebuilding images"
+        SHOULD_BUILD="--build"
+    else
+        echo "Build manifest unchanged: reusing images"
+    fi
+else
+    echo "No previous build manifest"
+    SHOULD_BUILD="--build"
+fi
+
+# Save current manifest for next run
+cp /opt/docker/.build-manifest /opt/docker/.build-manifest.prev
+
 echo "Starting docker compose"
-if ! docker compose up -d --force-recreate --wait --wait-timeout 300; then
+if ! docker compose up -d --force-recreate $SHOULD_BUILD --wait --wait-timeout 300; then
     echo "First attempt failed, trying with cleanup..."
     docker compose down || true
     docker system prune -f --volumes || true
 
-    if ! docker compose up -d --force-recreate --wait --wait-timeout 120; then
+    if ! docker compose up -d --force-recreate $SHOULD_BUILD --wait --wait-timeout 120; then
         echo "Second attempt failed, restarting Docker daemon..."
         systemctl restart docker
         sleep 10
-        docker compose up -d --force-recreate --wait --wait-timeout 120
+        docker compose up -d --force-recreate $SHOULD_BUILD --wait --wait-timeout 120
     fi
 fi
 echo "docker compose complete"

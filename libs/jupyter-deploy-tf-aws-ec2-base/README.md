@@ -245,6 +245,7 @@ This project:
 | `secret_arn` | The ARN of the AWS Secret storing the OAuth client secret |
 | `region` | The AWS region where the resources were created |
 | `deployment_id` | Unique identifier for this deployment |
+| `jupyter_build_hash` | Hash of files affecting the Jupyter container build |
 | `server_status_check_document` | Name of the SSM document to verify if the server is ready to serve traffic |
 | `server_update_document` | Name of the SSM document to control server container operations |
 | `server_logs_document` | Name of the SSM document to print server logs to terminal |

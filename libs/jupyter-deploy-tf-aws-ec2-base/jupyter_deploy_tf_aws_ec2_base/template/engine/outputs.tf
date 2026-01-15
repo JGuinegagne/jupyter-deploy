@@ -43,6 +43,12 @@ output "deployment_id" {
   value       = local.doc_postfix
 }
 
+# Build information
+output "jupyter_build_hash" {
+  description = "Hash of files affecting the Jupyter container build."
+  value       = local.jupyter_build_hash
+}
+
 # server.status CLI handling
 output "server_status_check_document" {
   description = "Name of the SSM document to check the server status."

@@ -97,6 +97,18 @@ locals {
   kernel_pyproject_content      = var.jupyter_package_manager == "pixi" ? local.pixi_kernel_templated : local.kernel_templated
   jupyter_toml_filename         = var.jupyter_package_manager == "pixi" ? "pixi.jupyter.toml" : "pyproject.jupyter.toml"
 
+  # Compute hash of all files that affect Jupyter container build
+  # This hash is used to determine if a rebuild is necessary
+  build_affecting_files = [
+    local.dockerfile_content,
+    local.jupyter_toml_content,
+    local.jupyter_start_content,
+    local.jupyter_reset_content,
+    local.jupyter_server_config_content,
+    local.kernel_pyproject_content,
+  ]
+  jupyter_build_hash = sha256(join("\n", local.build_affecting_files))
+
   allowed_github_usernames = var.oauth_allowed_usernames != null ? join(",", [for username in var.oauth_allowed_usernames : "${username}"]) : ""
   allowed_github_org       = var.oauth_allowed_org != null ? var.oauth_allowed_org : ""
   allowed_github_teams     = var.oauth_allowed_teams != null ? join(",", [for team in var.oauth_allowed_teams : "${team}"]) : ""
@@ -266,6 +278,7 @@ mainSteps:
           tee /opt/docker/parsers.conf << 'EOF'
           ${local.parsers_conf_indented}
           EOF
+          echo "${local.jupyter_build_hash}" > /opt/docker/.build-manifest
 
   - action: aws:runShellScript
     name: StartDockerServices
