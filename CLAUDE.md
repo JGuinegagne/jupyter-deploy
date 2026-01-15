@@ -37,25 +37,6 @@ After making code changes, always run from the root of the repository:
 - After writing tests, run `uv run mypy` to verify all type annotations are correct
 - If you detect inconsistencies between implementation and test assertions (e.g., code raises `KeyError` but test expects `ValueError`), notify the user of the implementation issue rather than modifying tests to pass
 
-# Configuration Testing Workflow for the Base Template
-- Make sure you are in the workspace root directory (same dir as `CLAUDE.md`)
-- Setup the deployment directory:
-  - If `./sandbox-claude` directory exists and is not empty, stop and ask the user to clean it
-  - If `./sandbox-claude` directory does not exist, create it: `mkdir sandbox-claude`
-- Initialize the deployment project with: `uv run jd init -E terraform -P aws -I ec2 -T base sandbox-claude`
-- Change dir to the deployment project: `cd sandbox-claude`
-- Read the values in `../claude-test-base.yaml`
-  - Read-only: do not modify this file.
-  - If the file is missing, stop and ask the user to create it.
-- Configure the `variables.yaml` file with the values specified in `../claude-test-base.yaml`
-- Verify that the config command succeed: `uv run jd config`
-  - If that fails and you need to update the template:
-    - Go back to the root directory: `cd ..`
-    - Clear the deployment template with: `rm -rf sandbox-claude`
-    - !IMPORTANT: never run `rm -rf` on any other dir than `sandbox-claude`
-    - Edit the template project, and start again the end-to-end testing workflow
-- Finally, always go back to the project root directory (same dir as `CLAUDE.md`)
-
 # E2E Testing Workflow
 E2E tests validate a complete deployment with actual CLI commands and browser-based interactions using Playwright.
 

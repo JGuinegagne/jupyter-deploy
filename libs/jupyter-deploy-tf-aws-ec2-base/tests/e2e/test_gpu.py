@@ -8,8 +8,10 @@ from pytest_jupyter_deploy.notebook import delete_notebook, run_notebook_in_jupy
 from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
 from pytest_jupyter_deploy.plugin import skip_if_testvars_not_set
 
+from .constants import ORDER_GPU
 
-@pytest.mark.order(60)
+
+@pytest.mark.order(ORDER_GPU)
 @pytest.mark.mutating
 @skip_if_testvars_not_set(["JD_E2E_CPU_INSTANCE", "JD_E2E_GPU_INSTANCE"])
 def test_gpu_1_switch_to_gpu(
@@ -34,7 +36,7 @@ def test_gpu_1_switch_to_gpu(
     github_oauth_app.verify_jupyterlab_accessible()
 
 
-@pytest.mark.order(61)
+@pytest.mark.order(ORDER_GPU + 1)
 @pytest.mark.mutating
 @skip_if_testvars_not_set(["JD_E2E_GPU_INSTANCE"])
 def test_gpu_2_run_gpu_notebook(
@@ -83,7 +85,7 @@ def test_gpu_2_run_gpu_notebook(
     delete_notebook(e2e_deployment, "e2e-test/gpu_check.ipynb")
 
 
-@pytest.mark.order(62)
+@pytest.mark.order(ORDER_GPU + 2)
 @pytest.mark.mutating
 @skip_if_testvars_not_set(["JD_E2E_CPU_INSTANCE"])
 def test_gpu_3_switch_back_to_cpu(

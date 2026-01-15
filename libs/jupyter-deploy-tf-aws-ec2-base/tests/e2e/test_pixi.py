@@ -7,8 +7,10 @@ from pytest_jupyter_deploy.deployment import EndToEndDeployment
 from pytest_jupyter_deploy.notebook import delete_notebook, run_notebook_in_jupyterlab, upload_notebook
 from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
 
+from .constants import ORDER_PIXI
 
-@pytest.mark.order(50)
+
+@pytest.mark.order(ORDER_PIXI)
 @pytest.mark.mutating
 def test_pixi_switch_to_pixi(
     e2e_deployment: EndToEndDeployment,
@@ -43,7 +45,7 @@ def test_pixi_switch_to_pixi(
     github_oauth_app.verify_jupyterlab_accessible()
 
 
-@pytest.mark.order(51)
+@pytest.mark.order(ORDER_PIXI + 1)
 @pytest.mark.mutating
 def test_pixi_install_and_persist(
     e2e_deployment: EndToEndDeployment,
@@ -105,7 +107,7 @@ def test_pixi_install_and_persist(
         raise AssertionError(f"Expected conda-build install to survive server restart: {result.stdout}")
 
 
-@pytest.mark.order(52)
+@pytest.mark.order(ORDER_PIXI + 2)
 @pytest.mark.mutating
 def test_pixi_environment_recovery(
     e2e_deployment: EndToEndDeployment,

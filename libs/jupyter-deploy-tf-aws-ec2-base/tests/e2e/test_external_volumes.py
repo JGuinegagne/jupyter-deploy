@@ -18,9 +18,11 @@ from pytest_jupyter_deploy.deployment import EndToEndDeployment
 from pytest_jupyter_deploy.notebook import delete_notebook, run_notebook_in_jupyterlab, upload_notebook
 from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
 
+from .constants import ORDER_EXTERNAL_VOLUMES
+
 
 @pytest.mark.skip(reason="SSM document size limit - requires S3 externalization of scripts")
-@pytest.mark.order(20)
+@pytest.mark.order(ORDER_EXTERNAL_VOLUMES)
 @pytest.mark.mutating
 def test_external_volumes_provisioning(
     e2e_deployment: EndToEndDeployment,
@@ -61,7 +63,7 @@ def test_external_volumes_provisioning(
 
 
 @pytest.mark.skip(reason="SSM document size limit - requires S3 externalization of scripts")
-@pytest.mark.order(21)
+@pytest.mark.order(ORDER_EXTERNAL_VOLUMES + 1)
 @pytest.mark.mutating
 def test_external_volumes_ebs(
     e2e_deployment: EndToEndDeployment,
@@ -99,7 +101,7 @@ def test_external_volumes_ebs(
 
 
 @pytest.mark.skip(reason="SSM document size limit - requires S3 externalization of scripts")
-@pytest.mark.order(22)
+@pytest.mark.order(ORDER_EXTERNAL_VOLUMES + 2)
 @pytest.mark.mutating
 def test_external_volumes_efs(
     e2e_deployment: EndToEndDeployment,

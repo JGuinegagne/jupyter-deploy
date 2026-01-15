@@ -9,8 +9,10 @@ from pytest_jupyter_deploy.deployment import EndToEndDeployment
 from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
 from pytest_jupyter_deploy.plugin import skip_if_testvars_not_set
 
+from .constants import ORDER_CONFIG_APPLY
 
-@pytest.mark.order(10)
+
+@pytest.mark.order(ORDER_CONFIG_APPLY)
 @pytest.mark.mutating
 @skip_if_testvars_not_set(["JD_E2E_LARGER_INSTANCE", "JD_E2E_LARGER_LOG_RETENTION_DAYS"])
 def test_upgrade_config(
