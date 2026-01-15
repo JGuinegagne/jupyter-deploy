@@ -9,7 +9,7 @@ from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplicati
 from pytest_jupyter_deploy.plugin import skip_if_testvars_not_set
 
 
-@pytest.mark.order(50)
+@pytest.mark.order(60)
 @pytest.mark.mutating
 @skip_if_testvars_not_set(["JD_E2E_CPU_INSTANCE", "JD_E2E_GPU_INSTANCE"])
 def test_gpu_1_switch_to_gpu(
@@ -34,7 +34,8 @@ def test_gpu_1_switch_to_gpu(
     github_oauth_app.verify_jupyterlab_accessible()
 
 
-@pytest.mark.order(51)
+@pytest.mark.order(61)
+@pytest.mark.mutating
 @skip_if_testvars_not_set(["JD_E2E_GPU_INSTANCE"])
 def test_gpu_2_run_gpu_notebook(
     e2e_deployment: EndToEndDeployment,
@@ -69,7 +70,7 @@ def test_gpu_2_run_gpu_notebook(
     upload_notebook(e2e_deployment, gpu_notebook, "e2e-test/gpu_check.ipynb")
 
     # Restart server to ensure clean session (prevents "Document session error" dialogs)
-    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "restart"])
+    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "restart", "-s", "jupyter"])
 
     # Re-authenticate after server restart
     github_oauth_app.ensure_authenticated()
@@ -82,7 +83,7 @@ def test_gpu_2_run_gpu_notebook(
     delete_notebook(e2e_deployment, "e2e-test/gpu_check.ipynb")
 
 
-@pytest.mark.order(52)
+@pytest.mark.order(62)
 @pytest.mark.mutating
 @skip_if_testvars_not_set(["JD_E2E_CPU_INSTANCE"])
 def test_gpu_3_switch_back_to_cpu(
