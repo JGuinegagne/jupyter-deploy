@@ -91,17 +91,27 @@ fi
 # Save current manifest for next run
 cp /opt/docker/.build-manifest /opt/docker/.build-manifest.prev
 
+# Set timeouts based on whether we're building or not
+# Building takes longer, especially for GPU images
+if [ "$SHOULD_BUILD" = "--build" ]; then
+    TIMEOUT_FIRST=600  # 10 minutes for build
+    TIMEOUT_RETRY=300  # 5 minutes for retry
+else
+    TIMEOUT_FIRST=120  # 2 minutes without build
+    TIMEOUT_RETRY=60   # 1 minute for retry
+fi
+
 echo "Starting docker compose"
-if ! docker compose up -d --force-recreate $SHOULD_BUILD --wait --wait-timeout 300; then
+if ! docker compose up -d --force-recreate $SHOULD_BUILD --wait --wait-timeout $TIMEOUT_FIRST; then
     echo "First attempt failed, trying with cleanup..."
     docker compose down || true
     docker system prune -f --volumes || true
 
-    if ! docker compose up -d --force-recreate $SHOULD_BUILD --wait --wait-timeout 120; then
+    if ! docker compose up -d --force-recreate $SHOULD_BUILD --wait --wait-timeout $TIMEOUT_RETRY; then
         echo "Second attempt failed, restarting Docker daemon..."
         systemctl restart docker
         sleep 10
-        docker compose up -d --force-recreate $SHOULD_BUILD --wait --wait-timeout 120
+        docker compose up -d --force-recreate $SHOULD_BUILD --wait --wait-timeout $TIMEOUT_RETRY
     fi
 fi
 echo "docker compose complete"

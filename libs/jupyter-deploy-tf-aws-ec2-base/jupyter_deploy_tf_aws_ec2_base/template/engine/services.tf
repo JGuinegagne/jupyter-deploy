@@ -120,11 +120,18 @@ locals {
   docker_startup_file = templatefile("${path.module}/../services/docker-startup.sh.tftpl", {
     oauth_secret_arn = module.secret.secret_arn,
   })
+  sync_acme_file = templatefile("${path.module}/../services/sync-acme.sh.tftpl", {
+    certs_secret_arn = module.certs_secret.secret_arn,
+    full_domain      = module.network.full_domain,
+  })
+  upload_acme_file = templatefile("${path.module}/../services/commands/upload-acme.sh.tftpl", {
+    certs_secret_arn = module.certs_secret.secret_arn,
+  })
   docker_compose_file = templatefile("${path.module}/../services/docker-compose.yml.tftpl", {
     oauth_provider           = var.oauth_provider
     full_domain              = module.network.full_domain
     github_client_id         = var.oauth_app_client_id
-    aws_region               = data.aws_region.current.region
+    aws_region               = data.aws_region.current.id
     allowed_github_usernames = local.allowed_github_usernames
     allowed_github_org       = local.allowed_github_org
     allowed_github_teams     = local.allowed_github_teams
@@ -143,13 +150,122 @@ locals {
   })
 }
 
+# Map of all script files to upload to S3
+# These files will be downloaded by the SSM document instead of being embedded
+# Note: cloudinit.sh and cloudinit-volumes.sh remain embedded in SSM document for visibility
+locals {
+  # Lists of filenames for SSM document downloads
+  deployment_scripts_filenames = ["update-auth.sh", "refresh-oauth-cookie.sh", "check-status-internal.sh", "get-status.sh", "get-auth.sh", "update-server.sh", "upload-acme.sh", "sync-acme.sh"]
+  deployment_docker_filenames  = ["docker-compose.yml", "traefik.yml", "dockerfile.jupyter", "jupyter-start.sh", "jupyter-reset.sh", "pyproject.kernel.toml", "jupyter_server_config.py", "dockerfile.logrotator", "logrotator-start.sh", "fluent-bit.conf", "parsers.conf", ".build-manifest"]
+
+  all_script_files = {
+    # Startup scripts (docker-startup only, cloudinit stays in SSM)
+    "deployment-scripts/docker-startup.sh" = {
+      content      = local.docker_startup_file
+      content_type = "text/x-shellscript"
+    }
+
+    # Utility scripts from commands
+    "deployment-scripts/update-auth.sh" = {
+      content      = data.local_file.update_auth.content
+      content_type = "text/x-shellscript"
+    }
+    "deployment-scripts/refresh-oauth-cookie.sh" = {
+      content      = data.local_file.refresh_oauth_cookie.content
+      content_type = "text/x-shellscript"
+    }
+    "deployment-scripts/check-status-internal.sh" = {
+      content      = data.local_file.check_status.content
+      content_type = "text/x-shellscript"
+    }
+    "deployment-scripts/get-status.sh" = {
+      content      = data.local_file.get_status.content
+      content_type = "text/x-shellscript"
+    }
+    "deployment-scripts/get-auth.sh" = {
+      content      = data.local_file.get_auth.content
+      content_type = "text/x-shellscript"
+    }
+    "deployment-scripts/update-server.sh" = {
+      content      = data.local_file.update_server.content
+      content_type = "text/x-shellscript"
+    }
+    "deployment-scripts/upload-acme.sh" = {
+      content      = local.upload_acme_file
+      content_type = "text/x-shellscript"
+    }
+    "deployment-scripts/sync-acme.sh" = {
+      content      = local.sync_acme_file
+      content_type = "text/x-shellscript"
+    }
+
+    # Docker and service configuration files
+    "deployment-docker/docker-compose.yml" = {
+      content      = local.docker_compose_file
+      content_type = "text/yaml"
+    }
+    "deployment-docker/dockerfile.jupyter" = {
+      content      = local.dockerfile_content
+      content_type = "text/plain"
+    }
+    "deployment-docker/${local.jupyter_toml_filename}" = {
+      content      = local.jupyter_toml_content
+      content_type = "text/plain"
+    }
+    "deployment-docker/pyproject.kernel.toml" = {
+      content      = local.kernel_pyproject_content
+      content_type = "text/plain"
+    }
+    "deployment-docker/jupyter-start.sh" = {
+      content      = local.jupyter_start_content
+      content_type = "text/x-shellscript"
+    }
+    "deployment-docker/jupyter-reset.sh" = {
+      content      = local.jupyter_reset_content
+      content_type = "text/x-shellscript"
+    }
+    "deployment-docker/jupyter_server_config.py" = {
+      content      = local.jupyter_server_config_content
+      content_type = "text/x-python"
+    }
+    "deployment-docker/traefik.yml" = {
+      content      = local.traefik_config_file
+      content_type = "text/yaml"
+    }
+    "deployment-docker/dockerfile.logrotator" = {
+      content      = data.local_file.dockerfile_logrotator.content
+      content_type = "text/plain"
+    }
+    "deployment-docker/logrotator-start.sh" = {
+      content      = local.logrotator_start_file
+      content_type = "text/x-shellscript"
+    }
+    "deployment-docker/fluent-bit.conf" = {
+      content      = data.local_file.fluent_bit_conf.content
+      content_type = "text/plain"
+    }
+    "deployment-docker/parsers.conf" = {
+      content      = data.local_file.parsers_conf.content
+      content_type = "text/plain"
+    }
+    "deployment-docker/static/oauth_error_500.html" = {
+      content      = local.oauth_error_500_templated
+      content_type = "text/html"
+    }
+    "deployment-docker/.build-manifest" = {
+      content      = local.jupyter_build_hash
+      content_type = "text/plain"
+    }
+  }
+}
+
 # Generate the cloudinit_volumes_script directly in services.tf
 locals {
   # Generate the cloudinit script for mounting volumes
   cloudinit_volumes_script = templatefile("${path.module}/../services/cloudinit-volumes.sh.tftpl", {
     ebs_volumes = module.volumes.resolved_ebs_mounts
     efs_volumes = module.volumes.resolved_efs_mounts
-    aws_region  = data.aws_region.current.region
+    aws_region  = data.aws_region.current.id
   })
 }
 
@@ -188,33 +304,17 @@ schemaVersion: '2.2'
 description: Setup docker, mount volumes, copy docker-compose, start docker services
 mainSteps:
   - action: aws:runShellScript
-    name: SaveUtilityScripts
+    name: DownloadUtilityScripts
     inputs:
       runCommand:
         - |
-          # Save utility scripts first so they're available for status checks
           mkdir -p /usr/local/bin
           mkdir -p /var/log/jupyter-deploy
-          tee /usr/local/bin/update-auth.sh << 'EOF'
-          ${local.update_auth_indented}
-          EOF
-          chmod 644 /usr/local/bin/update-auth.sh
-          tee /usr/local/bin/refresh-oauth-cookie.sh << 'EOF'
-          ${local.refresh_oauth_cookie_indented}
-          EOF
-          chmod 644 /usr/local/bin/refresh-oauth-cookie.sh
-          tee /usr/local/bin/check-status-internal.sh << 'EOF'
-          ${local.check_status_indented}
-          EOF
-          tee /usr/local/bin/get-status.sh << 'EOF'
-          ${local.get_status_indented}
-          EOF
-          tee /usr/local/bin/get-auth.sh << 'EOF'
-          ${local.get_auth_indented}
-          EOF
-          tee /usr/local/bin/update-server.sh << 'EOF'
-          ${local.update_server_indented}
-          EOF
+          for script in ${join(" ", local.deployment_scripts_filenames)}; do
+            aws s3 cp s3://${module.s3_bucket.bucket_name}/deployment-scripts/$script /usr/local/bin/$script
+            chmod 755 /usr/local/bin/$script
+          done
+          chmod 644 /usr/local/bin/update-auth.sh /usr/local/bin/refresh-oauth-cookie.sh
 
   - action: aws:runShellScript
     name: CloudInit
@@ -231,54 +331,29 @@ mainSteps:
           ${local.cloudinit_volumes_indented}
 
   - action: aws:runShellScript
-    name: SaveDockerFiles
+    name: DownloadDockerFiles
     inputs:
       runCommand:
         - |
+          BUCKET="${module.s3_bucket.bucket_name}"
           mkdir -p /opt/docker/static
-          tee /opt/docker/static/oauth_error_500.html << 'EOF'
-          ${local.oauth_error_500_indented}
-          EOF
-          tee /opt/docker/docker-compose.yml << 'EOF'
-          ${local.docker_compose_indented}
-          EOF
-          tee /opt/docker/traefik.yml << 'EOF'
-          ${local.traefik_config_indented}
-          EOF
-          tee /opt/docker/docker-startup.sh << 'EOF'
-          ${local.docker_startup_indented}
-          EOF
-          tee /opt/docker/dockerfile.jupyter << 'EOF'
-          ${local.dockerfile_jupyter_indented}
-          EOF
-          tee /opt/docker/jupyter-start.sh << 'EOF'
-          ${local.jupyter_start_indented}
-          EOF
-          tee /opt/docker/jupyter-reset.sh << 'EOF'
-          ${local.jupyter_reset_indented}
-          EOF
-          tee /opt/docker/${local.jupyter_toml_filename} << 'EOF'
-          ${local.toml_jupyter_indented}
-          EOF
-          tee /opt/docker/pyproject.kernel.toml << 'EOF'
-          ${local.pyproject_kernel_indented}
-          EOF
-          tee /opt/docker/jupyter_server_config.py << 'EOF'
-          ${local.jupyter_server_config_indented}
-          EOF
-          tee /opt/docker/dockerfile.logrotator << 'EOF'
-          ${local.dockerfile_logrotator_indented}
-          EOF
-          tee /opt/docker/logrotator-start.sh << 'EOF'
-          ${local.logrotator_start_file_indented}
-          EOF
-          tee /opt/docker/fluent-bit.conf << 'EOF'
-          ${local.fluent_bit_conf_indented}
-          EOF
-          tee /opt/docker/parsers.conf << 'EOF'
-          ${local.parsers_conf_indented}
-          EOF
-          echo "${local.jupyter_build_hash}" > /opt/docker/.build-manifest
+
+          aws s3 cp s3://$BUCKET/deployment-docker/static/oauth_error_500.html /opt/docker/static/oauth_error_500.html
+
+          for file in ${join(" ", local.deployment_docker_filenames)}; do
+            aws s3 cp s3://$BUCKET/deployment-docker/$file /opt/docker/$file
+          done
+
+          aws s3 cp s3://$BUCKET/deployment-scripts/docker-startup.sh /opt/docker/docker-startup.sh
+          aws s3 cp s3://$BUCKET/deployment-docker/${local.jupyter_toml_filename} /opt/docker/${local.jupyter_toml_filename}
+
+  - action: aws:runShellScript
+    name: SyncCertificates
+    inputs:
+      runCommand:
+        - |
+          chmod 744 /usr/local/bin/sync-acme.sh
+          sh /usr/local/bin/sync-acme.sh
 
   - action: aws:runShellScript
     name: StartDockerServices
@@ -306,6 +381,8 @@ DOC
     fileexists("${path.module}/../services/commands/get-status.sh"),
     fileexists("${path.module}/../services/commands/get-auth.sh"),
     fileexists("${path.module}/../services/commands/update-server.sh"),
+    fileexists("${path.module}/../services/commands/upload-acme.sh.tftpl"),
+    fileexists("${path.module}/../services/sync-acme.sh.tftpl"),
     fileexists("${path.module}/../services/static/oauth_error_500.html.tftpl"),
   ])
 
@@ -325,6 +402,8 @@ DOC
     length(data.local_file.get_status) > 0,
     length(data.local_file.get_auth) > 0,
     length(data.local_file.update_server) > 0,
+    length(local.upload_acme_file) > 0,
+    length(local.sync_acme_file) > 0,
     length(data.local_file.oauth_error_500_html_tftpl) > 0,
   ])
 
@@ -359,8 +438,8 @@ resource "aws_ssm_document" "instance_startup" {
       error_message = "One or more required files are empty"
     }
     precondition {
-      condition     = length(local.ssm_startup_content) < 65400 # AWS limit is 65536 bytes, leaving small buffer
-      error_message = "SSM document content exceeds size limit of 64KB (current: ${length(local.ssm_startup_content)} bytes, max: 65400)"
+      condition     = length(local.ssm_startup_content) < 30000 # SSM Document hard limit is 65kB. Keep ample buffer.
+      error_message = "SSM document content exceeds size limit (current: ${length(local.ssm_startup_content)} bytes, max: 30000)"
     }
     precondition {
       condition     = local.ssm_content_valid

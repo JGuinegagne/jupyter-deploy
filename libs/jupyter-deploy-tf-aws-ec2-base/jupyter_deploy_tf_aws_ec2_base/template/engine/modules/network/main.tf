@@ -10,16 +10,12 @@ resource "aws_default_vpc" "default" {
   }
 }
 
-# Retrieve the first subnet in the default VPC
+# Retrieve subnets in the default VPC
 data "aws_subnets" "default_vpc_subnets" {
   filter {
     name   = "vpc-id"
     values = [aws_default_vpc.default.id]
   }
-}
-
-data "aws_subnet" "first_subnet_of_default_vpc" {
-  id = tolist(data.aws_subnets.default_vpc_subnets.ids)[0]
 }
 
 # Create security group for the EC2 instance

@@ -1,0 +1,64 @@
+#!/bin/bash
+set -e
+
+exec > >(tee -a /var/log/jupyter-deploy/sync-acme.log) 2>&1
+
+log_message() {
+  local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+  echo "[$timestamp] $*"
+}
+
+log_message "Starting certificate sync from AWS Secrets Manager"
+log_message "Secret: ${certs_secret_arn}"
+log_message "Expected domain: ${full_domain}"
+
+# Try to retrieve existing TLS certificates from AWS Secrets Manager
+if CERTS_JSON=$(aws secretsmanager get-secret-value \
+    --secret-id ${certs_secret_arn} \
+    --query 'SecretString' \
+    --output text 2>/dev/null); then
+
+    if [ -z "$CERTS_JSON" ] || [ "$CERTS_JSON" == "null" ]; then
+        log_message "Secret exists but contains no certificates yet"
+        exit 0
+    fi
+
+    log_message "Retrieved certificates from secret"
+
+    # Validate that certificates match the expected domain
+    # Extract the domain from the certificate JSON
+    CERT_DOMAIN=$(echo "$CERTS_JSON" | jq -r '.letsencrypt.Certificates[0].domain.main // empty' 2>/dev/null || echo "")
+
+    if [ -z "$CERT_DOMAIN" ]; then
+        log_message "Warning: Could not extract domain from certificate data"
+        exit 0
+    fi
+
+    log_message "Certificate domain: $CERT_DOMAIN"
+
+    if [ "$CERT_DOMAIN" != "${full_domain}" ]; then
+        log_message "Domain mismatch! Certificate is for $CERT_DOMAIN but deployment is for ${full_domain}"
+        log_message "Clearing secret to allow new certificates to be issued"
+
+        # Clear the secret by writing minimal placeholder (AWS requires min length 1)
+        if aws secretsmanager put-secret-value \
+            --secret-id ${certs_secret_arn} \
+            --secret-string "{}" >/dev/null 2>&1; then
+            log_message "Successfully cleared mismatched certificates from secret"
+        else
+            log_message "Warning: Failed to clear secret, continuing anyway"
+        fi
+        exit 0
+    fi
+
+    # Domain matches, restore certificates
+    log_message "Domain matches! Restoring certificates to /opt/docker/acme.json"
+    printf "%s" "$CERTS_JSON" > /opt/docker/acme.json
+    chmod 600 /opt/docker/acme.json
+    chown service-user:service-user /opt/docker/acme.json
+    log_message "Successfully restored certificates from secret"
+else
+    log_message "No existing certificates found in secret (this is normal on first deployment)"
+fi
+
+exit 0

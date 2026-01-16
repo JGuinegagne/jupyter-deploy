@@ -1,0 +1,42 @@
+#!/bin/bash
+set -e
+
+exec > >(tee -a /var/log/jupyter-deploy/upload-acme.log) 2>&1
+
+log_message() {
+  local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+  echo "[$timestamp] $*"
+}
+
+log_message "Starting certificate upload to AWS Secrets Manager"
+log_message "Secret: ${certs_secret_arn}"
+
+if [ ! -f /opt/docker/acme.json ]; then
+    log_message "Error: ACME file does not exist: /opt/docker/acme.json"
+    exit 1
+fi
+
+if [ ! -s /opt/docker/acme.json ]; then
+    log_message "Error: ACME file is empty: /opt/docker/acme.json"
+    exit 1
+fi
+
+# Validate the ACME file has certificates
+if ! jq -e '.letsencrypt.Certificates | length > 0' /opt/docker/acme.json >/dev/null 2>&1; then
+    log_message "Error: ACME file does not contain valid certificates"
+    exit 1
+fi
+
+log_message "ACME file validated successfully"
+
+# Upload certificates to AWS Secrets Manager
+CERTS_CONTENT=$(cat /opt/docker/acme.json)
+if aws secretsmanager put-secret-value \
+    --secret-id ${certs_secret_arn} \
+    --secret-string "$CERTS_CONTENT" >/dev/null 2>&1; then
+    log_message "Successfully uploaded TLS certificates to secret: ${certs_secret_arn}"
+    exit 0
+else
+    log_message "Error: Failed to upload TLS certificates to secret"
+    exit 1
+fi

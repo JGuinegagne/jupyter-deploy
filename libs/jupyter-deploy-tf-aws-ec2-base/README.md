@@ -114,10 +114,13 @@ This project:
 - selects the latest Amazon Linux 2023 AMI compatible with the selected instance type
     - standard AL2023 AMI for CPU instances (x86_64 or arm64)
     - DLAMI in the case of GPU or Neuron instances (x86_64 or arm64)
-- sets up an IAM role to enable SSM, Route53 and (optionally) EFS access
+- sets up an IAM role to enable SSM, Route53, S3, and (optionally) EFS access
 - passes on the root volume settings of the AMI
 - adds an EBS volume which will mount on the Jupyter Server container
 - adds an Elastic IP (EIP) to keep the public IP of the instance stable
+- creates an S3 bucket to store deployment configuration files
+    - upload various bash scripts and docker service configuration files
+    - cloudinit script pulls the configuration files at instance setup or update time
 - writes Docker service logs to disk at `/var/log/services` using `fluent-bit`
 - configures automatic rotation for all log files using `logrotate`
 - creates an SSM instance-startup script, which references several files:
@@ -146,6 +149,7 @@ This project:
 - creates the Route 53 Hosted Zone for the domain unless it already exists
 - adds the DNS record to the Route 53 Hosted Zone
 - creates an AWS Secret to store the OAuth App client secret
+- creates an AWS Secret to store TLS certificates from Let's Encrypt for persistence across instance replacements
 - optionally creates or references EBS volumes or EFS and mount them to the home directory of the jupyter app
 - provides two presets default values for the template variables:
     - `defaults-all.tfvars` comprehensive preset with all the recommended values
@@ -167,9 +171,11 @@ This project:
 | Name | Location |
 |---|---|
 | `ami_al2023` | `template/engine/modules/ami_al2023` |
+| `certs_secret` | `template/engine/modules/certs_secret` |
 | `ec2_iam_role` | `template/engine/modules/ec2_iam_role` |
 | `ec2_instance` | `template/engine/modules/ec2_instance` |
 | `network` | `template/engine/modules/network` |
+| `s3_bucket` | `template/engine/modules/s3_bucket` |
 | `secret` | `template/engine/modules/secret` |
 | `volumes` | `template/engine/modules/volumes` |
 
@@ -196,6 +202,11 @@ This project:
 | [aws_efs_file_system](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/efs_file_system)| resource |
 | [aws_efs_mount_target](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/efs_mount_target) | resource |
 | [aws_eip](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eip) | resource |
+| [aws_s3_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
+| [aws_s3_bucket_versioning](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_versioning) | resource |
+| [aws_s3_bucket_server_side_encryption_configuration](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_server_side_encryption_configuration) | resource |
+| [aws_s3_bucket_public_access_block](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_public_access_block) | resource |
+| [aws_s3_object](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_object) | resource |
 | [aws_subnets](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/subnets) | data source |
 | [aws_subnet](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/subnet) | data source |
 | [aws_ami](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami) | data source |
@@ -218,6 +229,8 @@ This project:
 | volume_type | `string` | `gp3` | The type of EBS volume the Jupyter Server will has access to |
 | iam_role_prefix | `string` | `Jupyter-deploy-ec2-base` | The prefix for the name of the IAM role for the instance |
 | oauth_app_secret_prefix | `string` | `Jupyter-deploy-ec2-base` | The prefix for the name of the AWS secret to store your OAuth app client secret |
+| s3_bucket_prefix | `string` | `jupyter-deploy-ec2-base` | The prefix for the name of the S3 bucket where deployment scripts are stored (3-28 characters, lowercase alphanumeric with hyphens) |
+| certs_secret_prefix | `string` | `Jupyter-deploy-ec2-base` | The prefix for the name of the AWS secret where ACME certificates are stored |
 | letsencrypt_email | `string` | Required | An email for letsencrypt to notify about certificate expirations |
 | domain | `string` | Required | A domain that you own |
 | subdomain | `string` | Required | A sub-domain of `domain` to add DNS records |
@@ -243,6 +256,9 @@ This project:
 | `ami_id` | The Amazon Machine Image ID used by the EC2 instance |
 | `jupyter_server_public_ip` | The public IP assigned to the EC2 instance |
 | `secret_arn` | The ARN of the AWS Secret storing the OAuth client secret |
+| `certs_secret_arn` | The ARN of the AWS Secret where TLS certificates are stored |
+| `deployment_scripts_bucket_name` | Name of the S3 bucket where deployment scripts and service configuration files are stored |
+| `deployment_scripts_bucket_arn` | ARN of the S3 bucket where deployment scripts and service configuration files are stored |
 | `region` | The AWS region where the resources were created |
 | `deployment_id` | Unique identifier for this deployment |
 | `jupyter_build_hash` | Hash of files affecting the Jupyter container build |

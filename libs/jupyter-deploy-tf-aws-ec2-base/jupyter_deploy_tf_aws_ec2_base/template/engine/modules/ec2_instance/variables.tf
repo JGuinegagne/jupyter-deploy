@@ -29,7 +29,7 @@ variable "key_pair_name" {
 }
 
 variable "subnet_id" {
-  description = "The ID of the subnet in which to place the EC2 instance"
+  description = "Subnet ID where the instance will be placed."
   type        = string
 }
 
@@ -39,7 +39,7 @@ variable "security_group_id" {
 }
 
 variable "min_root_volume_size_gb" {
-  description = "The minimum size in gigabytes of the root EBS volume for the EC2 instance."
+  description = "The minimum size in gigabytes of the root EBS volume. Actual size is max(this, max(round(AMI_size × 1.33), AMI_size + 10))."
   type        = number
   nullable    = true
 }

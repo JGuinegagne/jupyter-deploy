@@ -37,3 +37,8 @@ output "instance_type" {
   description = "Instance type of the EC2 instance."
   value       = aws_instance.ec2_jupyter_server.instance_type
 }
+
+output "subnet_id" {
+  description = "Subnet ID where the EC2 instance is placed."
+  value       = var.subnet_id
+}
