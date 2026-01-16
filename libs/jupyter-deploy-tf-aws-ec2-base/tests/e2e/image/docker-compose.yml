@@ -44,6 +44,8 @@ services:
       - JD_E2E_SAFE_TEAM=${JD_E2E_SAFE_TEAM:-}
       - JD_E2E_LARGER_INSTANCE=${JD_E2E_LARGER_INSTANCE:-}
       - JD_E2E_LARGER_LOG_RETENTION_DAYS=${JD_E2E_LARGER_LOG_RETENTION_DAYS:-}
+      - JD_E2E_CPU_INSTANCE=${JD_E2E_CPU_INSTANCE:-}
+      - JD_E2E_GPU_INSTANCE=${JD_E2E_GPU_INSTANCE:-}
     network_mode: host
     # Keep container running in background
     command: sleep infinity

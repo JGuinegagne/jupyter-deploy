@@ -132,3 +132,29 @@ def larger_log_retention_days() -> int:
     if not larger_log_retention_days:
         raise ValueError("JD_E2E_LARGER_LOG_RETENTION_DAYS environment variable must be set")
     return int(larger_log_retention_days)
+
+
+@pytest.fixture(scope="session")
+def cpu_instance_type() -> str:
+    """Returns a CPU instance type for instance swap tests.
+
+    Raises:
+        ValueError: If JD_E2E_CPU_INSTANCE is not set
+    """
+    cpu_instance = os.getenv("JD_E2E_CPU_INSTANCE")
+    if not cpu_instance:
+        raise ValueError("JD_E2E_CPU_INSTANCE environment variable must be set")
+    return cpu_instance
+
+
+@pytest.fixture(scope="session")
+def gpu_instance_type() -> str:
+    """Returns a GPU instance type for GPU deployment tests.
+
+    Raises:
+        ValueError: If JD_E2E_GPU_INSTANCE is not set
+    """
+    gpu_instance = os.getenv("JD_E2E_GPU_INSTANCE")
+    if not gpu_instance:
+        raise ValueError("JD_E2E_GPU_INSTANCE environment variable must be set")
+    return gpu_instance

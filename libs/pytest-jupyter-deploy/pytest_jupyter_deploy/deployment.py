@@ -1,5 +1,6 @@
 """Deployment lifecycle management for E2E tests."""
 
+import contextlib
 import subprocess
 import time
 from pathlib import Path
@@ -481,3 +482,40 @@ class EndToEndDeployment:
             key_order=VARIABLES_CONFIG_V1_KEYS_ORDER,
             comments=VARIABLES_CONFIG_V1_COMMENTS,
         )
+
+    def ensure_deployed_with(self, config_args: list[str]) -> None:
+        """Ensure the deployment is updated with new configuration.
+
+        This method reconfigures and redeploys an existing project with new settings.
+        It includes resiliency logic to handle waiter script failures.
+
+        Args:
+            config_args: Additional arguments to pass to `jd config` command
+
+        Raises:
+            RuntimeError: If deployment update fails
+        """
+        # Ensure project exists
+        self.ensure_deployed()
+
+        # Run jd config with provided arguments
+        config_cmd = ["jupyter-deploy", "config"] + config_args
+        self.cli.run_command(config_cmd)
+
+        # Run jd up to apply changes
+        result = self.cli.run_command(["jupyter-deploy", "up", "-y"], timeout_seconds=self.deploy_timeout_seconds)
+
+        # Save deployment output to log file
+        log_file = self.suite_config.project_dir / "e2e-reconfig.log"
+        with open(log_file, "w") as f:
+            f.write("=== STDOUT ===\n")
+            f.write(result.stdout)
+            f.write("\n=== STDERR ===\n")
+            f.write(result.stderr)
+
+        # Wait for SSM to be ready after reconfiguration
+        # This is necessary because instance changes may cause SSM agent to restart
+        # If SSM still not ready, it's not critical for the deployment itself
+        # The waiter script may have failed, but infrastructure changes succeeded
+        with contextlib.suppress(JDCliError):
+            self.wait_for_ssm_ready()

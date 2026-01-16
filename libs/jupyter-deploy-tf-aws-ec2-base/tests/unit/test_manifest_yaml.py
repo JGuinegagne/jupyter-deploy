@@ -14,8 +14,16 @@ class TestManifest(unittest.TestCase):
     EXPECTED_REQUIREMENTS = ["terraform", "awscli", "jq"]
     EXPECTED_VALUES = ["open_url", "aws_region", "persisting_resources"]
     EXPECTED_SERVICES = ["jupyter", "traefik", "oauth"]
-    EXPECTED_HOST_COMMANDS = ["host.status", "host.start", "host.stop", "host.restart", "host.connect"]
-    EXPECTED_SERVER_COMMANDS = ["server.status", "server.start", "server.stop", "server.restart", "server.logs"]
+    EXPECTED_HOST_COMMANDS = ["host.status", "host.start", "host.stop", "host.restart", "host.connect", "host.exec"]
+    EXPECTED_SERVER_COMMANDS = [
+        "server.status",
+        "server.start",
+        "server.stop",
+        "server.restart",
+        "server.logs",
+        "server.exec",
+        "server.connect",
+    ]
     EXPECTED_USERS_COMMANDS = ["users.list", "users.add", "users.remove", "users.set"]
     EXPECTED_TEAMS_COMMANDS = ["teams.list", "teams.add", "teams.remove", "teams.set"]
     EXPECTED_ORGANIZATION_COMMANDS = ["organization.get", "organization.set", "organization.unset"]

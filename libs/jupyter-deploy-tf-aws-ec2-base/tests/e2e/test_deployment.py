@@ -3,8 +3,10 @@
 import pytest
 from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
 
+from .constants import ORDER_DEPLOYMENT
 
-@pytest.mark.order(1)  # Run first
+
+@pytest.mark.order(ORDER_DEPLOYMENT)
 @pytest.mark.full_deployment  # Only runs when deploying from scratch
 def test_immediately_available_after_deployment(
     github_oauth_app: GitHubOAuth2ProxyApplication,
