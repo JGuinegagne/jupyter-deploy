@@ -72,7 +72,7 @@ def test_gpu_2_run_gpu_notebook(
     upload_notebook(e2e_deployment, gpu_notebook, "e2e-test/gpu_check.ipynb")
 
     # Restart server to ensure clean session (prevents "Document session error" dialogs)
-    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "restart", "-s", "jupyter"])
+    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "restart"])
 
     # Re-authenticate after server restart
     github_oauth_app.ensure_authenticated()
