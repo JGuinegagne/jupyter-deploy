@@ -85,7 +85,7 @@ def test_uv_install_and_persist(
     delete_notebook(e2e_deployment, "e2e-test/uv_install_ipywidgets.ipynb")
 
     # Restart server to verify persistence
-    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "restart", "-s", "jupyter"])
+    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "restart"])
     e2e_deployment.ensure_server_running()
 
     # Verify ipywidgets is still installed after restart
@@ -121,7 +121,7 @@ def test_uv_environment_recovery(
     e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "uv", "remove", "jupyterlab"])
 
     # Restart server (should trigger auto-recovery)
-    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "restart", "-s", "jupyter"])
+    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "restart"])
 
     # Ensure server is running and user is authorized
     e2e_deployment.ensure_server_running()

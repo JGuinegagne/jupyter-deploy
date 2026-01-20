@@ -123,6 +123,29 @@ def run_notebook_in_jupyterlab(page: Page, notebook_path: str, timeout_ms: int =
     page.reload()
     page.wait_for_load_state("networkidle")
 
+    # Close all open notebook tabs to avoid strict mode violations when multiple notebooks are open
+    # This can happen if previous tests left tabs open due to errors
+    # Strategy: Use Command Palette to execute "application:close-all"
+    try:
+        # Close any open dialogs first
+        page.keyboard.press("Escape")
+        time.sleep(0.2)
+
+        # Open Command Palette with Ctrl+Shift+C
+        page.keyboard.press("Control+Shift+c")
+        time.sleep(0.5)
+
+        # Type "close all tabs" to filter commands
+        page.keyboard.type("close all tabs")
+        time.sleep(0.3)
+
+        # Press Enter to execute the "application:close-all" command
+        page.keyboard.press("Enter")
+        time.sleep(0.5)
+    except Exception as e:
+        # If closing tabs fails, continue anyway
+        logger.warning(f"Could not close all tabs: {e}")
+
     # Open the notebook directly via URL to bypass file browser caching issues
     # JupyterLab uses URLs like /lab/tree/path/to/notebook.ipynb
     current_url = page.url
@@ -134,7 +157,8 @@ def run_notebook_in_jupyterlab(page: Page, notebook_path: str, timeout_ms: int =
     time.sleep(2)  # Give JupyterLab time to load the notebook
 
     # Wait for the notebook to load - check for the notebook toolbar
-    notebook_toolbar = page.locator(".jp-NotebookPanel-toolbar")
+    # Use .first to handle cases where multiple notebooks may be open
+    notebook_toolbar = page.locator(".jp-NotebookPanel-toolbar").first
     notebook_toolbar.wait_for(state="visible", timeout=10000)
 
     # Wait a bit for the notebook to fully initialize
@@ -156,11 +180,31 @@ def run_notebook_in_jupyterlab(page: Page, notebook_path: str, timeout_ms: int =
     # Strategy: Wait for the busy indicator to appear and then disappear
     start_time = time.time()
     max_wait = timeout_ms / 1000  # Convert to seconds
+    connection_error_recovered = False  # Track if we've already recovered from connection error once
 
     # First, wait for execution to start (busy indicator appears)
     # The kernel status is in the status bar
     busy_started = False
     while time.time() - start_time < max_wait:
+        # Check for connection error dialog first
+        connection_error = page.get_by_text("Server Connection Error")
+        if connection_error.is_visible(timeout=500):
+            if connection_error_recovered:
+                # Already tried to recover once, fail now
+                raise RuntimeError(
+                    f"Server connection error detected while executing {notebook_path}. "
+                    "The Jupyter server may not be fully ready or may have crashed during notebook execution."
+                )
+            # First connection error, attempt recovery
+            logger.warning("Connection error detected, waiting 2s and refreshing page...")
+            time.sleep(2)
+            page.reload()
+            page.wait_for_load_state("networkidle")
+            connection_error_recovered = True
+            # Continue checking after refresh
+            time.sleep(0.5)
+            continue
+
         # Check if kernel is busy by looking for the filled circle icon
         # JupyterLab uses jp-FilledCircleIcon for busy state
         busy_indicator = page.locator(".jp-Kernel-statusCircle.jp-FilledCircleIcon")
@@ -187,6 +231,25 @@ def run_notebook_in_jupyterlab(page: Page, notebook_path: str, timeout_ms: int =
 
     # Now wait for kernel to become idle (busy indicator disappears)
     while time.time() - start_time < max_wait:
+        # Check for connection error dialog
+        connection_error = page.get_by_text("Server Connection Error")
+        if connection_error.is_visible(timeout=500):
+            if connection_error_recovered:
+                # Already tried to recover once, fail now
+                raise RuntimeError(
+                    f"Server connection error detected while executing {notebook_path}. "
+                    "The Jupyter server may not be fully ready or may have crashed during notebook execution."
+                )
+            # First connection error, attempt recovery
+            logger.warning("Connection error detected, waiting 2s and refreshing page...")
+            time.sleep(2)
+            page.reload()
+            page.wait_for_load_state("networkidle")
+            connection_error_recovered = True
+            # Continue checking after refresh
+            time.sleep(0.5)
+            continue
+
         busy_indicator = page.locator(".jp-Kernel-statusCircle.jp-FilledCircleIcon")
         try:
             # Check if busy indicator is no longer visible

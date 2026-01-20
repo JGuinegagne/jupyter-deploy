@@ -129,43 +129,6 @@ service-user hard nofile 8192
 EOF
 chmod 440 /etc/security/limits.d/service-user.conf
 
-# Allocate swap memory based on RAM amount
-TOTAL_MEMORY_MB=$(free -m | awk '/^Mem:/{print $2}')
-if [ $TOTAL_MEMORY_MB -le 1024 ]; then
-    SWAP_SIZE_MB=2048
-elif [ $TOTAL_MEMORY_MB -le 8192 ]; then
-    SWAP_SIZE_MB=$TOTAL_MEMORY_MB
-else
-    SWAP_SIZE_MB=8192
-fi
-
-CURRENT_SWAP_KB=$(free -k | awk '/^Swap:/{print $2}')
-NEEDED_SWAP_KB=$((SWAP_SIZE_MB * 1024))
-SWAP_CHANGED=false
-
-if [ $CURRENT_SWAP_KB -eq 0 ]; then
-    echo "Creating new swap file of $${SWAP_SIZE_MB}MB..."
-    fallocate -l $${SWAP_SIZE_MB}M /swapfile
-    SWAP_CHANGED=true
-elif [ $CURRENT_SWAP_KB -ne $NEEDED_SWAP_KB ]; then
-    echo "Resizing swap file from $((CURRENT_SWAP_KB/1024))MB to $${SWAP_SIZE_MB}MB..."
-    swapoff -a
-    fallocate -l $${SWAP_SIZE_MB}M /swapfile
-    SWAP_CHANGED=true
-else
-    echo "Swap file is already configured correctly ($${SWAP_SIZE_MB}MB)"
-fi
-
-# apply (idempotent)
-if [ "$SWAP_CHANGED" = true ]; then
-    chmod 600 /swapfile
-    mkswap /swapfile
-    swapon /swapfile
-fi
-if ! grep -q '/swapfile' /etc/fstab; then
-    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-fi
-
 # Mount the jupyter-data drive and save config to persist on reboots
 mkdir -p /mnt/jupyter-data
 if ! blkid /dev/sdf | grep -q 'TYPE="ext4"'; then
@@ -178,7 +141,7 @@ if ! mountpoint -q /mnt/jupyter-data; then
     mount /dev/sdf /mnt/jupyter-data
 fi
 
-chown service-user:service-user /mnt/jupyter-data
+chown -R service-user:service-user /mnt/jupyter-data
 chmod 750 /mnt/jupyter-data
 if ! grep -q '/mnt/jupyter-data' /etc/fstab; then
     echo "/dev/sdf /mnt/jupyter-data ext4 defaults,nofail 0 2" | tee -a /etc/fstab

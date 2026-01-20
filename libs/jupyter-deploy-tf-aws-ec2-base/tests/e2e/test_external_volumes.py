@@ -1,15 +1,4 @@
-"""E2E tests for external volumes (EBS and EFS) functionality.
-
-SKIPPED: These tests are currently skipped because adding multiple external volumes
-causes the SSM document (instance_startup) to exceed AWS's 65,536 byte limit.
-The SSM document embeds all startup scripts, docker files, and configurations inline.
-These tests require 2 EBS + 1 EFS volumes which pushes the document size to ~69KB.
-
-TODO: Externalize scripts/dockerfiles to S3 instead of embedding them in SSM document.
-Once implemented, these tests can be re-enabled.
-
-See: https://github.com/jupyter-infra/jupyter-deploy/issues/119
-"""
+"""E2E tests for external volumes (EBS and EFS) functionality."""
 
 from pathlib import Path
 
@@ -21,7 +10,6 @@ from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplicati
 from .constants import ORDER_EXTERNAL_VOLUMES
 
 
-@pytest.mark.skip(reason="SSM document size limit - requires S3 externalization of scripts")
 @pytest.mark.order(ORDER_EXTERNAL_VOLUMES)
 @pytest.mark.mutating
 def test_external_volumes_provisioning(
@@ -62,7 +50,6 @@ def test_external_volumes_provisioning(
     github_oauth_app.verify_jupyterlab_accessible()
 
 
-@pytest.mark.skip(reason="SSM document size limit - requires S3 externalization of scripts")
 @pytest.mark.order(ORDER_EXTERNAL_VOLUMES + 1)
 @pytest.mark.mutating
 def test_external_volumes_ebs(
@@ -100,7 +87,6 @@ def test_external_volumes_ebs(
     delete_notebook(e2e_deployment, "e2e-test/external_volumes_ebs.ipynb")
 
 
-@pytest.mark.skip(reason="SSM document size limit - requires S3 externalization of scripts")
 @pytest.mark.order(ORDER_EXTERNAL_VOLUMES + 2)
 @pytest.mark.mutating
 def test_external_volumes_efs(

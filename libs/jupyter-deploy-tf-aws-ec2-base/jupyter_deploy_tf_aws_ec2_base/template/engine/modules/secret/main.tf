@@ -2,6 +2,7 @@
 resource "aws_secretsmanager_secret" "oauth_github_client_secret" {
   name_prefix = "${var.oauth_app_secret_prefix}-${var.postfix}-"
   tags        = var.combined_tags
+  description = "OAuth app client secret - managed by jupyter-deploy."
 }
 
 # Seed the AWS Secret with the OAuth GitHub client secret

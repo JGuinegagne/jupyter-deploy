@@ -198,10 +198,10 @@ wait_for_cloudinit_execution() {
         # Check if status is None or empty, which means the association is still pending
         if [ "$ASSOC_STATUS" = "None" ] || [ "$ASSOC_STATUS" = "Failed" ] || [ "$ASSOC_STATUS" = "Queued" ] || [ "$ASSOC_STATUS" = "Pending" ] || [ -z "$ASSOC_STATUS" ] ; then
             echo "Association status not yet available or might have run too early (Failed), retrying..."
-            # Sleep and retry a few times (accelerated instances need more time, Docker image pulls can take 2-3 minutes)
-            # With 5min docker-compose timeout, worst case: 5min + 2min retry + 2min retry = ~9min, so allow 10min
+            # Sleep and retry for up to 30 minutes (GPU instances need more time for cloudinit + docker build)
+            # With 10min docker-compose build timeout, worst case: 10min + 5min retry + 5min retry + cloudinit overhead = ~30min
             local retry_count=0
-            local max_retries=30
+            local max_retries=90
             while [ "$ASSOC_STATUS" = "None" ] || [ "$ASSOC_STATUS" = "Failed" ] || [ "$ASSOC_STATUS" = "Queued" ] || [ "$ASSOC_STATUS" = "Pending" ] || [ -z "$ASSOC_STATUS" ]; do
                 if [ $retry_count -ge $max_retries ]; then
                     echo "Max retries reached, breaking."

@@ -31,6 +31,22 @@ output "secret_arn" {
   value       = module.secret.secret_arn
 }
 
+output "certs_secret_arn" {
+  description = "ARN of the AWS Secret where TLS certificates are stored."
+  value       = module.certs_secret.secret_arn
+}
+
+# S3 bucket information
+output "deployment_scripts_bucket_name" {
+  description = "Name of the S3 bucket where deployment scripts and service configuration files are stored."
+  value       = module.s3_bucket.bucket_name
+}
+
+output "deployment_scripts_bucket_arn" {
+  description = "ARN of the S3 bucket where deployment scripts and service configuration files are stored."
+  value       = module.s3_bucket.bucket_arn
+}
+
 # Declarative value for AWS SDK
 output "region" {
   description = "Name of the AWS region where the resources are deployed."

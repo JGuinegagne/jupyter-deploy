@@ -6,10 +6,24 @@ exec > >(tee -a /var/log/jupyter-deploy/check-status.log) 2>&1
 REQUIRED_CONTAINERS=("jupyter" "traefik" "oauth")
 ACME_FILE="/opt/docker/acme.json"
 STARTED_FLAG="/opt/docker/started.txt"
+STATUS_STATE_FILE="/var/run/check-status-state"
 
 log_message() {
   local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
   echo "[$timestamp] $*"
+}
+
+get_previous_state() {
+  if [ -f "$STATUS_STATE_FILE" ]; then
+    cat "$STATUS_STATE_FILE"
+  else
+    echo ""
+  fi
+}
+
+save_current_state() {
+  local state=$1
+  echo "$state" > "$STATUS_STATE_FILE"
 }
 
 check_started_flag() {
@@ -90,11 +104,14 @@ check_certs() {
 # Main status check
 main() {
   set +e
+
   if ! check_started_flag; then
+    save_current_state "INITIALIZING"
     exit 10 # INITIALIZING
   fi
 
   if ! check_docker_running; then
+    save_current_state "STOPPED"
     exit 20 # STOPPED
   fi
 
@@ -106,13 +123,29 @@ main() {
   set -e
 
   if [ "$container_status" -eq 2 ]; then
+    save_current_state "STOPPED"
     exit 20 # STOPPED
   elif [ "$cert_status" -eq 1 ]; then
+    save_current_state "FETCHING_CERTIFICATES"
     exit 30 # FETCHING_CERTIFICATES
   elif [ "$container_status" -eq 0 ] && [ "$cert_status" -eq 0 ]; then
     log_message "In-service: containers are running and TLS certificates are available"
+
+    # If transitioning from FETCHING_CERTIFICATES to IN_SERVICE, upload certificates
+    PREVIOUS_STATE=$(get_previous_state)
+    if [ "$PREVIOUS_STATE" = "FETCHING_CERTIFICATES" ]; then
+      log_message "Transitioning from FETCHING_CERTIFICATES to IN_SERVICE - uploading certificates"
+      if /usr/local/bin/upload-acme.sh; then
+        log_message "Successfully uploaded certificates to secret"
+      else
+        log_message "Warning: Failed to upload certificates to secret"
+      fi
+    fi
+
+    save_current_state "IN_SERVICE"
     exit 0 # IN_SERVICE
   else
+    save_current_state "OUT_OF_SERVICE"
     exit 40 # OUT_OF_SERVICE
   fi
 }

@@ -68,10 +68,14 @@ variable "ami_id" {
 variable "min_root_volume_size_gb" {
   description = <<-EOT
     The minimum size in gigabytes of the root EBS volume for the EC2 instance.
-    
-    If not specified, defaults to the size provided by the AMI.
-    If specified but smaller than the AMI's snapshot size, the larger value will be used.
-    
+
+    The actual volume size is calculated as:
+    max(this_value, max(ceil(AMI_size × 1.33), AMI_size + 10))
+
+    This ensures volumes scale proportionally with AMI requirements while guaranteeing at least
+    10GB headroom and maintaining a safety minimum. When switching instance types, the volume
+    will resize up or down based on the new AMI's needs.
+
     Recommended: 30
   EOT
   type        = number
@@ -126,6 +130,46 @@ variable "oauth_app_secret_prefix" {
     The prefix for the name of the AWS secret where to store your OAuth app client secret.
 
     Terraform will assign the postfix to ensure there is no name collision in your AWS account.
+
+    Recommended: Jupyter-deploy-ec2-base
+  EOT
+  type        = string
+}
+
+variable "s3_bucket_prefix" {
+  description = <<-EOT
+    The prefix for the name of the S3 bucket where startup scripts are stored.
+
+    Terraform will append the deployment ID and AWS will append a random suffix
+    to ensure global uniqueness across all AWS accounts.
+
+    Must be lowercase alphanumeric with hyphens, 3-28 characters, cannot start or end with hyphen.
+
+    Recommended: jupyter-deploy-ec2-base
+  EOT
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9-]+$", var.s3_bucket_prefix))
+    error_message = "The s3_bucket_prefix must contain only lowercase alphanumeric characters and hyphens."
+  }
+
+  validation {
+    condition     = can(regex("^[a-z0-9].*[a-z0-9]$", var.s3_bucket_prefix))
+    error_message = "The s3_bucket_prefix cannot start or end with a hyphen."
+  }
+
+  validation {
+    condition     = length(var.s3_bucket_prefix) >= 3 && length(var.s3_bucket_prefix) <= 28
+    error_message = "The s3_bucket_prefix must be between 3 and 28 characters to allow for the deployment ID suffix (max 37 characters for bucket_prefix)."
+  }
+}
+
+variable "certs_secret_prefix" {
+  description = <<-EOT
+    The prefix for the name of the AWS secret where ACME certificates are stored.
+
+    Terraform will append the deployment ID to ensure uniqueness in your AWS account.
 
     Recommended: Jupyter-deploy-ec2-base
   EOT

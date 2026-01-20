@@ -51,6 +51,14 @@ module "secret" {
   oauth_app_client_secret = var.oauth_app_client_secret
 }
 
+# Certificates secret module for storing TLS certificates
+module "certs_secret" {
+  source              = "./modules/certs_secret"
+  combined_tags       = local.combined_tags
+  postfix             = local.doc_postfix
+  certs_secret_prefix = var.certs_secret_prefix
+}
+
 # IAM role module for instance profile and policies
 module "ec2_iam_role" {
   source               = "./modules/ec2_iam_role"
@@ -68,12 +76,41 @@ module "ami_al2023" {
   instance_type = var.instance_type
 }
 
+# Query for existing instance created by this project to preserve AZ
+data "aws_instance" "existing" {
+  filter {
+    name   = "tag:Source"
+    values = ["jupyter-deploy"]
+  }
+  filter {
+    name   = "tag:Template"
+    values = [local.template_name]
+  }
+  filter {
+    name = "tag:DeploymentId"
+    # Use try() to handle fresh deployments where random_id.postfix.hex is unknown
+    # Fallback to dummy value that won't match any existing instances
+    values = [try(random_id.postfix.hex, "i-do-not-exist-yet")]
+  }
+  filter {
+    name   = "instance-state-name"
+    values = ["pending", "running", "stopping", "stopped"]
+  }
+}
+
+locals {
+  # Select subnet for instance placement:
+  # 1. If existing instance found: use its subnet to preserve AZ (avoids EBS volume data loss)
+  # 2. If no existing instance: use first subnet from VPC for consistency across fresh deployments
+  selected_subnet_id = try(data.aws_instance.existing.subnet_id, module.network.subnet_ids[0])
+}
+
 # EC2 instance module
 module "ec2_instance" {
   source                  = "./modules/ec2_instance"
   ami_id                  = coalesce(var.ami_id, module.ami_al2023.ami_id)
   instance_type           = var.instance_type
-  subnet_id               = module.network.subnet_id
+  subnet_id               = local.selected_subnet_id
   security_group_id       = module.network.security_group_id
   key_pair_name           = var.key_pair_name
   combined_tags           = local.combined_tags
@@ -82,6 +119,11 @@ module "ec2_instance" {
   min_root_volume_size_gb = var.min_root_volume_size_gb
   instance_profile_name   = module.ec2_iam_role.instance_profile_name
   eip_allocation_id       = module.network.eip_allocation_id
+}
+
+# Query the selected subnet to get its AZ (known at plan time, avoids EBS volume replacement)
+data "aws_subnet" "selected" {
+  id = module.ec2_instance.subnet_id
 }
 
 # Volumes module for EBS/EFS volumes
@@ -94,9 +136,21 @@ module "volumes" {
   volume_type           = var.volume_type
   additional_ebs_mounts = var.additional_ebs_mounts
   additional_efs_mounts = var.additional_efs_mounts
-  availability_zone     = module.ec2_instance.availability_zone
+  availability_zone     = data.aws_subnet.selected.availability_zone
   instance_id           = module.ec2_instance.id
   efs_security_group_id = module.network.efs_security_group_id
+}
+
+# S3 bucket module for storing deployment scripts and service configuration files.
+# The SSM document that configures the instance pulls the script from this bucket.
+# This is necessary because the SSM document size must be below 65kB.
+# Note: cloudinit.sh and cloudinit-volumes.sh remain embedded in SSM for visibility
+module "s3_bucket" {
+  source             = "./modules/s3_bucket"
+  bucket_name_prefix = "${var.s3_bucket_prefix}-${local.doc_postfix}"
+  force_destroy      = true
+  script_files       = local.all_script_files
+  combined_tags      = local.combined_tags
 }
 
 # 'services.tf' configures the EC2 instance using the modules above to:
