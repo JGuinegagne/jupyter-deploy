@@ -1,5 +1,6 @@
 """E2E tests for UV package manager functionality."""
 
+import time
 from pathlib import Path
 
 import pytest
@@ -38,6 +39,7 @@ def test_uv_switch_to_uv(
 
 @pytest.mark.order(ORDER_UV + 1)
 @pytest.mark.mutating
+@pytest.mark.flaky(reruns=1)
 def test_uv_install_and_persist(
     e2e_deployment: EndToEndDeployment,
     github_oauth_app: GitHubOAuth2ProxyApplication,
@@ -73,6 +75,10 @@ def test_uv_install_and_persist(
 
     # Restart server to ensure clean session (prevents "Document session error" dialogs)
     e2e_deployment.cli.run_command(["jupyter-deploy", "server", "restart"])
+
+    # Wait for server to fully stabilize after restart before running notebook
+    # Without this delay, notebook execution can fail with "Server Connection Error"
+    time.sleep(2)
 
     # Re-authenticate after server restart
     github_oauth_app.ensure_authenticated()

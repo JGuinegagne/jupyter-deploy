@@ -380,9 +380,7 @@ mainSteps:
     inputs:
       runCommand:
         - |
-          # Force clean restart with proper depends_on ordering. Docker auto-restart after instance
-          # stop/start ignores depends_on, causing fluent-bit connection failures.
-          sh /usr/local/bin/update-server.sh restart all
+          sh /opt/docker/docker-startup.sh
 DOC
 
   # Additional validations

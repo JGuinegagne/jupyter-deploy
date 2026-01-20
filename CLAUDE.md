@@ -1,34 +1,35 @@
 # Project Context
 This is a monorepo to deploy Jupyter or IDE types of application to the Cloud.
-It consists in several packaged, all managed as uv workspace members.
+It consists in several packages, all managed as uv workspace members.
 
 ## The CLI package
 Code: `./libs/jupyter-deploy`
 CLI tool for deploying Jupyter server to the cloud.
 
-It's cloud-provider and infrastructure-as-code agnostic. It MUST NOT depend directly on:
-- such cloud provider-specific libraries (e.g. `boto3` for AWS)
-- infrastructure-as-code specific code paths (e.g. it MUST NOT work only with `terraform`)
-The main code paths/imports of the CLI MUST NOT import any of such package.
+It's cloud-provider and infrastructure-as-code agnostic. The CLI code MUST NOT:
+- depend directly on any cloud provider-specific libraries (e.g. `boto3` for AWS)
+- assume that an infrastructure-as-code engine is selected (e.g. it MUST remain extensible to other engines than `terraform`)
 
-However, specific implementation need such packages, so we use optional installs such as `pip install juptyer-deploy[aws]` 
-The module `provider/instruction_runner_factory` handles these optional imports.
-You MUST NOT break that pattern with imports to cloud-provider or infrastructure-as-code specific libraries outside of the instruction
-runner code paths.
+To access cloud-provider specific dependencies, we use optional installs such as `pip install juptyer-deploy[aws]` 
+Then module `provider/instruction_runner_factory` handles these optional imports.
+You MUST NOT break that pattern with import statements to cloud-provider or infrastructure-as-code specific libraries
+outside of the instruction runner code paths.
 
 ## Base template package
 Code: `./libs/jupyter-deploy-tf-ec2-base`
 
 Primary template used by the CLI, referred to as "base template".
-  - infrastructure-as-code engine: `terraform`
-  - cloud provider: `aws`
-  - identity provider: `github`
+- infrastructure-as-code engine: `terraform`
+- cloud provider: `aws`
+- identity provider: `github`
 
 All variables MUST be defined in `variables.tf` without default values.
 Default values MUST be set in `presets/defaults-all.tfvars`.
 There MUST BE be any `variable` blocks in files other than `variables.tf`.
 
-IMPORTANT: Do not copy files to `/home/jovyan` during Docker build time. The EBS volume for Jupyter data is mounted at runtime, and any files copied during build will be hidden by this mount. Instead, copy files to a location like `/opt` during build and then copy them to `/home/jovyan` in startup scripts.
+IMPORTANT: Do not copy files to `/home/jovyan` during Docker build time.
+The EBS volume for Jupyter data is mounted at runtime, and any files copied during build will be hidden by this mount.
+Instead, copy files to a location like `/opt` during build and then copy them to `/home/jovyan` in startup scripts.
 
 ## E2E Pytest plugin package
 Code: `./libs/pytest-jupyter-deploy`
@@ -46,14 +47,14 @@ Always run from the root of the repository:
 
 ## General coding rules
 1. you MUST NOT use runtime import in python; only exception is `<cli>/provider/instrauction_runner_factory` module
-2. you MUST NOT silence linters without user permission
-3. you MUST avoid docstrings that merely repeat the method name
+2. you MUST NOT silence linters without the user's permission
+3. you MUST NOT write docstrings that merely repeat a method name
 
 ## Writing unit tests
 Unit tests are located in `libs/<package-name>/tests/unit`
 
 1. Define `unittest.TestCase` instance for each class, function or major method to be tested
-2. Do not use `pytest.fixtures`
+2. you SHOULD NOT use `pytest.fixtures`
 3. Use `@patch()` or inline `with patch` when possible
 4. Always set `: Mock` typing for `mypy` with patches
 5. When mocking boto3 types in tests, use proper type annotations (e.g., `instance_state: InstanceStateTypeDef = {"Code": code}`) rather than casting
@@ -70,14 +71,14 @@ E2E tests are located in `libs/<template-name>/tests/e2e/`
 # E2E Testing Workflow
 E2E tests validate a complete deployment with actual CLI commands and browser-based interactions using `playwright`.
 
-The E2E tests run in a local container using `pytest` where `playwright` is installed.
+The E2E tests run in a local container using `pytest` where `playwright` and webbrowsers are installed.
 - `just e2e-up` builds and starts the container.
-- `just e2e-sync` synchronizes the project workspace file with the container.
+- `just e2e-sync` synchronizes the workspace files with the container.
 Look at `./justfile` for more details.
 IMPORTANT: you CANNOT run any e2e directly with `uv run pytest E2E-TEST-SELECTOR`, you MUST use a `just` command.
 
 ## Prerequisites
-1. A deployed project that you want to test against located in a dir relative to the workspace root (e.g., `sandbox`)
+1. A deployed project to test against located in a dir relative to the workspace root (e.g., `./sandbox`)
 2. Some E2E tests require environment variables to be set:
     - look at `./env.example` in the workspace root
     - the user must have created an `.env` file with values at the workspace root
@@ -92,7 +93,7 @@ To run the configuration test:
 1. ask the user for the `<project-dir>` to use
 2. run `just test-e2e <project-dir> test_configuration`
 
-## Authentication Setup
+## Authentication Setup for the base template
 Before running E2E tests, ask the user to run GitHub OAuth authentication: `just auth-setup <project-dir>`.
 This will:
 - Launch a browser for the user to authenticate with GitHub (with 2FA presumably)
@@ -107,10 +108,12 @@ Examples:
 - Run all E2E tests: `just test-e2e sandbox3 "" mutate=true`
 - Run specific test file: `just test-e2e sandbox3 test_users` (possibly needs `mutate=true`)
 
+The test container saves screenshots of failed tests to `./test-results`
+
 # Debugging and Investing Deployments
 
 ## Useful jd commands
-Essential commands for debugging deployed instance that use the base template.
+Essential commands for debugging a deployed instance that uses the base template.
 - `jd server status` - Check server health status (IN_SERVICE, OUT_OF_SERVICE, etc.)
 - `jd server restart` - Restart all services
 - `jd host status` - Check EC2 instance status
@@ -123,8 +126,8 @@ Essential commands for debugging deployed instance that use the base template.
 - `jd up` - Apply infrastructure changes
 - `jd show --variables --list` - Display list of available variables
 - `jd show --outputs --list` - Display list of available outputs
-- `jd show -v VARIABLE-NAME --text` - Display the value of a variable (careful: it does not guarantee it was applied with `jd up`)
-- `jd show -o OUTPUT-NAME --text` - Display the value of an output
+- `jd show -v VARIABLE-NAME --text` - Display the variable value (careful: it does not guarantee it was applied with `jd up`)
+- `jd show -o OUTPUT-NAME --text` - Display the output value
 - `jd --help` or `jd CMD SUB-CMD --help` - Find out about API shapes 
 
 ## Key file locations on instance in the base template
@@ -141,4 +144,3 @@ Essential commands for debugging deployed instance that use the base template.
 - `/opt/docker/docker-startup.sh` - Docker services startup script
 - `/opt/docker/dockerfile.jupyter` - Jupyter container Dockerfile
 - `/opt/docker/traefik.yml` - Traefik reverse proxy configuration
-
