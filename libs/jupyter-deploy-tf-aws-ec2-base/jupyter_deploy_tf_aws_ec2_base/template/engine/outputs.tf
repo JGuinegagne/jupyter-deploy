@@ -60,9 +60,14 @@ output "deployment_id" {
 }
 
 # Build information
-output "jupyter_build_hash" {
-  description = "Hash of files affecting the Jupyter container build."
-  value       = local.jupyter_build_hash
+output "images_build_hash" {
+  description = "Hash of files affecting docker compose image builds (jupyter, log-rotator)."
+  value       = local.images_build_hash
+}
+
+output "scripts_files_hash" {
+  description = "Hash of all deployment script files which controls SSM association re-execution."
+  value       = local.scripts_files_hash
 }
 
 # server.status CLI handling

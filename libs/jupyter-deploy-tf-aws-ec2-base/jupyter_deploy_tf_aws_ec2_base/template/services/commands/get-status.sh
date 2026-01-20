@@ -18,6 +18,9 @@ case $STATUS in
     echo "FETCHING_CERTIFICATES"
     ;;
   40)
+    echo "STARTING"
+    ;;
+  50)
     echo "OUT_OF_SERVICE"
     ;;
   *)

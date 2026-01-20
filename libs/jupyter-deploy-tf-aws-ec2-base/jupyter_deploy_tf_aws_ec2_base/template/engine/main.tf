@@ -76,41 +76,13 @@ module "ami_al2023" {
   instance_type = var.instance_type
 }
 
-# Query for existing instance created by this project to preserve AZ
-data "aws_instance" "existing" {
-  filter {
-    name   = "tag:Source"
-    values = ["jupyter-deploy"]
-  }
-  filter {
-    name   = "tag:Template"
-    values = [local.template_name]
-  }
-  filter {
-    name = "tag:DeploymentId"
-    # Use try() to handle fresh deployments where random_id.postfix.hex is unknown
-    # Fallback to dummy value that won't match any existing instances
-    values = [try(random_id.postfix.hex, "i-do-not-exist-yet")]
-  }
-  filter {
-    name   = "instance-state-name"
-    values = ["pending", "running", "stopping", "stopped"]
-  }
-}
-
-locals {
-  # Select subnet for instance placement:
-  # 1. If existing instance found: use its subnet to preserve AZ (avoids EBS volume data loss)
-  # 2. If no existing instance: use first subnet from VPC for consistency across fresh deployments
-  selected_subnet_id = try(data.aws_instance.existing.subnet_id, module.network.subnet_ids[0])
-}
 
 # EC2 instance module
 module "ec2_instance" {
   source                  = "./modules/ec2_instance"
   ami_id                  = coalesce(var.ami_id, module.ami_al2023.ami_id)
   instance_type           = var.instance_type
-  subnet_id               = local.selected_subnet_id
+  subnet_id               = module.network.subnet_ids[0]
   security_group_id       = module.network.security_group_id
   key_pair_name           = var.key_pair_name
   combined_tags           = local.combined_tags

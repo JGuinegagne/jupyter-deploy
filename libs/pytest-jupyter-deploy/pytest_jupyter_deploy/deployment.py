@@ -22,6 +22,7 @@ from pytest_jupyter_deploy.constants import (
     CONFIGURATION_DEFAULT_NAME,
     DEPLOY_TIMEOUT_SECONDS,
     DESTROY_TIMEOUT_SECONDS,
+    E2E_CONFIG_LOG_FILE,
     E2E_DOWN_LOG_FILE,
     E2E_UP_LOG_FILE,
 )
@@ -203,6 +204,58 @@ class EndToEndDeployment:
         if not self._is_server_stopped():
             raise RuntimeError("Jupyter Server failed to stop")
 
+    def configure_project(self, cli: JDCli | None = None) -> None:
+        """Configure the E2E project by running jd config -s.
+
+        This method saves output of config to <project_dir>/logs/e2e-config.log
+
+        Args:
+            cli: Optional CLI instance to use. If provided, uses cli.project_dir as the project directory.
+                 If not provided, uses self.cli and self.suite_config.project_dir.
+
+        Raises:
+            RuntimeError: If configuration fails, with paths to logs and project directory
+        """
+        # Ensure suite config is loaded
+        self.suite_config.load()
+
+        # Determine which CLI and project directory to use
+        if cli is not None:
+            # Use provided CLI and its project directory
+            use_cli = cli
+            project_dir = cli.project_dir
+            # Prepare configuration to the custom project directory
+            self.suite_config.prepare_configuration(self.config_name, target_dir=project_dir)
+        else:
+            # Use self.cli and suite_config.project_dir
+            use_cli = self.cli
+            project_dir = self.suite_config.project_dir
+            # Prepare configuration (copies variables.yaml to default project dir)
+            self.suite_config.prepare_configuration(self.config_name)
+
+        # Create logs directory
+        logs_dir = project_dir / "logs"
+        logs_dir.mkdir(exist_ok=True)
+
+        # Run jd config -s
+        try:
+            result = use_cli.run_command(["jupyter-deploy", "config", "-s"])
+            self.save_command_logs(E2E_CONFIG_LOG_FILE, result, project_dir=logs_dir)
+        except JDCliError as e:
+            # Save error output to log file
+            log_file = logs_dir / E2E_CONFIG_LOG_FILE
+            with open(log_file, "w") as f:
+                f.write("=== ERROR ===\n")
+                f.write(str(e))
+
+            # Raise with helpful error message including paths
+            raise RuntimeError(
+                f"Configuration failed for project.\n"
+                f"Project directory: {project_dir}\n"
+                f"Logs file: {log_file}\n"
+                f"Error: {e}"
+            ) from e
+
     def _deploy_e2e_project(self) -> None:
         """Calls jd init, jd config, jd up."""
         # Initialize project
@@ -230,22 +283,12 @@ class EndToEndDeployment:
         ]
         self.cli.run_command(init_cmd)
 
-        # Copy the variables.yaml with specified configuration
-        self.suite_config.prepare_configuration(self.config_name)
-
-        # Call the CLI commands
-        self.cli.run_command(["jupyter-deploy", "config", "-s"])
+        # Call config and capture output
+        self.configure_project()
 
         # Run deployment and capture output
         result = self.cli.run_command(["jupyter-deploy", "up", "-y"], timeout_seconds=self.deploy_timeout_seconds)
-
-        # Save deployment output to log file
-        log_file = self.suite_config.project_dir / E2E_UP_LOG_FILE
-        with open(log_file, "w") as f:
-            f.write("=== STDOUT ===\n")
-            f.write(result.stdout)
-            f.write("\n=== STDERR ===\n")
-            f.write(result.stderr)
+        self.save_command_logs(E2E_UP_LOG_FILE, result)
 
         self._is_deployed = True
 
@@ -259,14 +302,7 @@ class EndToEndDeployment:
             result = self.cli.run_command(
                 ["jupyter-deploy", "down", "-y"], timeout_seconds=self.destroy_timeout_seconds
             )
-
-            # Save teardown output to log file
-            log_file = self.suite_config.project_dir / E2E_DOWN_LOG_FILE
-            with open(log_file, "w") as f:
-                f.write("=== STDOUT ===\n")
-                f.write(result.stdout)
-                f.write("\n=== STDERR ===\n")
-                f.write(result.stderr)
+            self.save_command_logs(E2E_DOWN_LOG_FILE, result)
         finally:
             self._is_deployed = False
 
@@ -397,14 +433,19 @@ class EndToEndDeployment:
                     raise ValueError("Cannot set teams without an organization")
             self.cli.run_command(["jupyter-deploy", "teams", "set"] + teams)
 
-    def save_command_logs(self, log_filename: str, result: subprocess.CompletedProcess[str]) -> None:
+    def save_command_logs(
+        self, log_filename: str, result: subprocess.CompletedProcess[str], project_dir: Path | None = None
+    ) -> None:
         """Save command output to a log file in the project directory.
 
         Args:
             log_filename: Name of the log file (e.g., "e2e-upgrade-instance.log")
             result: CompletedProcess instance from run_command
+            project_dir: Optional project directory to save logs to.
+                         If not provided, uses self.suite_config.project_dir.
         """
-        log_file = self.suite_config.project_dir / log_filename
+        target_dir = project_dir if project_dir is not None else self.suite_config.project_dir
+        log_file = target_dir / log_filename
         with open(log_file, "w") as f:
             f.write("=== STDOUT ===\n")
             f.write(result.stdout)
