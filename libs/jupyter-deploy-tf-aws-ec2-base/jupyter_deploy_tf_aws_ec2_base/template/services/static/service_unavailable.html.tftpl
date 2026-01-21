@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jupyter Service Unavailable</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #e53e3e;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        h2 {
+            margin-top: 30px;
+            color: #2c5282;
+        }
+        .section {
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        li {
+            margin-bottom: 10px;
+        }
+        a {
+            color: #3182ce;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        code {
+            background-color: #edf2f7;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        .warning {
+            background-color: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Jupyter Service Unavailable</h1>
+
+    <div class="warning">
+        <p><strong>The Jupyter service is temporarily unavailable.</strong></p>
+        <p>The service container is running but the Jupyter application is not responding to requests.</p>
+    </div>
+
+    <h2>What Happened?</h2>
+
+    <div class="section">
+        <p>This error occurs when the Jupyter application inside the container fails its health check. Common causes include:</p>
+        <ul>
+            <li>Broken Python environment (e.g., removed critical packages like <code>jupyterlab</code>)</li>
+            <li>Application crash or internal error</li>
+            <li>Memory or resource exhaustion</li>
+            <li>Configuration errors in Jupyter settings</li>
+        </ul>
+    </div>
+
+    <h2>Troubleshooting</h2>
+
+    <div class="section">
+        <ol>
+            <li>
+                <strong>Check the Jupyter service logs</strong>
+                <p>View the logs to identify the error:</p>
+                <code>jd server logs</code>
+            </li>
+
+            <li>
+                <strong>Restart all the services</strong>
+                <p>A full server restart ensures all services are in a clean state:</p>
+                <code>jd server restart</code>
+                <p>This will restore any packages that were accidentally removed and fix most application errors.</p>
+            </li>
+
+            <li>
+                <strong>Check server status</strong>
+                <p>Monitor the server status to see when it returns to service:</p>
+                <code>jd server status</code>
+            </li>
+        </ol>
+    </div>
+
+    <h2>Need more help?</h2>
+
+    <div class="section">
+        <p>If the issue persists after restarting:</p>
+        <ul>
+            <li>Examine the server logs for detailed error messages: <code>jd server logs</code></li>
+            <li>Check if the server instance has sufficient resources (CPU, memory, disk space) <code>jd server exec -- CMD</code></li>
+        </ul>
+    </div>
+</body>
+</html>

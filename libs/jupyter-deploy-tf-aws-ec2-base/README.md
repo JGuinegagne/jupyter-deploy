@@ -261,7 +261,8 @@ This project:
 | `deployment_scripts_bucket_arn` | ARN of the S3 bucket where deployment scripts and service configuration files are stored |
 | `region` | The AWS region where the resources were created |
 | `deployment_id` | Unique identifier for this deployment |
-| `jupyter_build_hash` | Hash of files affecting the Jupyter container build |
+| `images_build_hash` | Hash of files affecting docker compose image builds (jupyter, log-rotator) |
+| `scripts_files_hash` | Hash of all deployment script files which controls SSM association re-execution |
 | `server_status_check_document` | Name of the SSM document to verify if the server is ready to serve traffic |
 | `server_update_document` | Name of the SSM document to control server container operations |
 | `server_logs_document` | Name of the SSM document to print server logs to terminal |

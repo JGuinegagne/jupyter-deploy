@@ -101,6 +101,16 @@ check_certs() {
   return 1
 }
 
+check_jupyter_ready() {
+  # Try to reach a JupyterLab resource to verify it's functional
+  if docker exec jupyter curl -sf "http://localhost:8888/lab/favicon.ico" >/dev/null 2>&1; then
+    return 0
+  else
+    log_message "Containers running but Jupyter not ready yet"
+    return 1
+  fi
+}
+
 # Main status check
 main() {
   set +e
@@ -129,24 +139,33 @@ main() {
     save_current_state "FETCHING_CERTIFICATES"
     exit 30 # FETCHING_CERTIFICATES
   elif [ "$container_status" -eq 0 ] && [ "$cert_status" -eq 0 ]; then
-    log_message "In-service: containers are running and TLS certificates are available"
+    # Containers are running and certs are available, check if Jupyter is ready
+    check_jupyter_ready
+    jupyter_status=$?
 
-    # If transitioning from FETCHING_CERTIFICATES to IN_SERVICE, upload certificates
-    PREVIOUS_STATE=$(get_previous_state)
-    if [ "$PREVIOUS_STATE" = "FETCHING_CERTIFICATES" ]; then
-      log_message "Transitioning from FETCHING_CERTIFICATES to IN_SERVICE - uploading certificates"
-      if /usr/local/bin/upload-acme.sh; then
-        log_message "Successfully uploaded certificates to secret"
-      else
-        log_message "Warning: Failed to upload certificates to secret"
+    if [ "$jupyter_status" -eq 0 ]; then
+      log_message "In-service: containers running, certs available, Jupyter responding"
+
+      # If transitioning from FETCHING_CERTIFICATES to IN_SERVICE, upload certificates
+      PREVIOUS_STATE=$(get_previous_state)
+      if [ "$PREVIOUS_STATE" = "FETCHING_CERTIFICATES" ]; then
+        log_message "Transitioning from FETCHING_CERTIFICATES to IN_SERVICE - uploading certificates"
+        if /usr/local/bin/upload-acme.sh; then
+          log_message "Successfully uploaded certificates to secret"
+        else
+          log_message "Warning: Failed to upload certificates to secret"
+        fi
       fi
-    fi
 
-    save_current_state "IN_SERVICE"
-    exit 0 # IN_SERVICE
+      save_current_state "IN_SERVICE"
+      exit 0 # IN_SERVICE
+    else
+      save_current_state "STARTING"
+      exit 40 # STARTING (containers up but Jupyter not ready)
+    fi
   else
     save_current_state "OUT_OF_SERVICE"
-    exit 40 # OUT_OF_SERVICE
+    exit 50 # OUT_OF_SERVICE
   fi
 }
 

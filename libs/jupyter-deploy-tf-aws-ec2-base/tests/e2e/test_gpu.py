@@ -25,8 +25,8 @@ def test_switch_to_gpu(
     e2e_deployment.ensure_server_stopped_and_host_is_running()
     e2e_deployment.ensure_authorized([logged_user], "", [])
 
-    # Switch to GPU instance
-    e2e_deployment.ensure_deployed_with(["--instance-type", gpu_instance_type])
+    # Switch to GPU instance and pixi package manager
+    e2e_deployment.ensure_deployed_with(["--instance-type", gpu_instance_type, "--jupyter-package-manager", "pixi"])
 
     # Ensure the server is running and healthy
     e2e_deployment.ensure_server_running()
@@ -56,6 +56,18 @@ def test_run_gpu_notebook(
             "The deployment may not have switched to GPU correctly."
         )
 
+    # Verify the deployment is using Pixi package manager (required for pytorch installation)
+    result = e2e_deployment.cli.run_command(
+        ["jupyter-deploy", "show", "--variable", "jupyter_package_manager", "--text"]
+    )
+    actual_package_manager = result.stdout.strip()
+
+    if actual_package_manager != "pixi":
+        raise AssertionError(
+            f"Expected package manager 'pixi', but got '{actual_package_manager}'. "
+            "GPU tests require Pixi for pytorch installation."
+        )
+
     # Prerequisite,
     e2e_deployment.ensure_server_running()
     e2e_deployment.ensure_authorized([logged_user], "", [])
@@ -73,13 +85,15 @@ def test_run_gpu_notebook(
 
     # Restart server to ensure clean session (prevents "Document session error" dialogs)
     e2e_deployment.cli.run_command(["jupyter-deploy", "server", "restart"])
+    e2e_deployment.ensure_server_running()
 
     # Re-authenticate after server restart
     github_oauth_app.ensure_authenticated()
     github_oauth_app.verify_jupyterlab_accessible()
 
     # Run the notebook in the UI
-    run_notebook_in_jupyterlab(github_oauth_app.page, "e2e-test/gpu_check.ipynb", timeout_ms=120000)
+    # Note: torch installation via pixi takes ~90s, so use 5min timeout to account for network variability
+    run_notebook_in_jupyterlab(github_oauth_app.page, "e2e-test/gpu_check.ipynb", timeout_ms=300000)
 
     # Clean up - delete the notebook
     delete_notebook(e2e_deployment, "e2e-test/gpu_check.ipynb")
@@ -95,9 +109,9 @@ def test_switch_from_gpu_to_cpu(
     logged_user: str,
 ) -> None:
     """Test switching back to CPU instance."""
-    # Switch back to CPU instance
+    # Switch back to CPU instance and UV package manager
     e2e_deployment.ensure_server_stopped_and_host_is_running()
-    e2e_deployment.ensure_deployed_with(["--instance-type", cpu_instance_type])
+    e2e_deployment.ensure_deployed_with(["--instance-type", cpu_instance_type, "--jupyter-package-manager", "uv"])
 
     # Prerequisites
     e2e_deployment.ensure_server_running()

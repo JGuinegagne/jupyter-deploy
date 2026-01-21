@@ -2,6 +2,17 @@
 default:
     @just --list
 
+# Run all linting and formatting tools
+lint:
+    uv run ruff format
+    uv run ruff check --fix
+    uv run mypy
+    terraform fmt -recursive -write=true
+
+# Run unit tests
+unit-test:
+    uv run pytest
+
 # Detect container tool (finch or docker)
 container-tool := `command -v finch >/dev/null 2>&1 && echo "finch" || echo "docker"`
 

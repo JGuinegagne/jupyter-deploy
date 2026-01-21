@@ -144,13 +144,22 @@ class SuiteConfig:
         base_name = parts[3:]
         return "-".join(base_name)
 
-    def prepare_configuration(self, config_name: str = "base") -> None:
-        """Load variables yaml of specific configuration, applies substitution, copies to project dir."""
+    def prepare_configuration(self, config_name: str = "base", target_dir: Path | None = None) -> None:
+        """Load variables yaml of specific configuration, applies substitution, copies to project dir.
+
+        Args:
+            config_name: Name of the configuration to load (default: "base")
+            target_dir: Optional target directory to write variables.yaml to.
+                        If not provided, uses self.project_dir.
+        """
         # Load the configuration file with environment variable expansion
         resolved_variables = self._load_configuration(config_name)
 
-        # Write resolved configuration to project dir
-        variables_config_path = self.project_dir / jd_constants.VARIABLES_FILENAME
+        # Determine target directory
+        write_dir = target_dir if target_dir is not None else self.project_dir
+
+        # Write resolved configuration to target dir
+        variables_config_path = write_dir / jd_constants.VARIABLES_FILENAME
         jd_fs_utils.write_yaml_file_with_comments(
             variables_config_path,
             resolved_variables.model_dump(),

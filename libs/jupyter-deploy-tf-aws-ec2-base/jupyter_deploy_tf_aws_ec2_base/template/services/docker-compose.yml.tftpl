@@ -12,6 +12,12 @@ services:
         - SERVICE_GID=$${SERVICE_GID}
         - DOCKER_GID=$${DOCKER_GID}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/lab/favicon.ico"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     security_opt:
       - no-new-privileges:true
     logging:
@@ -31,7 +37,10 @@ services:
       - "traefik.http.routers.jupyter.entrypoints=websecure"
       - "traefik.http.routers.jupyter.tls.certresolver=letsencrypt"
       - "traefik.http.services.jupyter.loadbalancer.server.port=8888"
-      - "traefik.http.routers.jupyter.middlewares=oauth-errors@docker,oauth-auth@docker,oauth-faults@docker"
+      - "traefik.http.services.jupyter.loadbalancer.healthcheck.path=/lab/favicon.ico"
+      - "traefik.http.services.jupyter.loadbalancer.healthcheck.interval=30s"
+      - "traefik.http.services.jupyter.loadbalancer.healthcheck.timeout=10s"
+      - "traefik.http.routers.jupyter.middlewares=oauth-errors@docker,oauth-auth@docker,oauth-faults@docker,jupyter-unavailable@docker"
     volumes:
       - /mnt/jupyter-data:/home/jovyan
       - /var/run/docker.sock:/var/run/docker.sock
@@ -103,10 +112,14 @@ services:
       - "traefik.http.middlewares.oauth-errors.errors.status=401-403"
       - "traefik.http.middlewares.oauth-errors.errors.service=oauth"
       - "traefik.http.middlewares.oauth-errors.errors.query=/oauth2/sign_in?rd={url}"
-      # 500 error handling middleware
-      - "traefik.http.middlewares.oauth-faults.errors.status=500-599"
+      # 500 error handling middleware (excluding 503)
+      - "traefik.http.middlewares.oauth-faults.errors.status=500-502,504-599"
       - "traefik.http.middlewares.oauth-faults.errors.service=oauth"
       - "traefik.http.middlewares.oauth-faults.errors.query=/oauth2-static/oauth_error_500.html"
+      # 503 service unavailable middleware
+      - "traefik.http.middlewares.jupyter-unavailable.errors.status=503"
+      - "traefik.http.middlewares.jupyter-unavailable.errors.service=oauth"
+      - "traefik.http.middlewares.jupyter-unavailable.errors.query=/oauth2-static/service_unavailable.html"
       # Static files router have direct access without auth
       - "traefik.http.routers.static.rule=Host(`${full_domain}`) && PathPrefix(`/oauth2-static/`)"
       - "traefik.http.routers.static.service=oauth"

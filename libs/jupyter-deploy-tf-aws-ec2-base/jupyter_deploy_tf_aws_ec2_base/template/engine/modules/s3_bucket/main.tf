@@ -44,7 +44,9 @@ resource "aws_s3_object" "script_files" {
   key          = each.key
   content      = each.value.content
   content_type = each.value.content_type
-  etag         = md5(each.value.content)
+  # Use source_hash instead of etag because with KMS encryption
+  # S3's ETag doesn't match md5(content)
+  source_hash = md5(each.value.content)
 
   tags = var.combined_tags
 }

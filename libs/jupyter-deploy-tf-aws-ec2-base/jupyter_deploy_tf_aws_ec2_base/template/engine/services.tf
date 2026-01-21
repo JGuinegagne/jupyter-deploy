@@ -60,44 +60,53 @@ data "local_file" "oauth_error_500_html_tftpl" {
   filename = "${path.module}/../services/static/oauth_error_500.html.tftpl"
 }
 
+data "local_file" "service_unavailable_html_tftpl" {
+  filename = "${path.module}/../services/static/service_unavailable.html.tftpl"
+}
+
+data "local_file" "pyproject_jupyter" {
+  filename = "${path.module}/../services/jupyter/pyproject.jupyter.toml"
+}
+
+data "local_file" "pyproject_kernel_uv" {
+  filename = "${path.module}/../services/jupyter/pyproject.kernel.toml"
+}
+
+data "local_file" "pyproject_kernel_pixi" {
+  filename = "${path.module}/../services/jupyter-pixi/pyproject.kernel.toml"
+}
+
 locals {
-  # Generate the templated HTML file
+  # Generate the templated HTML files
   oauth_error_500_templated = templatefile("${path.module}/../services/static/oauth_error_500.html.tftpl", {
     full_domain = module.network.full_domain
   })
 
-  # Generate the templated TOML files
-  pyproject_jupyter_templated = templatefile("${path.module}/../services/jupyter/pyproject.jupyter.toml.tftpl", {
-    has_gpu    = module.ami_al2023.has_gpu
-    has_neuron = module.ami_al2023.has_neuron
+  service_unavailable_templated = templatefile("${path.module}/../services/static/service_unavailable.html.tftpl", {
+    full_domain = module.network.full_domain
   })
 
+  # TOML files - most are now static, only pixi.jupyter.toml needs templating for cpu_architecture
+  pyproject_jupyter_content = data.local_file.pyproject_jupyter.content
+
   pixi_jupyter_templated = templatefile("${path.module}/../services/jupyter-pixi/pixi.jupyter.toml.tftpl", {
-    has_gpu          = module.ami_al2023.has_gpu
-    has_neuron       = module.ami_al2023.has_neuron
     cpu_architecture = module.ami_al2023.cpu_architecture
   })
 
-  kernel_templated = templatefile("${path.module}/../services/jupyter/pyproject.kernel.toml.tftpl", {
-    has_gpu    = module.ami_al2023.has_gpu
-    has_neuron = module.ami_al2023.has_neuron
-  })
+  kernel_uv_content = data.local_file.pyproject_kernel_uv.content
 
-  pixi_kernel_templated = templatefile("${path.module}/../services/jupyter-pixi/pyproject.kernel.toml.tftpl", {
-    has_gpu    = module.ami_al2023.has_gpu
-    has_neuron = module.ami_al2023.has_neuron
-  })
+  kernel_pixi_content = data.local_file.pyproject_kernel_pixi.content
 
   # Select the correct files based on package manager type
   dockerfile_content            = var.jupyter_package_manager == "pixi" ? data.local_file.dockerfile_jupyter_pixi.content : data.local_file.dockerfile_jupyter.content
-  jupyter_toml_content          = var.jupyter_package_manager == "pixi" ? local.pixi_jupyter_templated : local.pyproject_jupyter_templated
+  jupyter_toml_content          = var.jupyter_package_manager == "pixi" ? local.pixi_jupyter_templated : local.pyproject_jupyter_content
   jupyter_start_content         = var.jupyter_package_manager == "pixi" ? data.local_file.jupyter_start_pixi.content : data.local_file.jupyter_start.content
   jupyter_reset_content         = var.jupyter_package_manager == "pixi" ? data.local_file.jupyter_reset_pixi.content : data.local_file.jupyter_reset.content
   jupyter_server_config_content = var.jupyter_package_manager == "pixi" ? data.local_file.jupyter_server_config_pixi.content : data.local_file.jupyter_server_config_uv.content
-  kernel_pyproject_content      = var.jupyter_package_manager == "pixi" ? local.pixi_kernel_templated : local.kernel_templated
+  kernel_pyproject_content      = var.jupyter_package_manager == "pixi" ? local.kernel_pixi_content : local.kernel_uv_content
   jupyter_toml_filename         = var.jupyter_package_manager == "pixi" ? "pixi.jupyter.toml" : "pyproject.jupyter.toml"
 
-  # Compute hash of all files that affect Jupyter container build
+  # Compute hash of all files that affect docker compose image builds (jupyter, log-rotator)
   # This hash is used to determine if a rebuild is necessary
   build_affecting_files = [
     local.dockerfile_content,
@@ -106,8 +115,10 @@ locals {
     local.jupyter_reset_content,
     local.jupyter_server_config_content,
     local.kernel_pyproject_content,
+    data.local_file.dockerfile_logrotator.content,
+    local.logrotator_start_file,
   ]
-  jupyter_build_hash = sha256(join("\n", local.build_affecting_files))
+  images_build_hash = sha256(join("\n", local.build_affecting_files))
 
   allowed_github_usernames = var.oauth_allowed_usernames != null ? join(",", [for username in var.oauth_allowed_usernames : "${username}"]) : ""
   allowed_github_org       = var.oauth_allowed_org != null ? var.oauth_allowed_org : ""
@@ -252,11 +263,19 @@ locals {
       content      = local.oauth_error_500_templated
       content_type = "text/html"
     }
+    "deployment-docker/static/service_unavailable.html" = {
+      content      = local.service_unavailable_templated
+      content_type = "text/html"
+    }
     "deployment-docker/.build-manifest" = {
-      content      = local.jupyter_build_hash
+      content      = local.images_build_hash
       content_type = "text/plain"
     }
   }
+
+  # Compute hash of all deployment script files
+  # This hash triggers SSM association re-execution when scripts change
+  scripts_files_hash = sha256(join("\n", [for k, v in local.all_script_files : v.content]))
 }
 
 # Generate the cloudinit_volumes_script directly in services.tf
@@ -339,12 +358,14 @@ mainSteps:
           mkdir -p /opt/docker/static
 
           aws s3 cp s3://$BUCKET/deployment-docker/static/oauth_error_500.html /opt/docker/static/oauth_error_500.html
+          aws s3 cp s3://$BUCKET/deployment-docker/static/service_unavailable.html /opt/docker/static/service_unavailable.html
 
           for file in ${join(" ", local.deployment_docker_filenames)}; do
             aws s3 cp s3://$BUCKET/deployment-docker/$file /opt/docker/$file
           done
 
           aws s3 cp s3://$BUCKET/deployment-scripts/docker-startup.sh /opt/docker/docker-startup.sh
+          chmod 755 /opt/docker/docker-startup.sh
           aws s3 cp s3://$BUCKET/deployment-docker/${local.jupyter_toml_filename} /opt/docker/${local.jupyter_toml_filename}
 
   - action: aws:runShellScript
@@ -352,7 +373,6 @@ mainSteps:
     inputs:
       runCommand:
         - |
-          chmod 744 /usr/local/bin/sync-acme.sh
           sh /usr/local/bin/sync-acme.sh
 
   - action: aws:runShellScript
@@ -360,7 +380,6 @@ mainSteps:
     inputs:
       runCommand:
         - |
-          chmod 744 /opt/docker/docker-startup.sh
           sh /opt/docker/docker-startup.sh
 DOC
 
@@ -370,10 +389,14 @@ DOC
     fileexists("${path.module}/../services/jupyter/jupyter-start.sh"),
     fileexists("${path.module}/../services/jupyter/jupyter-reset.sh"),
     fileexists("${path.module}/../services/jupyter/jupyter_server_config.py"),
+    fileexists("${path.module}/../services/jupyter/pyproject.jupyter.toml"),
+    fileexists("${path.module}/../services/jupyter/pyproject.kernel.toml"),
     fileexists("${path.module}/../services/jupyter-pixi/dockerfile.jupyter.pixi"),
     fileexists("${path.module}/../services/jupyter-pixi/jupyter-start-pixi.sh"),
     fileexists("${path.module}/../services/jupyter-pixi/jupyter-reset-pixi.sh"),
     fileexists("${path.module}/../services/jupyter-pixi/jupyter_server_config_pixi.py"),
+    fileexists("${path.module}/../services/jupyter-pixi/pixi.jupyter.toml.tftpl"),
+    fileexists("${path.module}/../services/jupyter-pixi/pyproject.kernel.toml"),
     fileexists("${path.module}/../services/logrotator/dockerfile.logrotator"),
     fileexists("${path.module}/../services/commands/update-auth.sh"),
     fileexists("${path.module}/../services/commands/refresh-oauth-cookie.sh"),
@@ -384,6 +407,7 @@ DOC
     fileexists("${path.module}/../services/commands/upload-acme.sh.tftpl"),
     fileexists("${path.module}/../services/sync-acme.sh.tftpl"),
     fileexists("${path.module}/../services/static/oauth_error_500.html.tftpl"),
+    fileexists("${path.module}/../services/static/service_unavailable.html.tftpl"),
   ])
 
   files_not_empty = alltrue([
@@ -391,10 +415,13 @@ DOC
     length(data.local_file.jupyter_start) > 0,
     length(data.local_file.jupyter_reset) > 0,
     length(data.local_file.jupyter_server_config_uv) > 0,
+    length(data.local_file.pyproject_jupyter) > 0,
+    length(data.local_file.pyproject_kernel_uv) > 0,
     length(data.local_file.dockerfile_jupyter_pixi) > 0,
     length(data.local_file.jupyter_start_pixi) > 0,
     length(data.local_file.jupyter_reset_pixi) > 0,
     length(data.local_file.jupyter_server_config_pixi) > 0,
+    length(data.local_file.pyproject_kernel_pixi) > 0,
     length(data.local_file.dockerfile_logrotator) > 0,
     length(data.local_file.update_auth) > 0,
     length(data.local_file.refresh_oauth_cookie) > 0,
@@ -405,6 +432,7 @@ DOC
     length(local.upload_acme_file) > 0,
     length(local.sync_acme_file) > 0,
     length(data.local_file.oauth_error_500_html_tftpl) > 0,
+    length(data.local_file.service_unavailable_html_tftpl) > 0,
   ])
 
   docker_compose_valid = can(yamldecode(local.docker_compose_file))
@@ -456,6 +484,14 @@ resource "aws_ssm_document" "instance_startup" {
   }
 }
 
+# Trigger for forcing SSM association re-execution when scripts change or instance type changes
+resource "terraform_data" "scripts_files_trigger" {
+  input = {
+    scripts_files_hash = local.scripts_files_hash
+    instance_type      = var.instance_type
+  }
+}
+
 resource "aws_ssm_association" "instance_startup_with_secret" {
   name = aws_ssm_document.instance_startup.name
   targets {
@@ -467,6 +503,12 @@ resource "aws_ssm_association" "instance_startup_with_secret" {
   max_errors                       = "0"
   wait_for_success_timeout_seconds = 300
   tags                             = local.combined_tags
+
+  lifecycle {
+    replace_triggered_by = [
+      terraform_data.scripts_files_trigger.output
+    ]
+  }
 
   depends_on = [
     module.secret,
