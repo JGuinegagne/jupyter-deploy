@@ -8,6 +8,7 @@ from pathlib import Path
 
 from playwright.sync_api import Page
 
+from pytest_jupyter_deploy.cli import JDCliError
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
 
 logger = logging.getLogger(__name__)
@@ -49,15 +50,19 @@ def upload_notebook(deployment: EndToEndDeployment, src_path: str | Path, target
     deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", python_cmd])
 
 
-def _extract_cell_outputs(page: Page) -> list[dict[str, str]]:
+def _extract_cell_outputs(page: Page, execution_idx: int = 0) -> list[dict[str, str]]:
     """Extract cell execution information from the current notebook.
 
+    Note: this method swallows exceptions to ensure we gather as much cell
+    information as possible.
+
     Args:
-        page: Playwright Page instance with an open notebook
+        page: Playwright Page instance
+        execution_idx: Poll iteration number for logging (0 = first check)
 
     Returns:
         List of dictionaries containing cell information with keys:
-        - cell_number: Execution count (e.g., "[1]", "[2]")
+        - cell_number: Execution count (e.g., "[1]", "[2]") or "[-1]" when not-executed
         - has_error: Boolean indicating if cell has error output
         - error_output: Error traceback text if present, empty string otherwise
     """
@@ -65,11 +70,12 @@ def _extract_cell_outputs(page: Page) -> list[dict[str, str]]:
 
     # Find all code cells in the notebook
     code_cells = page.locator(".jp-CodeCell").all()
+    logger.info(f"[Poll {execution_idx}] Found {len(code_cells)} code cells")
 
     for i, cell in enumerate(code_cells):
         cell_info: dict[str, str] = {
             "cell_index": str(i),
-            "cell_number": "",
+            "cell_number": "[-1]",
             "has_error": "False",
             "error_output": "",
         }
@@ -79,9 +85,11 @@ def _extract_cell_outputs(page: Page) -> list[dict[str, str]]:
             input_prompt = cell.locator(".jp-InputArea-prompt").first
             prompt_text = input_prompt.inner_text(timeout=1000)
             cell_info["cell_number"] = prompt_text.strip()
+            logger.info(f"[Poll {execution_idx}] Cell {i} execution count: {cell_info['cell_number']}")
         except Exception as e:
-            logger.debug(f"Could not extract cell number for cell {i}: {e}")
-            cell_info["cell_number"] = "[not executed]"
+            logger.warning(f"[Poll {execution_idx}] Could not extract cell number for cell {i}: {e}")
+            cell_info["cell_number"] = "[-1]"
+            # do NOT raise here, keep gathering cell information
 
         # Check for error outputs
         try:
@@ -90,22 +98,27 @@ def _extract_cell_outputs(page: Page) -> list[dict[str, str]]:
             if output_area.count() > 0:
                 # Get all output text and check if it contains error indicators
                 all_output_text = output_area.first.inner_text(timeout=1000)
-                logger.debug(f"Cell {i} output text (first 200 chars): {all_output_text[:200]}")
+                logger.info(f"[Poll {execution_idx}] Cell {i} output text (first 200 chars): {all_output_text[:200]}")
 
                 # Check for common error patterns
                 if any(pattern in all_output_text for pattern in ["Traceback", "Error:", "Exception:", "error:"]):
                     cell_info["has_error"] = "True"
                     cell_info["error_output"] = all_output_text[:500]  # Limit to first 500 chars
-                    logger.debug(f"Cell {i} has error: {cell_info['error_output'][:100]}")
+                    logger.warning(f"[Poll {execution_idx}] Cell {i} has error: {cell_info['error_output'][:100]}")
         except Exception as e:
-            logger.debug(f"Could not extract error output for cell {i}: {e}")
+            logger.error(f"[Poll {execution_idx}] Could not extract error output for cell {i}: {e}")
+            cell_info["has_error"] = "Possibly"
+            cell_info["error_output"] = "Failed to retrieve cell output"
+            # do NOT raise here, keep gathering cell information
 
         cells_info.append(cell_info)
 
     return cells_info
 
 
-def run_notebook_in_jupyterlab(page: Page, notebook_path: str, timeout_ms: int = 120000) -> None:
+def run_notebook_in_jupyterlab(
+    page: Page, notebook_path: str, timeout_ms: int = 120000, poll_interval_ms: int = 2000
+) -> None:
     """Run a notebook in JupyterLab and wait for completion.
 
     NOTE: To avoid "Document session error" dialogs, restart the Jupyter server
@@ -114,7 +127,8 @@ def run_notebook_in_jupyterlab(page: Page, notebook_path: str, timeout_ms: int =
     Args:
         page: Playwright Page instance with JupyterLab already loaded
         notebook_path: Path to the notebook relative to /home/jovyan (e.g., "work/test.ipynb")
-        timeout: Maximum time to wait for notebook execution in milliseconds (default: 120000)
+        timeout_ms: Maximum time to wait for notebook execution in milliseconds (default: 120000)
+        poll_interval_ms: Interval between cell execution checks in milliseconds (default: 2000)
 
     Raises:
         RuntimeError: If notebook execution fails or times out, includes cell execution details
@@ -123,10 +137,15 @@ def run_notebook_in_jupyterlab(page: Page, notebook_path: str, timeout_ms: int =
     page.reload()
     page.wait_for_load_state("networkidle")
 
+    # Check for server connection errors after page load
+    _reload_on_server_connection_error(page)
+
     # Close all open notebook tabs to avoid strict mode violations when multiple notebooks are open
     # This can happen if previous tests left tabs open due to errors
     # Strategy: Use Command Palette to execute "application:close-all"
     try:
+        logger.info("Attempting to close all other tabs...")
+
         # Close any open dialogs first
         page.keyboard.press("Escape")
         time.sleep(0.2)
@@ -142,6 +161,8 @@ def run_notebook_in_jupyterlab(page: Page, notebook_path: str, timeout_ms: int =
         # Press Enter to execute the "application:close-all" command
         page.keyboard.press("Enter")
         time.sleep(0.5)
+
+        logger.info("Successfully executed close-all command...")
     except Exception as e:
         # If closing tabs fails, continue anyway
         logger.warning(f"Could not close all tabs: {e}")
@@ -152,134 +173,149 @@ def run_notebook_in_jupyterlab(page: Page, notebook_path: str, timeout_ms: int =
     base_url = current_url.split("/lab")[0] if "/lab" in current_url else current_url.rstrip("/")
     notebook_url = f"{base_url}/lab/tree/{notebook_path}"
 
-    logger.info(f"Opening notebook at: {notebook_url}")
+    logger.info(f"Opening notebook at: {notebook_url}...")
     page.goto(notebook_url)
     time.sleep(2)  # Give JupyterLab time to load the notebook
 
     # Wait for the notebook to load - check for the notebook toolbar
     # Use .first to handle cases where multiple notebooks may be open
+    logger.info("Looking for notebook toolbar...")
     notebook_toolbar = page.locator(".jp-NotebookPanel-toolbar").first
     notebook_toolbar.wait_for(state="visible", timeout=10000)
 
-    # Wait a bit for the notebook to fully initialize
-    time.sleep(1)
+    # Wait for the kernel to be ready before executing cells
+    # The kernel status is shown in the status bar (e.g., "Python 3 (ipykernel) | Idle")
+    logger.info("Waiting for kernel to be ready...")
+    try:
+        # Target the visible status bar element specifically to avoid strict mode violation
+        kernel_status_idle = page.locator(".jp-StatusBar-TextItem").filter(has_text="Idle")
+        kernel_status_idle.wait_for(state="visible", timeout=30000)
+        logger.info("Kernel is idle and ready")
+    except Exception as e:
+        logger.warning(f"Could not detect idle kernel status, proceeding anyway: {e}")
 
-    # Click "Run" menu
+    # Click "Run" option in JupyterLab top menu and then "Run All Cells" option
+    logger.info("Clicking 'Run' option in JupyterLab top menu...")
     run_menu = page.get_by_role("menuitem", name="Run")
     run_menu.click()
 
-    # Click "Run All Cells" from the dropdown
+    logger.info("Clicking 'Run All Cells' option...")
     run_all_item = page.get_by_text("Run All Cells", exact=True)
     run_all_item.click()
+    logger.info("Clicked 'Run All Cells'")
 
-    # Wait for execution to complete
-    # Look for the kernel idle indicator or execution count updates
-    # JupyterLab shows a filled circle when kernel is busy, empty when idle
-    # We'll wait for the kernel status to become idle
-
-    # Strategy: Wait for the busy indicator to appear and then disappear
+    # Wait for execution to complete by polling cell execution counts
+    # This is more reliable than watching kernel status indicators, which can be affected by WebSocket issues
     start_time = time.time()
     max_wait = timeout_ms / 1000  # Convert to seconds
+    poll_interval = poll_interval_ms / 1000  # Convert to seconds
     connection_error_recovered = False  # Track if we've already recovered from connection error once
+    poll_iteration = 0  # Track poll iteration for logging
 
-    # First, wait for execution to start (busy indicator appears)
-    # The kernel status is in the status bar
-    busy_started = False
+    logger.info(f"Waiting for notebook execution to complete (timeout: {timeout_ms}ms)...")
     while time.time() - start_time < max_wait:
-        # Check for connection error dialog first
-        connection_error = page.get_by_text("Server Connection Error")
-        if connection_error.is_visible(timeout=500):
+        poll_iteration += 1
+        logger.info(f"[Poll {poll_iteration}] Checking cell execution states...")
+
+        # Check for server connection errors
+        if _reload_on_server_connection_error(page):
             if connection_error_recovered:
                 # Already tried to recover once, fail now
                 raise RuntimeError(
                     f"Server connection error detected while executing {notebook_path}. "
                     "The Jupyter server may not be fully ready or may have crashed during notebook execution."
                 )
-            # First connection error, attempt recovery
-            logger.warning("Connection error detected, waiting 2s and refreshing page...")
-            time.sleep(2)
-            page.reload()
-            page.wait_for_load_state("networkidle")
             connection_error_recovered = True
             # Continue checking after refresh
             time.sleep(0.5)
             continue
 
-        # Check if kernel is busy by looking for the filled circle icon
-        # JupyterLab uses jp-FilledCircleIcon for busy state
-        busy_indicator = page.locator(".jp-Kernel-statusCircle.jp-FilledCircleIcon")
-        try:
-            if busy_indicator.is_visible(timeout=1000):
-                busy_started = True
-                break
-        except Exception as e:
-            logger.debug(f"Could not check busy indicator visibility: {e}")
-        time.sleep(0.5)
+        # Extract current cell execution states
+        cells_info = _extract_cell_outputs(page, execution_idx=poll_iteration)
 
-    if not busy_started:
-        # Kernel might have executed too fast, or execution didn't start
-        # Check if there are any execution counts to verify it ran
-        execution_count = page.locator(".jp-InputArea-prompt:has-text('[')").first
-        try:
-            execution_count.wait_for(state="visible", timeout=5000)
-            # If we see execution counts, check for errors before returning
-            cells_info = _extract_cell_outputs(page)
-            _check_for_errors(cells_info, notebook_path)
-            return
-        except Exception:
-            raise RuntimeError("Notebook execution did not start") from None
-
-    # Now wait for kernel to become idle (busy indicator disappears)
-    while time.time() - start_time < max_wait:
-        # Check for connection error dialog
-        connection_error = page.get_by_text("Server Connection Error")
-        if connection_error.is_visible(timeout=500):
-            if connection_error_recovered:
-                # Already tried to recover once, fail now
-                raise RuntimeError(
-                    f"Server connection error detected while executing {notebook_path}. "
-                    "The Jupyter server may not be fully ready or may have crashed during notebook execution."
-                )
-            # First connection error, attempt recovery
-            logger.warning("Connection error detected, waiting 2s and refreshing page...")
-            time.sleep(2)
-            page.reload()
-            page.wait_for_load_state("networkidle")
-            connection_error_recovered = True
-            # Continue checking after refresh
-            time.sleep(0.5)
+        if not cells_info:
+            # No cells found yet, notebook may still be loading
+            logger.warning(f"[Poll {poll_iteration}] No cells found, waiting for notebook to load...")
+            time.sleep(poll_interval)
             continue
 
-        busy_indicator = page.locator(".jp-Kernel-statusCircle.jp-FilledCircleIcon")
-        try:
-            # Check if busy indicator is no longer visible
-            if not busy_indicator.is_visible(timeout=1000):
-                # Kernel is idle, execution complete
-                # Wait a bit more for UI to stabilize
-                time.sleep(1)
-                # Check for errors in cell outputs
-                cells_info = _extract_cell_outputs(page)
-                _check_for_errors(cells_info, notebook_path)
-                return
-        except Exception as e:
-            # Busy indicator not visible, execution likely complete
-            logger.debug(f"Exception while checking busy indicator: {e}")
-            time.sleep(1)
-            # Check for errors before returning
-            cells_info = _extract_cell_outputs(page)
-            _check_for_errors(cells_info, notebook_path)
+        # Count how many cells have executed
+        executed_count = len([cell for cell in cells_info if _is_cell_executed(cell["cell_number"])])
+        total_count = len(cells_info)
+
+        logger.info(f"[Poll {poll_iteration}] Execution progress: {executed_count}/{total_count} cells completed")
+
+        # Check if all cells have executed
+        if executed_count == total_count:
+            # All cells executed - verify no errors
+            _verify_executed_and_no_cell_error(cells_info, notebook_path)
+            logger.info(f"Notebook execution completed successfully: all {total_count} cells executed without errors")
             return
 
-        time.sleep(0.5)
+        # Not done yet, wait and check again
+        time.sleep(poll_interval)
 
-    # Timeout - extract cell info for diagnostics
-    cells_info = _extract_cell_outputs(page)
-    error_msg = f"Notebook execution timed out after {timeout_ms}ms\n"
-    error_msg += _format_cell_diagnostics(cells_info)
-    raise RuntimeError(error_msg)
+    # Timeout - perform final check to see if cells actually completed
+    poll_iteration += 1
+    logger.warning(f"[Poll {poll_iteration}] Timeout reached, performing final cell extraction...")
+    cells_info = _extract_cell_outputs(page, execution_idx=poll_iteration)
+    executed_count = len([cell for cell in cells_info if _is_cell_executed(cell["cell_number"])])
+    total_count = len(cells_info)
+
+    # Check if all cells actually executed (might have finished just after timeout)
+    if executed_count == total_count and total_count > 0:
+        # All cells executed - verify no errors
+        _verify_executed_and_no_cell_error(cells_info, notebook_path)
+        logger.info(
+            f"Notebook execution completed successfully (caught on final check after timeout): "
+            f"all {total_count} cells executed without errors"
+        )
+        return
+
+    # Cells did not complete execution
+    logger.error(f"Notebook execution timed out: {executed_count}/{total_count} cells executed")
+    raise RuntimeError(
+        f"Notebook execution timed out after {timeout_ms}ms. "
+        f"Only {executed_count} out of {total_count} cells completed execution."
+    )
 
 
-def _check_for_errors(cells_info: list[dict[str, str]], notebook_path: str) -> None:
+def _reload_on_server_connection_error(page: Page, pop_up_visible_timeout_ms: int = 500) -> bool:
+    """Check for server connection error and reload page if detected.
+
+    Args:
+        page: Playwright Page instance
+        pop_up_visible_timeout_ms: Timeout in ms to check if connection error popup is visible
+
+    Returns:
+        True if connection error was detected and page was reloaded, False otherwise
+    """
+    connection_error = page.get_by_text("Server Connection Error")
+    if connection_error.is_visible(timeout=pop_up_visible_timeout_ms):
+        logger.warning("Connection error detected, waiting 2s and refreshing page...")
+        time.sleep(2)
+        page.reload()
+        logger.info("Page reloaded after connection error")
+        return True
+    return False
+
+
+def _is_cell_executed(cell_number: str) -> bool:
+    """Return True if a cell has been executed based on its execution count.
+
+    Args:
+        cell_number: The execution count text from the cell prompt (e.g., "[1]", "[ ]:", "[*]", "[-1]")
+
+    Returns:
+        True if the cell has a numeric execution count (indicating it executed successfully),
+        False if the cell is unexecuted or still executing
+    """
+    # Cell is executed if it contains a digit (e.g., "[1]", "[2]", etc.)
+    # Not executed if it's "[ ]:", "[ ]", "[]", "[-1]", "[*]", or any variation without digits
+    return any(char.isdigit() for char in cell_number) and "*" not in cell_number and "-" not in cell_number
+
+
+def _verify_executed_and_no_cell_error(cells_info: list[dict[str, str]], notebook_path: str) -> None:
     """Check if any cells have errors and raise RuntimeError if found.
 
     Args:
@@ -287,46 +323,76 @@ def _check_for_errors(cells_info: list[dict[str, str]], notebook_path: str) -> N
         notebook_path: Path to the notebook for error message
 
     Raises:
-        RuntimeError: If any cell has an error
+        RuntimeError: If any cell has an error or if no cells executed
     """
-    # Log all cell info for debugging
-    logger.info(f"Checking {len(cells_info)} cells for errors in {notebook_path}")
-    for cell in cells_info:
-        error_preview = cell["error_output"][:100] if cell["error_output"] else "none"
-        logger.info(
-            f"  Cell {cell['cell_number']} (index {cell['cell_index']}): "
-            f"has_error={cell['has_error']}, error_output={error_preview}"
+    # Verify we found at least one cell
+    if not cells_info:
+        raise RuntimeError(
+            f"Notebook {notebook_path} validation failed: no cells found. The notebook may not have loaded properly."
         )
 
-    errors_found = [cell for cell in cells_info if cell["has_error"] == "True"]
+    # Verify all cells have execution counts (actually executed)
+    unexecuted_cells = [cell for cell in cells_info if not _is_cell_executed(cell["cell_number"])]
+    if unexecuted_cells:
+        unexecuted_indices = [cell["cell_index"] for cell in unexecuted_cells]
+        unexecuted_numbers = [cell["cell_number"] for cell in unexecuted_cells]
+        raise RuntimeError(
+            f"Notebook {notebook_path} validation failed.\n"
+            f"{len(unexecuted_cells)} cell(s) did not execute completely.\n"
+            f"Cell indices: {unexecuted_indices}\n"
+            f"Cell execution states: {unexecuted_numbers}\n"
+            "The notebook may have failed to execute or is still executing."
+        )
+
+    errors_found = [cell for cell in cells_info if cell["has_error"] in ["True", "Possibly"]]
     if errors_found:
-        error_msg = f"Notebook {notebook_path} execution failed with errors:\n"
-        error_msg += _format_cell_diagnostics(cells_info)
-        raise RuntimeError(error_msg)
+        raise RuntimeError(f"Notebook {notebook_path} execution failed with errors.")
 
 
-def _format_cell_diagnostics(cells_info: list[dict[str, str]]) -> str:
-    """Return formatted string with cell execution details.
+def wait_for_kernel_ready(
+    deployment: EndToEndDeployment,
+    timeout_seconds: int = 60,
+    jupyter_port: int = 8888,
+    interval_seconds: int = 5,
+    settle_delay_seconds: int = 2,
+) -> None:
+    """Wait for Jupyter kernel manager to be ready after server restart.
+
+    This function polls the Jupyter kernels API endpoint until it responds successfully,
+    indicating the kernel manager is ready to handle notebook execution requests.
 
     Args:
-        cells_info: List of cell information dictionaries
+        deployment: The deployment instance
+        timeout_seconds: Maximum time to wait for kernel readiness (default: 60)
+        jupyter_port: Port where Jupyter server is running (default: 8888)
+        interval_seconds: Delay between polling attempts (default: 5)
+        settle_delay_seconds: Additional delay after API responds to allow full initialization (default: 2)
+
+    Raises:
+        TimeoutError: If kernel manager is not ready within timeout_seconds
     """
-    if not cells_info:
-        return "No cell execution information available"
+    start_time = time.time()
 
-    lines: list[str] = []
-    for cell in cells_info:
-        status = "ERROR" if cell["has_error"] == "True" else "OK"
-        lines.append(f"  Cell {cell['cell_number']} (index {cell['cell_index']}): {status}")
-        if cell["has_error"] == "True" and cell["error_output"]:
-            # Indent error output
-            error_lines = cell["error_output"].split("\n")
-            for line in error_lines[:10]:  # Limit to first 10 lines
-                lines.append(f"    {line}")
-            if len(error_lines) > 10:
-                lines.append("    ... (error output truncated)")
+    while time.time() - start_time < timeout_seconds:
+        try:
+            result = deployment.cli.run_command(
+                ["jupyter-deploy", "server", "exec", "--", "curl", "-s", f"http://localhost:{jupyter_port}/api/kernels"]
+            )
+            if result.stdout.strip() != "":
+                # Kernel API is responding - wait a bit more for full initialization
+                logger.info(f"Kernel manager ready after {time.time() - start_time:.1f}s")
+                time.sleep(settle_delay_seconds)
+                return
+        except JDCliError:
+            # Command failed, kernel not ready yet
+            pass
 
-    return "\n".join(lines)
+        time.sleep(interval_seconds)
+
+    raise TimeoutError(
+        f"Kernel manager not ready after {timeout_seconds}s. "
+        "The Jupyter server may not have fully initialized or the kernel manager failed to start."
+    )
 
 
 def delete_notebook(deployment: EndToEndDeployment, target_path: str, home_path: str = "/home/jovyan") -> None:

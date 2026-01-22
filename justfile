@@ -235,7 +235,7 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="":
     fi
 
     # Add common pytest options
-    PYTEST_ARGS="$PYTEST_ARGS --screenshot only-on-failure --verbose --browser firefox"
+    PYTEST_ARGS="$PYTEST_ARGS --screenshot only-on-failure --verbose --browser firefox --log-cli-level=INFO"
 
     echo "Running E2E tests for project: {{project_dir}}"
     echo "Test filter: {{test_filter}}"

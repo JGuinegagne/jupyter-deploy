@@ -7,6 +7,8 @@ The pytest-jupyter-deploy plugin provides these fixtures automatically:
 """
 
 import os
+import re
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -18,6 +20,79 @@ def pytest_collection_modifyitems(items: list) -> None:
     for item in items:
         if "e2e" in str(item.fspath):
             item.add_marker(pytest.mark.e2e)
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> Any:
+    """Save page HTML content on test failures for debugging.
+
+    This hook captures the full HTML of the page when a test fails,
+    which is useful for debugging issues that aren't visible in screenshots alone
+    (e.g., checking if 'Server Connection Error' text is actually in the DOM).
+    """
+    # Execute the test
+    outcome = yield
+    report = outcome.get_result()
+
+    # Only process failures during the 'call' phase (actual test execution)
+    if report.when == "call" and report.failed:
+        # Check if the test has access to a playwright page
+        page = None
+        if "github_oauth_app" in item.fixturenames:  # type: ignore[attr-defined]
+            github_oauth_app = item.funcargs.get("github_oauth_app")  # type: ignore[attr-defined]
+            if github_oauth_app and hasattr(github_oauth_app, "page"):
+                page = github_oauth_app.page
+
+        if page:
+            # Save debugging artifacts in the same directory where pytest-playwright saves screenshots
+            # Match pytest-playwright's directory naming convention exactly
+            try:
+                # Get browser name
+                browser_name = page.context.browser.browser_type.name if page.context.browser else "unknown"
+
+                # Replicate pytest-playwright's sanitization logic:
+                # 1. Replace / with -
+                # 2. Replace .py:: with -py-
+                # 3. Replace _ with -
+                # 4. Remove [parameterization] brackets
+                # 5. Append -browser_name
+                test_name = item.nodeid
+                test_name = test_name.replace("/", "-")
+                test_name = test_name.replace(".py::", "-py-")
+                test_name = test_name.replace("_", "-")
+                # Remove parameterization like [firefox]
+                test_name = re.sub(r"\[.*?\]", "", test_name)
+
+                # Create directory matching pytest-playwright's structure
+                test_results_dir = Path("test-results")
+                test_dir = test_results_dir / f"{test_name}-{browser_name}"
+                test_dir.mkdir(parents=True, exist_ok=True)
+
+                # Save HTML content
+                html_path = test_dir / "test-failed.html"
+                html_content = page.content()
+                html_path.write_text(html_content, encoding="utf-8")
+
+                # Save page metadata (URL, title)
+                metadata_path = test_dir / "test-failed-metadata.txt"
+                metadata = f"URL: {page.url}\nTitle: {page.title()}\n"
+                metadata_path.write_text(metadata, encoding="utf-8")
+
+                # Save console messages
+                console_path = test_dir / "test-failed-console.txt"
+                console_messages = page.console_messages()
+                if console_messages:
+                    console_text = "\n".join([f"[{msg.type}] {msg.text}" for msg in console_messages])
+                    console_path.write_text(console_text, encoding="utf-8")
+                else:
+                    console_path.write_text("No console messages captured.\n", encoding="utf-8")
+
+                print(f"\n📄 Saved page artifacts to: {test_dir}/")
+                print("   - test-failed.html (page HTML)")
+                print("   - test-failed-metadata.txt (URL, title)")
+                print("   - test-failed-console.txt (console messages)")
+            except Exception as e:
+                print(f"\n⚠️  Could not save page artifacts: {e}")
 
 
 @pytest.fixture(scope="session")

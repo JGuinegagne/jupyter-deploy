@@ -1,5 +1,6 @@
 """Deployment lifecycle management for E2E tests."""
 
+import ast
 import contextlib
 import subprocess
 import time
@@ -560,3 +561,25 @@ class EndToEndDeployment:
         # The waiter script may have failed, but infrastructure changes succeeded
         with contextlib.suppress(JDCliError):
             self.wait_for_ssm_ready()
+
+    def get_str_variable_value(self, variable_name: str) -> str:
+        """Call jupyter-deploy show CLI, return the parsed response as str."""
+        result = self.cli.run_command(["jupyter-deploy", "show", "--variable", variable_name, "--text"])
+        output = result.stdout.strip()
+        # Try to parse as Python literal first
+        try:
+            value = ast.literal_eval(output)
+        except (ValueError, SyntaxError):
+            # If it fails, treat the output as a plain string (unquoted identifier)
+            value = output
+        assert isinstance(value, str), f"Expected str, got {type(value)}"
+        return value
+
+    def get_list_str_variable_value(self, variable_name: str) -> list[str]:
+        """Call jupyter-deploy show CLI, return the parsed response as list[str]."""
+        result = self.cli.run_command(["jupyter-deploy", "show", "--variable", variable_name, "--text"])
+        output = result.stdout.strip()
+        # Parse as Python literal
+        value = ast.literal_eval(output)
+        assert isinstance(value, list), f"Expected list, got {type(value)}"
+        return value

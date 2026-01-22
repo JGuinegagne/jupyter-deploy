@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
-from pytest_jupyter_deploy.notebook import delete_notebook, run_notebook_in_jupyterlab, upload_notebook
+from pytest_jupyter_deploy.notebook import (
+    delete_notebook,
+    run_notebook_in_jupyterlab,
+    upload_notebook,
+    wait_for_kernel_ready,
+)
 from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
 
 from .constants import ORDER_UV
@@ -38,7 +43,6 @@ def test_uv_switch_to_uv(
 
 @pytest.mark.order(ORDER_UV + 1)
 @pytest.mark.mutating
-@pytest.mark.flaky(reruns=1)
 def test_uv_install_and_persist(
     e2e_deployment: EndToEndDeployment,
     github_oauth_app: GitHubOAuth2ProxyApplication,
@@ -75,6 +79,7 @@ def test_uv_install_and_persist(
     # Restart server to ensure clean session (prevents "Document session error" dialogs)
     e2e_deployment.cli.run_command(["jupyter-deploy", "server", "restart"])
     e2e_deployment.ensure_server_running()
+    wait_for_kernel_ready(e2e_deployment)
 
     # Re-authenticate after server restart
     github_oauth_app.ensure_authenticated()

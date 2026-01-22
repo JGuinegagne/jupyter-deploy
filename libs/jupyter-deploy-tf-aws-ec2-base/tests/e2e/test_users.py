@@ -25,6 +25,10 @@ def test_admit_user_positive(
     users = e2e_deployment.get_allowlisted_users()
     assert set(users) == {logged_user}, f"Expected exactly [{logged_user}], got {users}"
 
+    # Verify variable was updated
+    usernames = e2e_deployment.get_list_str_variable_value("oauth_allowed_usernames")
+    assert usernames == [logged_user], f"Expected [{logged_user}], got {usernames}"
+
     # Verify logged user can access the app
     github_oauth_app.ensure_authenticated()
     github_oauth_app.verify_jupyterlab_accessible()
@@ -47,6 +51,10 @@ def test_admit_user_negative(
     # Verify list users is correct
     users = e2e_deployment.get_allowlisted_users()
     assert set(users) == {safe_user}, f"Expected exactly [{safe_user}], got {users}"
+
+    # Verify variable was updated
+    usernames = e2e_deployment.get_list_str_variable_value("oauth_allowed_usernames")
+    assert usernames == [safe_user], f"Expected [{safe_user}], got {usernames}"
 
     # Verify logged user gets unauthorized page
     github_oauth_app.ensure_authenticated()
@@ -74,6 +82,10 @@ def test_add_user(
     users = e2e_deployment.get_allowlisted_users()
     assert set(users) == {logged_user, safe_user}, f"Expected exactly [{logged_user}, {safe_user}], got {users}"
 
+    # Verify variable was updated
+    usernames = e2e_deployment.get_list_str_variable_value("oauth_allowed_usernames")
+    assert set(usernames) == {logged_user, safe_user}, f"Expected [{logged_user}, {safe_user}], got {usernames}"
+
     # Verify logged user can access the app
     github_oauth_app.ensure_authenticated()
     github_oauth_app.verify_jupyterlab_accessible()
@@ -99,6 +111,10 @@ def test_remove_user(
     # Verify list users only includes safe user
     users = e2e_deployment.get_allowlisted_users()
     assert set(users) == {safe_user}, f"Expected exactly [{safe_user}], got {users}"
+
+    # Verify variable was updated
+    usernames = e2e_deployment.get_list_str_variable_value("oauth_allowed_usernames")
+    assert usernames == [safe_user], f"Expected only [{safe_user}], got {usernames}"
 
     # Verify logged user gets unauthorized page
     github_oauth_app.ensure_authenticated()
@@ -130,6 +146,10 @@ def test_add_and_remove_multiple_users(
     users = e2e_deployment.get_allowlisted_users()
     assert set(users) == {logged_user, safe_user}, f"Expected exactly [{logged_user}, {safe_user}], got {users}"
 
+    # Verify variable was updated
+    usernames = e2e_deployment.get_list_str_variable_value("oauth_allowed_usernames")
+    assert set(usernames) == {logged_user, safe_user}, f"Expected [{logged_user}, {safe_user}], got {usernames}"
+
     # Verify logged user can access the app
     github_oauth_app.ensure_authenticated()
     github_oauth_app.verify_jupyterlab_accessible()
@@ -140,6 +160,10 @@ def test_add_and_remove_multiple_users(
     # Verify list users shows no allowlisted users
     users = e2e_deployment.get_allowlisted_users()
     assert set(users) == set(), f"Expected empty set, got {users}"
+
+    # Verify variable was updated to empty list
+    usernames = e2e_deployment.get_list_str_variable_value("oauth_allowed_usernames")
+    assert usernames == [], f"Expected empty list, got {usernames}"
 
     # Verify logged user gets unauthorized page
     github_oauth_app.ensure_authenticated()
@@ -169,6 +193,10 @@ def test_disallow_to_remove_all_users_when_no_org_allowlisted(
     # Verify list users still shows the user
     users = e2e_deployment.get_allowlisted_users()
     assert set(users) == {logged_user}, f"Expected {logged_user}, got {users}"
+
+    # Verify variable was NOT changed
+    usernames = e2e_deployment.get_list_str_variable_value("oauth_allowed_usernames")
+    assert usernames == [logged_user], f"Expected [{logged_user}] (unchanged), got {usernames}"
 
     # Verify logged user can still access the app
     github_oauth_app.ensure_authenticated()
