@@ -157,6 +157,22 @@ def test_run_gpu_notebook(
     # Clean up - delete the notebook
     delete_notebook(e2e_deployment, "e2e-test/gpu_check.ipynb")
 
+    # Verify torch was installed by the notebook
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "pixi", "list"])
+    if "torch" not in result.stdout:
+        raise AssertionError(f"Expected torch install: {result.stdout}")
+
+    # Remove torch from the environment
+    # torch is a gigantic library; we need it to assert cuda access and to ensure a user of a GPU instance
+    # can install torch in their environment, however it's less relevant for non-gpu tests.
+    # Therefore, we remove it to avoid pulling it for all future image builds
+    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "pixi", "remove", "--pypi", "torch"])
+
+    # Verify torch was removed
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "pixi", "list"])
+    if "torch" in result.stdout:
+        raise AssertionError(f"Expected torch to have been removed: {result.stdout}")
+
 
 @pytest.mark.order(ORDER_GPU + 2)
 @pytest.mark.mutating

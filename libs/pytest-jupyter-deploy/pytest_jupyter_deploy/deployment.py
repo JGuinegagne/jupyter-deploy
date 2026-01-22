@@ -90,6 +90,7 @@ class EndToEndDeployment:
                     "Cannot run integration tests; referenced project does not exist "
                     f"at path: {self.suite_config.project_dir.absolute()}"
                 )
+            self._is_deployed = True
         # CASE 2: Deploy from Scratch, then Test against it
         else:
             # In this case also, the directory MUST already exist

@@ -49,9 +49,7 @@ def upload_notebook(deployment: EndToEndDeployment, src_path: str | Path, target
     deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", python_cmd])
 
 
-def _extract_cell_outputs(
-    page: Page, execution_idx: int = 0, already_logged_cells: set[int] | None = None
-) -> list[dict[str, str]]:
+def _extract_cell_outputs(page: Page, cells_info: list[dict[str, str]]) -> list[dict[str, str]]:
     """Extract cell execution information from the current notebook.
 
     Note: this method swallows exceptions to ensure we gather as much cell
@@ -59,74 +57,88 @@ def _extract_cell_outputs(
 
     Args:
         page: Playwright Page instance
-        execution_idx: Poll iteration number for logging (0 = first check)
-        already_logged_cells: Set of cell indices that have already been logged (to reduce verbosity)
+        cells_info: Cell info from previous poll (to avoid expensive re-extraction
+            for cells that were already fully executed and captured)
 
     Returns:
-        List of dictionaries containing cell information with keys:
+        Updated list of cell information with keys:
         - cell_number: Execution count (e.g., "[1]", "[2]") or "[-1]" when not-executed
         - has_error: Boolean indicating if cell has error output
         - error_output: Error traceback text if present, empty string otherwise
     """
-    if already_logged_cells is None:
-        already_logged_cells = set()
-
-    cells_info: list[dict[str, str]] = []
-
-    # Find all code cells in the notebook
+    # Progressively scroll to ensure all cells are rendered
+    # JupyterLab uses virtualization - cells outside viewport aren't in DOM
+    # Get final cell list after scrolling
     code_cells = page.locator(".jp-CodeCell").all()
-    logger.debug(f"[Poll {execution_idx}] Found {len(code_cells)} code cells")
+    logger.debug(f"Found {len(code_cells)} cells.")
+
+    # Create a new list to avoid mutating the input
+    updated_cells_info: list[dict[str, str]] = []
+
+    # Ensure we have entries for all cells
+    for i in range(len(code_cells)):
+        if i < len(cells_info):
+            # Copy existing cell info
+            updated_cells_info.append(cells_info[i].copy())
+        else:
+            # Create new cell info entry
+            updated_cells_info.append(
+                {
+                    "cell_index": str(i),
+                    "cell_number": "[-1]",
+                    "has_error": "False",
+                    "error_output": "",
+                }
+            )
 
     for i, cell in enumerate(code_cells):
-        cell_info: dict[str, str] = {
-            "cell_index": str(i),
-            "cell_number": "[-1]",
-            "has_error": "False",
-            "error_output": "",
-        }
+        # Skip cells that were already fully executed and captured
+        if _is_cell_executed(updated_cells_info[i]["cell_number"]):
+            continue
 
-        # Get execution count from input prompt
+        # Update execution count
+        cell.scroll_into_view_if_needed()
         try:
-            input_prompt = cell.locator(".jp-InputArea-prompt").first
+            input_prompt = cell.locator(".jp-InputArea-prompt")
             prompt_text = input_prompt.inner_text(timeout=1000)
-            cell_info["cell_number"] = prompt_text.strip()
-            # Only log if this cell hasn't been logged yet
-            if i not in already_logged_cells:
-                logger.debug(f"[Poll {execution_idx}] Cell {i} execution count: {cell_info['cell_number']}")
+            updated_cells_info[i]["cell_number"] = prompt_text.strip()
         except Exception as e:
-            logger.warning(f"[Poll {execution_idx}] Could not extract cell number for cell {i}: {e}")
-            cell_info["cell_number"] = "[-1]"
+            updated_cells_info[i]["cell_number"] = "[-1]"
+            logger.warning(f"Exception when attempting to retrieve cell number: {e}")
             # do NOT raise here, keep gathering cell information
 
-        # Check for error outputs
-        try:
-            # JupyterLab displays errors in output area with specific classes
-            output_area = cell.locator(".jp-OutputArea-output")
-            if output_area.count() > 0:
-                # Get all output text and check if it contains error indicators
-                all_output_text = output_area.first.inner_text(timeout=1000)
-                # Only log if this cell hasn't been logged yet
-                if i not in already_logged_cells:
-                    logger.debug(
-                        f"[Poll {execution_idx}] Cell {i} output text (first 200 chars): {all_output_text[:200]}"
-                    )
+        logger.debug(f"Updated cell {i} to {updated_cells_info[i]['cell_number']}")
 
-                # Check for common error patterns
-                if any(pattern in all_output_text for pattern in ["Traceback", "Error:", "Exception:", "error:"]):
-                    cell_info["has_error"] = "True"
-                    cell_info["error_output"] = all_output_text[:500]  # Limit to first 500 chars
-                    # Only log if this cell hasn't been logged yet
-                    if i not in already_logged_cells:
-                        logger.warning(f"[Poll {execution_idx}] Cell {i} has error: {cell_info['error_output'][:100]}")
-        except Exception as e:
-            logger.error(f"[Poll {execution_idx}] Could not extract error output for cell {i}: {e}")
-            cell_info["has_error"] = "Possibly"
-            cell_info["error_output"] = "Failed to retrieve cell output"
-            # do NOT raise here, keep gathering cell information
+        # Stop iteration if we encounter a cell that's not executed yet (empty or [*]:)
+        # Since cells execute sequentially, all cells below this haven't started
+        cell_num = updated_cells_info[i]["cell_number"]
+        if not cell_num or cell_num.strip() == "" or "[*]" in cell_num:
+            logger.debug(f"Cell {i} not yet executed ({cell_num}), stopping iteration to avoid virtualization")
+            break
 
-        cells_info.append(cell_info)
+        # Check for error outputs (expensive operation) only if cell is now executed
+        if _is_cell_executed(updated_cells_info[i]["cell_number"]):
+            try:
+                # JupyterLab displays errors in output area with specific classes
+                output_area = cell.locator(".jp-OutputArea-output")
+                if output_area.count() > 0:
+                    # Get all output text and check if it contains error indicators
+                    all_output_text = output_area.first.inner_text(timeout=1000)
 
-    return cells_info
+                    # Check for common error patterns
+                    if any(pattern in all_output_text for pattern in ["Traceback", "Error:", "Exception:", "error:"]):
+                        updated_cells_info[i]["has_error"] = "True"
+                        updated_cells_info[i]["error_output"] = all_output_text[:500]  # Limit to first 500 chars
+                        logger.warning(f"Detected error for cell {i}: {all_output_text[:50]}.")
+            except Exception as e:
+                updated_cells_info[i]["has_error"] = "Possibly"
+                updated_cells_info[i]["error_output"] = "Failed to retrieve cell output"
+                updated_cells_info[i]["cell_number"] = "[*]"
+
+                logger.warning(f"Exception when attempting to retrieve cell output: {e}")
+                # do NOT raise here, keep gathering cell information
+
+    return updated_cells_info
 
 
 def _close_all_tabs_and_stop_sessions(page: Page, extra_sleep_after_close_tabs_seconds: float = 0.0) -> None:
@@ -193,23 +205,24 @@ def _close_all_tabs_and_stop_sessions(page: Page, extra_sleep_after_close_tabs_s
         logger.debug(f"No 'Close All' button found or already closed: {e}")
 
     # Click "Shut Down All" button in KERNELS section if present and enabled
-    try:
-        # Target the specific toolbar first, then find the button within it
-        kernels_toolbar = left_panel.locator('jp-toolbar[aria-label="Kernels toolbar"]')
-        shutdown_all_button = kernels_toolbar.locator('jp-button[aria-label="Shut Down All"]')
-        shutdown_all_button.wait_for(state="visible", timeout=1000)
-
-        logger.debug("Clicking 'Shut Down All' button...")
-        shutdown_all_button.click()
-        time.sleep(0.3)
-
-        # JupyterLab displays a dialog box with a confirm button at a hard-to-find place in the DOM
-        # use the keyboard to go around the issue of finding it!
-        logger.debug("Confirming 'Shut Down All' with Enter key...")
-        page.keyboard.press("Enter")
-        time.sleep(0.5)
-    except Exception as e:
-        logger.debug(f"No 'Shut Down All' button found or already shut down: {e}")
+    # COMMENTED OUT: This may prevent kernels from auto-starting for subsequent notebooks
+    # try:
+    #     # Target the specific toolbar first, then find the button within it
+    #     kernels_toolbar = left_panel.locator('jp-toolbar[aria-label="Kernels toolbar"]')
+    #     shutdown_all_button = kernels_toolbar.locator('jp-button[aria-label="Shut Down All"]')
+    #     shutdown_all_button.wait_for(state="visible", timeout=1000)
+    #
+    #     logger.debug("Clicking 'Shut Down All' button...")
+    #     shutdown_all_button.click()
+    #     time.sleep(0.3)
+    #
+    #     # JupyterLab displays a dialog box with a confirm button at a hard-to-find place in the DOM
+    #     # use the keyboard to go around the issue of finding it!
+    #     logger.debug("Confirming 'Shut Down All' with Enter key...")
+    #     page.keyboard.press("Enter")
+    #     time.sleep(0.5)
+    # except Exception as e:
+    #     logger.debug(f"No 'Shut Down All' button found or already shut down: {e}")
 
     # Close the Sessions and Tabs panel
     page.keyboard.press("Escape")
@@ -325,21 +338,15 @@ def run_notebook_in_jupyterlab(
     max_wait = timeout_ms / 1000  # Convert to seconds
     poll_interval = poll_interval_ms / 1000  # Convert to seconds
     poll_iteration = 0  # Track poll iteration for logging
-    logged_cells: set[int] = set()  # Track cells we've already logged to reduce verbosity
+    cells_info: list[dict[str, str]] = []  # Track previous poll to avoid re-extraction
 
     logger.debug(f"Waiting for notebook execution to complete (timeout: {timeout_ms}ms)...")
     while time.time() - start_time < max_wait:
         poll_iteration += 1
         logger.debug(f"[Poll {poll_iteration}] Checking cell execution states...")
 
-        # Extract current cell execution states
-        cells_info = _extract_cell_outputs(page, execution_idx=poll_iteration, already_logged_cells=logged_cells)
-
-        # Mark cells as logged if they're executed or have errors
-        for cell in cells_info:
-            cell_idx = int(cell["cell_index"])
-            if _is_cell_executed(cell["cell_number"]) or cell["has_error"] in ["True", "Possibly"]:
-                logged_cells.add(cell_idx)
+        # Extract current cell execution states (reuse info from previous poll for executed cells)
+        cells_info = _extract_cell_outputs(page, cells_info=cells_info)
 
         if not cells_info:
             # No cells found yet, notebook may still be loading
@@ -366,7 +373,7 @@ def run_notebook_in_jupyterlab(
     # Timeout - perform final check to see if cells actually completed
     poll_iteration += 1
     logger.warning(f"[Poll {poll_iteration}] Timeout reached, performing final cell extraction...")
-    cells_info = _extract_cell_outputs(page, execution_idx=poll_iteration, already_logged_cells=logged_cells)
+    cells_info = _extract_cell_outputs(page, cells_info=cells_info)
     executed_count = len([cell for cell in cells_info if _is_cell_executed(cell["cell_number"])])
     total_count = len(cells_info)
 
@@ -433,6 +440,13 @@ def _verify_executed_and_no_cell_error(cells_info: list[dict[str, str]], noteboo
     Raises:
         RuntimeError: If any cell has an error or if no cells executed
     """
+    # Log cell states for debugging
+    logger.debug(f"Verifying {len(cells_info)} cells from {notebook_path}")
+    for cell in cells_info:
+        logger.debug(
+            f"  Cell {cell['cell_index']}: execution_count={cell['cell_number']}, has_error={cell['has_error']}"
+        )
+
     # Verify we found at least one cell
     if not cells_info:
         raise RuntimeError(

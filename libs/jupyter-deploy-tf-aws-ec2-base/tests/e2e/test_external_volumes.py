@@ -46,9 +46,7 @@ def test_external_volumes_provisioning(
         "/home/jovyan/external-efs1",
     ]
     for mount_point in mount_points:
-        result = e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "stat", mount_point])
-        if "No such file or directory" in result.stdout:
-            raise AssertionError(f"Expected mount point {mount_point} to be accessible from jupyterlab")
+        verify_dir_exists_on_server(e2e_deployment, mount_point)
 
     # Verify app is accessible
     github_oauth_app.ensure_authenticated()

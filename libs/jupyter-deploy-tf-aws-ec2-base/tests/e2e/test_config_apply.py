@@ -51,8 +51,8 @@ def test_upgrade_config(
     )
 
     # Prerequisites
-    e2e_deployment.ensure_authorized([logged_user], "", [])
     e2e_deployment.ensure_server_running()
+    e2e_deployment.ensure_authorized([logged_user], "", [])
 
     # Add flag files to all volumes (home + external)
     e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "touch", "e2e_flag_home.txt"])

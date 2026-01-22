@@ -71,6 +71,7 @@ def test_config_set_list_string_variable(e2e_deployment: EndToEndDeployment, log
     e2e_deployment.ensure_deployed()
 
     # Step 1: Use ensure_authorized to set only the logged user
+    e2e_deployment.ensure_server_running()
     e2e_deployment.ensure_authorized([logged_user], "", [])
 
     # Verify only logged user is set

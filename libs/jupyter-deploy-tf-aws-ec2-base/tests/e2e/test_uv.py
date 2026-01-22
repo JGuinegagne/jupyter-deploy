@@ -23,7 +23,7 @@ def test_uv_switch_to_uv(
 ) -> None:
     """Test switching to UV package manager."""
     # Switch to UV package manager
-    e2e_deployment.ensure_server_stopped_and_host_is_running()
+    e2e_deployment.ensure_server_running()
     e2e_deployment.ensure_deployed_with(["--jupyter-package-manager", "uv"])
 
     # Ensure server is running and user is authorized
@@ -76,7 +76,7 @@ def test_uv_install_and_persist(
     upload_notebook(e2e_deployment, notebook_path, "e2e-test/uv_install_ipywidgets.ipynb")
 
     # Run the notebook in the UI
-    run_notebook_in_jupyterlab(github_oauth_app.page, "e2e-test/uv_install_ipywidgets.ipynb", timeout_ms=180000)
+    run_notebook_in_jupyterlab(github_oauth_app.page, "e2e-test/uv_install_ipywidgets.ipynb", timeout_ms=120000)
 
     # Clean up - delete the notebook
     delete_notebook(e2e_deployment, "e2e-test/uv_install_ipywidgets.ipynb")

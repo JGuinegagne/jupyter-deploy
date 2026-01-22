@@ -23,7 +23,7 @@ def test_pixi_switch_to_pixi(
 ) -> None:
     """Test switching to Pixi package manager."""
     # Switch to Pixi package manager
-    e2e_deployment.ensure_server_stopped_and_host_is_running()
+    e2e_deployment.ensure_server_running()
     e2e_deployment.ensure_deployed_with(["--jupyter-package-manager", "pixi"])
 
     # Ensure server is running and user is authorized
@@ -85,7 +85,7 @@ def test_pixi_install_and_persist(
     upload_notebook(e2e_deployment, notebook_path, "e2e-test/pixi_install_libraries.ipynb")
 
     # Run the notebook in the UI
-    run_notebook_in_jupyterlab(github_oauth_app.page, "e2e-test/pixi_install_libraries.ipynb", timeout_ms=240000)
+    run_notebook_in_jupyterlab(github_oauth_app.page, "e2e-test/pixi_install_libraries.ipynb", timeout_ms=120000)
 
     # Clean up - delete the notebook
     delete_notebook(e2e_deployment, "e2e-test/pixi_install_libraries.ipynb")
