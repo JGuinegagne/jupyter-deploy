@@ -6,7 +6,7 @@ import pytest
 from pytest_jupyter_deploy.cli import JDCliError
 from pytest_jupyter_deploy.constants import E2E_UPGRADE_INSTANCE_LOG_FILE
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
-from pytest_jupyter_deploy.files import verify_file_does_not_exist_on_server, verify_file_exists_on_server
+from pytest_jupyter_deploy.files import verify_file_exists_on_server, verify_file_or_dir_does_not_exist_on_server
 from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
 from pytest_jupyter_deploy.plugin import skip_if_testvars_not_set
 
@@ -127,6 +127,6 @@ def test_upgrade_config(
     )
 
     # Verify cleanup succeeded
-    verify_file_does_not_exist_on_server(e2e_deployment, "e2e_flag_home.txt")
-    verify_file_does_not_exist_on_server(e2e_deployment, "external-ebs1/e2e_flag_ebs.txt")
-    verify_file_does_not_exist_on_server(e2e_deployment, "external-efs1/e2e_flag_efs.txt")
+    verify_file_or_dir_does_not_exist_on_server(e2e_deployment, "e2e_flag_home.txt")
+    verify_file_or_dir_does_not_exist_on_server(e2e_deployment, "external-ebs1/e2e_flag_ebs.txt")
+    verify_file_or_dir_does_not_exist_on_server(e2e_deployment, "external-efs1/e2e_flag_efs.txt")

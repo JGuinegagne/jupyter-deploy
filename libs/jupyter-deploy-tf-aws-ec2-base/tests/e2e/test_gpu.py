@@ -4,12 +4,11 @@ from pathlib import Path
 
 import pytest
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
-from pytest_jupyter_deploy.files import verify_file_does_not_exist_on_server, verify_file_exists_on_server
+from pytest_jupyter_deploy.files import verify_file_exists_on_server, verify_file_or_dir_does_not_exist_on_server
 from pytest_jupyter_deploy.notebook import (
     delete_notebook,
     run_notebook_in_jupyterlab,
     upload_notebook,
-    wait_for_kernel_ready,
 )
 from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
 from pytest_jupyter_deploy.plugin import skip_if_testvars_not_set
@@ -96,9 +95,9 @@ def test_switch_to_gpu(
     )
 
     # Verify cleanup succeeded
-    verify_file_does_not_exist_on_server(e2e_deployment, "e2e_flag_home.txt")
-    verify_file_does_not_exist_on_server(e2e_deployment, "external-ebs1/e2e_flag_ebs.txt")
-    verify_file_does_not_exist_on_server(e2e_deployment, "external-efs1/e2e_flag_efs.txt")
+    verify_file_or_dir_does_not_exist_on_server(e2e_deployment, "e2e_flag_home.txt")
+    verify_file_or_dir_does_not_exist_on_server(e2e_deployment, "external-ebs1/e2e_flag_ebs.txt")
+    verify_file_or_dir_does_not_exist_on_server(e2e_deployment, "external-efs1/e2e_flag_efs.txt")
 
 
 @pytest.mark.order(ORDER_GPU + 1)
@@ -147,15 +146,6 @@ def test_run_gpu_notebook(
 
     # Upload the notebook
     upload_notebook(e2e_deployment, gpu_notebook, "e2e-test/gpu_check.ipynb")
-
-    # Restart server to ensure clean session (prevents "Document session error" dialogs)
-    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "restart"])
-    e2e_deployment.ensure_server_running()
-    wait_for_kernel_ready(e2e_deployment)
-
-    # Re-authenticate after server restart
-    github_oauth_app.ensure_authenticated()
-    github_oauth_app.verify_jupyterlab_accessible()
 
     # Run the notebook in the UI
     # Note: torch installation via pixi takes ~90s, so use 5min timeout to account for network variability

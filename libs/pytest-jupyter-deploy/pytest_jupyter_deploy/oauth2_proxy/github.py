@@ -72,7 +72,7 @@ class GitHubOAuth2ProxyApplication:
                 if is_dns_error and attempt < max_retries - 1:
                     # Wait with exponential backoff: 2s, 4s, 8s, 16s (max: 30s total)
                     delay = min(2 ** (attempt + 1), 30)
-                    logger.info(f"Retrying navigation in {delay}s (DNS/connection error detected)...")
+                    logger.debug(f"Retrying navigation in {delay}s (DNS/connection error detected)...")
                     time.sleep(delay)
                 else:
                     # Max retries exceeded or non-DNS error - raise original exception

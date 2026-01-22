@@ -8,7 +8,6 @@ from pathlib import Path
 
 from playwright.sync_api import Page
 
-from pytest_jupyter_deploy.cli import JDCliError
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
 
 logger = logging.getLogger(__name__)
@@ -50,7 +49,9 @@ def upload_notebook(deployment: EndToEndDeployment, src_path: str | Path, target
     deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", python_cmd])
 
 
-def _extract_cell_outputs(page: Page, execution_idx: int = 0) -> list[dict[str, str]]:
+def _extract_cell_outputs(
+    page: Page, execution_idx: int = 0, already_logged_cells: set[int] | None = None
+) -> list[dict[str, str]]:
     """Extract cell execution information from the current notebook.
 
     Note: this method swallows exceptions to ensure we gather as much cell
@@ -59,6 +60,7 @@ def _extract_cell_outputs(page: Page, execution_idx: int = 0) -> list[dict[str, 
     Args:
         page: Playwright Page instance
         execution_idx: Poll iteration number for logging (0 = first check)
+        already_logged_cells: Set of cell indices that have already been logged (to reduce verbosity)
 
     Returns:
         List of dictionaries containing cell information with keys:
@@ -66,11 +68,14 @@ def _extract_cell_outputs(page: Page, execution_idx: int = 0) -> list[dict[str, 
         - has_error: Boolean indicating if cell has error output
         - error_output: Error traceback text if present, empty string otherwise
     """
+    if already_logged_cells is None:
+        already_logged_cells = set()
+
     cells_info: list[dict[str, str]] = []
 
     # Find all code cells in the notebook
     code_cells = page.locator(".jp-CodeCell").all()
-    logger.info(f"[Poll {execution_idx}] Found {len(code_cells)} code cells")
+    logger.debug(f"[Poll {execution_idx}] Found {len(code_cells)} code cells")
 
     for i, cell in enumerate(code_cells):
         cell_info: dict[str, str] = {
@@ -85,7 +90,9 @@ def _extract_cell_outputs(page: Page, execution_idx: int = 0) -> list[dict[str, 
             input_prompt = cell.locator(".jp-InputArea-prompt").first
             prompt_text = input_prompt.inner_text(timeout=1000)
             cell_info["cell_number"] = prompt_text.strip()
-            logger.info(f"[Poll {execution_idx}] Cell {i} execution count: {cell_info['cell_number']}")
+            # Only log if this cell hasn't been logged yet
+            if i not in already_logged_cells:
+                logger.debug(f"[Poll {execution_idx}] Cell {i} execution count: {cell_info['cell_number']}")
         except Exception as e:
             logger.warning(f"[Poll {execution_idx}] Could not extract cell number for cell {i}: {e}")
             cell_info["cell_number"] = "[-1]"
@@ -98,13 +105,19 @@ def _extract_cell_outputs(page: Page, execution_idx: int = 0) -> list[dict[str, 
             if output_area.count() > 0:
                 # Get all output text and check if it contains error indicators
                 all_output_text = output_area.first.inner_text(timeout=1000)
-                logger.info(f"[Poll {execution_idx}] Cell {i} output text (first 200 chars): {all_output_text[:200]}")
+                # Only log if this cell hasn't been logged yet
+                if i not in already_logged_cells:
+                    logger.debug(
+                        f"[Poll {execution_idx}] Cell {i} output text (first 200 chars): {all_output_text[:200]}"
+                    )
 
                 # Check for common error patterns
                 if any(pattern in all_output_text for pattern in ["Traceback", "Error:", "Exception:", "error:"]):
                     cell_info["has_error"] = "True"
                     cell_info["error_output"] = all_output_text[:500]  # Limit to first 500 chars
-                    logger.warning(f"[Poll {execution_idx}] Cell {i} has error: {cell_info['error_output'][:100]}")
+                    # Only log if this cell hasn't been logged yet
+                    if i not in already_logged_cells:
+                        logger.warning(f"[Poll {execution_idx}] Cell {i} has error: {cell_info['error_output'][:100]}")
         except Exception as e:
             logger.error(f"[Poll {execution_idx}] Could not extract error output for cell {i}: {e}")
             cell_info["has_error"] = "Possibly"
@@ -116,13 +129,136 @@ def _extract_cell_outputs(page: Page, execution_idx: int = 0) -> list[dict[str, 
     return cells_info
 
 
+def _close_all_tabs_and_stop_sessions(page: Page, extra_sleep_after_close_tabs_seconds: float = 0.0) -> None:
+    """Close all open tabs and shut down all kernel sessions in JupyterLab.
+
+    Uses the View > Sessions and Tabs menu to cleanly close all tabs and shutdown all kernels.
+    This helps avoid strict mode violations when multiple notebooks are open.
+
+    Args:
+        page: Playwright Page instance
+        extra_wait_after_close_all: Additional seconds to wait after closing tabs
+            (useful when cleaning up after error dialogs)
+    """
+    try:
+        logger.debug("Attempting to close all tabs and shutdown all kernels...")
+
+        # Close any open dialogs first
+        page.keyboard.press("Escape")
+        time.sleep(0.2)
+
+        # Click View menu in top menu bar
+        logger.debug("Opening View menu...")
+        view_menu = page.get_by_role("menuitem", name="View")
+        view_menu.click()
+        time.sleep(0.3)
+
+        # Click "Sessions and Tabs" submenu item
+        logger.debug("Clicking 'Sessions and Tabs'...")
+        sessions_and_tabs = page.get_by_text("Sessions and Tabs", exact=True)
+        sessions_and_tabs.wait_for(state="visible", timeout=1000)
+        sessions_and_tabs.click()
+        time.sleep(0.5)
+    except Exception as e:
+        # Error accessing session and tabs
+        logger.warning(f"Could not access Sessions and Tabs left panel: {e}")
+        return
+
+    # Scope searches to the left panel to avoid strict mode violations
+    left_panel = page.locator("#jp-running-sessions")
+
+    # Click "Close All" button in OPEN TABS section
+    try:
+        # Target the specific toolbar first, then find the button within it
+        open_tabs_toolbar = left_panel.locator('jp-toolbar[aria-label="Open Tabs toolbar"]')
+        close_all_button = open_tabs_toolbar.locator('jp-button[aria-label="Close All"]')
+        close_all_button.wait_for(state="visible", timeout=1000)
+
+        logger.debug("Clicking 'Close All' button...")
+        close_all_button.click()
+        time.sleep(0.3)
+
+        # JupyterLab displays a dialog box with a confirm button at a hard-to-find place in the DOM
+        # use the keyboard to go around the issue of finding it!
+        logger.debug("Confirming 'Close All' with Enter key...")
+        page.keyboard.press("Enter")
+        time.sleep(0.5)
+
+        # Wait for tabs to actually close (with extra wait if needed for error cleanup)
+        base_sleep_seconds = 1.0
+        total_sleep = base_sleep_seconds + extra_sleep_after_close_tabs_seconds
+        logger.debug(f"Waiting {total_sleep}s for tabs to close...")
+        time.sleep(total_sleep)
+    except Exception as e:
+        logger.debug(f"No 'Close All' button found or already closed: {e}")
+
+    # Click "Shut Down All" button in KERNELS section if present and enabled
+    try:
+        # Target the specific toolbar first, then find the button within it
+        kernels_toolbar = left_panel.locator('jp-toolbar[aria-label="Kernels toolbar"]')
+        shutdown_all_button = kernels_toolbar.locator('jp-button[aria-label="Shut Down All"]')
+        shutdown_all_button.wait_for(state="visible", timeout=1000)
+
+        logger.debug("Clicking 'Shut Down All' button...")
+        shutdown_all_button.click()
+        time.sleep(0.3)
+
+        # JupyterLab displays a dialog box with a confirm button at a hard-to-find place in the DOM
+        # use the keyboard to go around the issue of finding it!
+        logger.debug("Confirming 'Shut Down All' with Enter key...")
+        page.keyboard.press("Enter")
+        time.sleep(0.5)
+    except Exception as e:
+        logger.debug(f"No 'Shut Down All' button found or already shut down: {e}")
+
+    # Close the Sessions and Tabs panel
+    page.keyboard.press("Escape")
+    time.sleep(0.2)
+
+    logger.debug("Successfully closed all tabs and shut down all kernels")
+
+
+def _dismiss_document_session_error_if_present(page: Page) -> bool:
+    """Dismiss any lingering 'Document session error' dialog if present.
+
+    This dialog can appear when JupyterLab tries to restore a session for a notebook
+    that was previously open but has since been deleted from the filesystem.
+
+    Dismissing with Enter will unblock the UI (though it may leave a spinner),
+    which allows the subsequent close all tabs operation to clean up properly.
+
+    Args:
+        page: Playwright Page instance
+
+    Returns:
+        True if a dialog was dismissed, False otherwise
+    """
+    logger.debug("Checking for 'Document session error' dialog...")
+    try:
+        # Look for the dialog element with aria-label containing "Document session error"
+        error_dialog = page.locator('dialog[aria-label*="Document session error"]')
+
+        # Check if the dialog is visible with a short timeout
+        if error_dialog.is_visible(timeout=1000):
+            logger.debug("Found 'Document session error' dialog, dismissing with Enter key...")
+            # Press Enter to dismiss the dialog (may leave a spinner but unblocks the UI)
+            page.keyboard.press("Enter")
+            time.sleep(0.5)
+            logger.debug("Successfully dismissed 'Document session error' dialog")
+            return True
+        else:
+            logger.debug("No 'Document session error' dialog present")
+            return False
+    except Exception as e:
+        # No error dialog present or already dismissed
+        logger.debug(f"No 'Document session error' dialog found: {e}")
+        return False
+
+
 def run_notebook_in_jupyterlab(
     page: Page, notebook_path: str, timeout_ms: int = 120000, poll_interval_ms: int = 2000
 ) -> None:
     """Run a notebook in JupyterLab and wait for completion.
-
-    NOTE: To avoid "Document session error" dialogs, restart the Jupyter server
-    and re-authenticate BEFORE calling this function.
 
     Args:
         page: Playwright Page instance with JupyterLab already loaded
@@ -133,39 +269,16 @@ def run_notebook_in_jupyterlab(
     Raises:
         RuntimeError: If notebook execution fails or times out, includes cell execution details
     """
-    # Refresh page to establish fresh kernel connections (especially important after server restarts)
-    page.reload()
-    page.wait_for_load_state("networkidle")
-
-    # Check for server connection errors after page load
+    # Check for server connection errors
     _reload_on_server_connection_error(page)
 
-    # Close all open notebook tabs to avoid strict mode violations when multiple notebooks are open
-    # This can happen if previous tests left tabs open due to errors
-    # Strategy: Use Command Palette to execute "application:close-all"
-    try:
-        logger.info("Attempting to close all other tabs...")
+    # Dismiss any "Document session error" dialog first (unblocks UI so we can close tabs)
+    dismissed_error_dialog = _dismiss_document_session_error_if_present(page)
 
-        # Close any open dialogs first
-        page.keyboard.press("Escape")
-        time.sleep(0.2)
-
-        # Open Command Palette with Ctrl+Shift+C
-        page.keyboard.press("Control+Shift+c")
-        time.sleep(0.5)
-
-        # Type "close all tabs" to filter commands
-        page.keyboard.type("close all tabs")
-        time.sleep(0.3)
-
-        # Press Enter to execute the "application:close-all" command
-        page.keyboard.press("Enter")
-        time.sleep(0.5)
-
-        logger.info("Successfully executed close-all command...")
-    except Exception as e:
-        # If closing tabs fails, continue anyway
-        logger.warning(f"Could not close all tabs: {e}")
+    # Close all open notebook tabs and shut down all kernels to avoid strict mode violations
+    # If we dismissed an error dialog, wait longer for tabs to close (spinner cleanup)
+    extra_sleep_seconds = 1.5 if dismissed_error_dialog else 0.0
+    _close_all_tabs_and_stop_sessions(page, extra_sleep_after_close_tabs_seconds=extra_sleep_seconds)
 
     # Open the notebook directly via URL to bypass file browser caching issues
     # JupyterLab uses URLs like /lab/tree/path/to/notebook.ipynb
@@ -173,65 +286,60 @@ def run_notebook_in_jupyterlab(
     base_url = current_url.split("/lab")[0] if "/lab" in current_url else current_url.rstrip("/")
     notebook_url = f"{base_url}/lab/tree/{notebook_path}"
 
-    logger.info(f"Opening notebook at: {notebook_url}...")
+    logger.debug(f"Opening notebook at: {notebook_url}...")
     page.goto(notebook_url)
     time.sleep(2)  # Give JupyterLab time to load the notebook
 
     # Wait for the notebook to load - check for the notebook toolbar
-    # Use .first to handle cases where multiple notebooks may be open
-    logger.info("Looking for notebook toolbar...")
-    notebook_toolbar = page.locator(".jp-NotebookPanel-toolbar").first
+    # Strict mode will enforce that only one notebook is visible
+    # do NOT add .first as it would mess up cell selection later
+    logger.debug("Looking for notebook toolbar...")
+    notebook_toolbar = page.locator(".jp-NotebookPanel-toolbar")
     notebook_toolbar.wait_for(state="visible", timeout=10000)
 
     # Wait for the kernel to be ready before executing cells
     # The kernel status is shown in the status bar (e.g., "Python 3 (ipykernel) | Idle")
-    logger.info("Waiting for kernel to be ready...")
+    logger.debug("Waiting for kernel to be ready...")
     try:
         # Target the visible status bar element specifically to avoid strict mode violation
         kernel_status_idle = page.locator(".jp-StatusBar-TextItem").filter(has_text="Idle")
-        kernel_status_idle.wait_for(state="visible", timeout=30000)
-        logger.info("Kernel is idle and ready")
+        kernel_status_idle.wait_for(state="visible", timeout=10000)
+        logger.debug("Kernel is idle and ready")
     except Exception as e:
         logger.warning(f"Could not detect idle kernel status, proceeding anyway: {e}")
 
     # Click "Run" option in JupyterLab top menu and then "Run All Cells" option
-    logger.info("Clicking 'Run' option in JupyterLab top menu...")
+    logger.debug("Clicking 'Run' option in JupyterLab top menu...")
     run_menu = page.get_by_role("menuitem", name="Run")
     run_menu.click()
 
-    logger.info("Clicking 'Run All Cells' option...")
+    logger.debug("Clicking 'Run All Cells' option...")
     run_all_item = page.get_by_text("Run All Cells", exact=True)
+    run_all_item.wait_for(state="visible", timeout=1000)
     run_all_item.click()
-    logger.info("Clicked 'Run All Cells'")
+    logger.debug("Clicked 'Run All Cells'")
 
     # Wait for execution to complete by polling cell execution counts
     # This is more reliable than watching kernel status indicators, which can be affected by WebSocket issues
     start_time = time.time()
     max_wait = timeout_ms / 1000  # Convert to seconds
     poll_interval = poll_interval_ms / 1000  # Convert to seconds
-    connection_error_recovered = False  # Track if we've already recovered from connection error once
     poll_iteration = 0  # Track poll iteration for logging
+    logged_cells: set[int] = set()  # Track cells we've already logged to reduce verbosity
 
-    logger.info(f"Waiting for notebook execution to complete (timeout: {timeout_ms}ms)...")
+    logger.debug(f"Waiting for notebook execution to complete (timeout: {timeout_ms}ms)...")
     while time.time() - start_time < max_wait:
         poll_iteration += 1
-        logger.info(f"[Poll {poll_iteration}] Checking cell execution states...")
-
-        # Check for server connection errors
-        if _reload_on_server_connection_error(page):
-            if connection_error_recovered:
-                # Already tried to recover once, fail now
-                raise RuntimeError(
-                    f"Server connection error detected while executing {notebook_path}. "
-                    "The Jupyter server may not be fully ready or may have crashed during notebook execution."
-                )
-            connection_error_recovered = True
-            # Continue checking after refresh
-            time.sleep(0.5)
-            continue
+        logger.debug(f"[Poll {poll_iteration}] Checking cell execution states...")
 
         # Extract current cell execution states
-        cells_info = _extract_cell_outputs(page, execution_idx=poll_iteration)
+        cells_info = _extract_cell_outputs(page, execution_idx=poll_iteration, already_logged_cells=logged_cells)
+
+        # Mark cells as logged if they're executed or have errors
+        for cell in cells_info:
+            cell_idx = int(cell["cell_index"])
+            if _is_cell_executed(cell["cell_number"]) or cell["has_error"] in ["True", "Possibly"]:
+                logged_cells.add(cell_idx)
 
         if not cells_info:
             # No cells found yet, notebook may still be loading
@@ -243,7 +351,7 @@ def run_notebook_in_jupyterlab(
         executed_count = len([cell for cell in cells_info if _is_cell_executed(cell["cell_number"])])
         total_count = len(cells_info)
 
-        logger.info(f"[Poll {poll_iteration}] Execution progress: {executed_count}/{total_count} cells completed")
+        logger.debug(f"[Poll {poll_iteration}] Execution progress: {executed_count}/{total_count} cells completed")
 
         # Check if all cells have executed
         if executed_count == total_count:
@@ -258,7 +366,7 @@ def run_notebook_in_jupyterlab(
     # Timeout - perform final check to see if cells actually completed
     poll_iteration += 1
     logger.warning(f"[Poll {poll_iteration}] Timeout reached, performing final cell extraction...")
-    cells_info = _extract_cell_outputs(page, execution_idx=poll_iteration)
+    cells_info = _extract_cell_outputs(page, execution_idx=poll_iteration, already_logged_cells=logged_cells)
     executed_count = len([cell for cell in cells_info if _is_cell_executed(cell["cell_number"])])
     total_count = len(cells_info)
 
@@ -347,52 +455,6 @@ def _verify_executed_and_no_cell_error(cells_info: list[dict[str, str]], noteboo
     errors_found = [cell for cell in cells_info if cell["has_error"] in ["True", "Possibly"]]
     if errors_found:
         raise RuntimeError(f"Notebook {notebook_path} execution failed with errors.")
-
-
-def wait_for_kernel_ready(
-    deployment: EndToEndDeployment,
-    timeout_seconds: int = 60,
-    jupyter_port: int = 8888,
-    interval_seconds: int = 5,
-    settle_delay_seconds: int = 2,
-) -> None:
-    """Wait for Jupyter kernel manager to be ready after server restart.
-
-    This function polls the Jupyter kernels API endpoint until it responds successfully,
-    indicating the kernel manager is ready to handle notebook execution requests.
-
-    Args:
-        deployment: The deployment instance
-        timeout_seconds: Maximum time to wait for kernel readiness (default: 60)
-        jupyter_port: Port where Jupyter server is running (default: 8888)
-        interval_seconds: Delay between polling attempts (default: 5)
-        settle_delay_seconds: Additional delay after API responds to allow full initialization (default: 2)
-
-    Raises:
-        TimeoutError: If kernel manager is not ready within timeout_seconds
-    """
-    start_time = time.time()
-
-    while time.time() - start_time < timeout_seconds:
-        try:
-            result = deployment.cli.run_command(
-                ["jupyter-deploy", "server", "exec", "--", "curl", "-s", f"http://localhost:{jupyter_port}/api/kernels"]
-            )
-            if result.stdout.strip() != "":
-                # Kernel API is responding - wait a bit more for full initialization
-                logger.info(f"Kernel manager ready after {time.time() - start_time:.1f}s")
-                time.sleep(settle_delay_seconds)
-                return
-        except JDCliError:
-            # Command failed, kernel not ready yet
-            pass
-
-        time.sleep(interval_seconds)
-
-    raise TimeoutError(
-        f"Kernel manager not ready after {timeout_seconds}s. "
-        "The Jupyter server may not have fully initialized or the kernel manager failed to start."
-    )
 
 
 def delete_notebook(deployment: EndToEndDeployment, target_path: str, home_path: str = "/home/jovyan") -> None:
