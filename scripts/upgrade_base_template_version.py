@@ -225,7 +225,7 @@ def main() -> None:
         / "template"
         / "services"
         / "jupyter"
-        / "pyproject.jupyter.toml.tftpl"
+        / "pyproject.jupyter.toml"
     )
     jupyter_pixi_path = (
         project_path
@@ -243,7 +243,7 @@ def main() -> None:
         / "template"
         / "services"
         / "jupyter"
-        / "pyproject.kernel.toml.tftpl"
+        / "pyproject.kernel.toml"
     )
     jupyter_pixi_kernel_path = (
         project_path
@@ -251,7 +251,7 @@ def main() -> None:
         / "template"
         / "services"
         / "jupyter-pixi"
-        / "pyproject.kernel.toml.tftpl"
+        / "pyproject.kernel.toml"
     )
 
     # Update files
