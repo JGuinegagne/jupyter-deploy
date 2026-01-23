@@ -1,11 +1,14 @@
 """GitHub OAuth2 Proxy authentication helper for E2E testing."""
 
 import contextlib
+import logging
 import os
 import time
 from pathlib import Path
 
 from playwright.sync_api import Page, expect
+
+logger = logging.getLogger(__name__)
 
 
 class GitHubOAuth2ProxyApplication:
@@ -50,6 +53,7 @@ class GitHubOAuth2ProxyApplication:
                 return  # Success - navigation completed
             except Exception as e:
                 error_msg = str(e).lower()
+                logger.warning(f"Navigation attempt {attempt + 1}/{max_retries} failed: {e}")
                 # Check for DNS/connection errors that indicate DNS propagation issues
                 is_dns_error = any(
                     err in error_msg
@@ -68,6 +72,7 @@ class GitHubOAuth2ProxyApplication:
                 if is_dns_error and attempt < max_retries - 1:
                     # Wait with exponential backoff: 2s, 4s, 8s, 16s (max: 30s total)
                     delay = min(2 ** (attempt + 1), 30)
+                    logger.debug(f"Retrying navigation in {delay}s (DNS/connection error detected)...")
                     time.sleep(delay)
                 else:
                     # Max retries exceeded or non-DNS error - raise original exception
@@ -364,11 +369,14 @@ class GitHubOAuth2ProxyApplication:
         It does NOT authenticate - just confirms the deployment is up and OAuth proxy
         is responding.
 
+        Use in deployment tests to verify a fresh deployment is immediately accessible.
+
         Raises:
             AssertionError: If OAuth2 Proxy sign-in page does not load within timeout
         """
         # Navigate to the JupyterLab URL
-        self._navigate_with_retry(self.jupyterlab_url, timeout=60000)
+        # Allows higher retry to account for route53 stabilization.
+        self._navigate_with_retry(self.jupyterlab_url, timeout=60000, max_retries=10)
 
         # Verify OAuth2 Proxy sign-in button is visible
         sign_in_button = self.page.get_by_role("button", name="Sign in with GitHub")

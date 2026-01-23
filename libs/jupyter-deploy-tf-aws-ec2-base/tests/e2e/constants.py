@@ -27,17 +27,21 @@ ORDER_DEPLOYMENT = 1
 # Base starting point for all mutating tests
 _MUTATING_BASE = 10
 
-# Group 1: Config apply tests
-ORDER_CONFIG_APPLY = _MUTATING_BASE  # 10
+# Group 1: External volumes tests
+ORDER_EXTERNAL_VOLUMES = _MUTATING_BASE  # 10
 
-# Group 2: UV package manager tests
-ORDER_UV = _MUTATING_BASE + 10  # 20
+# Group 2: Config apply tests
+# reuse external volumes
+ORDER_CONFIG_APPLY = _MUTATING_BASE + 10  # 20
 
-# Group 3: Pixi package manager tests
-ORDER_PIXI = _MUTATING_BASE + 20  # 30
+# Group 3: GPU instance tests
+# reuse external volumes
+ORDER_GPU = _MUTATING_BASE + 20  # 30
 
-# Group 4: External volumes tests
-ORDER_EXTERNAL_VOLUMES = _MUTATING_BASE + 30  # 40
+# Group 4: Pixi package manager tests
+# go uv -> pixi
+ORDER_PIXI = _MUTATING_BASE + 30  # 40
 
-# Group 5: GPU instance tests
-ORDER_GPU = _MUTATING_BASE + 40  # 50
+# Group 5: UV package manager tests
+# go pixi -> uv
+ORDER_UV = _MUTATING_BASE + 50  # 50

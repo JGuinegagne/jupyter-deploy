@@ -28,6 +28,10 @@ def test_org_based_admit_positive(
     org = e2e_deployment.get_allowlisted_org()
     assert org == logged_org, f"Expected exactly [{logged_org}], got {org}"
 
+    # Verify variable was updated
+    org_value = e2e_deployment.get_str_variable_value("oauth_allowed_org")
+    assert org_value == logged_org, f"Expected {logged_org}, got {org_value}"
+
     # Verify logged user can access the app
     github_oauth_app.ensure_authenticated()
     github_oauth_app.verify_jupyterlab_accessible()
@@ -53,6 +57,10 @@ def test_org_based_admit_negative(
     # Verify list org is correct
     org = e2e_deployment.get_allowlisted_org()
     assert org == safe_org, f"Expected exactly [{safe_org}], got {org}"
+
+    # Verify variable was updated
+    org_value = e2e_deployment.get_str_variable_value("oauth_allowed_org")
+    assert org_value == safe_org, f"Expected {safe_org}, got {org_value}"
 
     # Verify logged user gets unauthorized page
     github_oauth_app.ensure_authenticated()
@@ -86,6 +94,10 @@ def test_team_based_admit_positive(
     teams = e2e_deployment.get_allowlisted_teams()
     assert set(teams) == {logged_team}, f"Expected exactly [{logged_team}], got {teams}"
 
+    # Verify variable was updated
+    teams_value = e2e_deployment.get_list_str_variable_value("oauth_allowed_teams")
+    assert teams_value == [logged_team], f"Expected [{logged_team}], got {teams_value}"
+
     # Verify logged user can access the app
     github_oauth_app.ensure_authenticated()
     github_oauth_app.verify_jupyterlab_accessible()
@@ -117,6 +129,10 @@ def test_team_based_admit_negative(
     # Verify list teams includes safe team
     teams = e2e_deployment.get_allowlisted_teams()
     assert set(teams) == {safe_team}, f"Expected exactly [{safe_team}], got {teams}"
+
+    # Verify variable was updated
+    teams_value = e2e_deployment.get_list_str_variable_value("oauth_allowed_teams")
+    assert teams_value == [safe_team], f"Expected [{safe_team}], got {teams_value}"
 
     # Verify logged user gets unauthorized page
     github_oauth_app.ensure_authenticated()
@@ -150,6 +166,10 @@ def test_diff_org_team_admit_negative(
     teams = e2e_deployment.get_allowlisted_teams()
     assert set(teams) == {logged_team}, f"Expected exactly [{logged_team}], got {teams}"
 
+    # Verify variable was updated
+    teams_value = e2e_deployment.get_list_str_variable_value("oauth_allowed_teams")
+    assert teams_value == [logged_team], f"Expected [{logged_team}], got {teams_value}"
+
     # Verify logged user gets unauthorized page
     github_oauth_app.ensure_authenticated()
     verify_access_forbidden(github_oauth_app)
@@ -182,6 +202,10 @@ def test_add_and_remove_multiple_teams(
     teams = e2e_deployment.get_allowlisted_teams()
     assert set(teams) == {logged_team}, f"Expected exactly [{logged_team}], got {teams}"
 
+    # Verify variable was updated
+    teams_value = e2e_deployment.get_list_str_variable_value("oauth_allowed_teams")
+    assert teams_value == [logged_team], f"Expected [{logged_team}], got {teams_value}"
+
     # Verify logged user can access the app
     github_oauth_app.ensure_authenticated()
     github_oauth_app.verify_jupyterlab_accessible()
@@ -192,6 +216,10 @@ def test_add_and_remove_multiple_teams(
     # Verify list teams shows no allowlisted teams
     teams = e2e_deployment.get_allowlisted_teams()
     assert set(teams) == set(), f"Expected empty set, got {teams}"
+
+    # Verify variable was updated to empty list
+    teams_value = e2e_deployment.get_list_str_variable_value("oauth_allowed_teams")
+    assert teams_value == [], f"Expected empty list, got {teams_value}"
 
     # Verify logged user can still access (based on org membership)
     github_oauth_app.ensure_authenticated()
@@ -232,6 +260,12 @@ def test_unset_org_admit_negative(
     org = e2e_deployment.get_allowlisted_org()
     assert org is None, f"Expected org to be None after unset, got {org}"
 
+    # Verify variable was updated to null
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "show", "--variable", "oauth_allowed_org", "--text"])
+    output = result.stdout.strip()
+    # When org is unset, it could be null, empty string literal, or empty
+    assert output in ["null", '""', ""], f"Expected variable oauth_allowed_org to be null/empty, got: {output}"
+
     # Verify logged user gets unauthorized page (no longer admitted via org membership)
     github_oauth_app.ensure_authenticated()
     verify_access_forbidden(github_oauth_app)
@@ -260,6 +294,10 @@ def test_disallow_to_unset_org_when_no_user_allowlisted(
     # Verify get organization still shows logged org
     allowlisted_org = e2e_deployment.get_allowlisted_org()
     assert allowlisted_org == logged_org, f"expected org to be {logged_org}, got {allowlisted_org}"
+
+    # Verify variable was NOT changed
+    org_value = e2e_deployment.get_str_variable_value("oauth_allowed_org")
+    assert org_value == logged_org, f"Expected {logged_org} (unchanged), got {org_value}"
 
     # Verify logged user can still access the app (via org membership)
     github_oauth_app.ensure_authenticated()
@@ -292,6 +330,10 @@ def test_add_team_when_there_was_none_restricts_access(
 
     # Allowlist only a team the logged user is not a member of
     e2e_deployment.cli.run_command(["jupyter-deploy", "teams", "add", safe_team])
+
+    # Verify variable was updated
+    teams_value = e2e_deployment.get_list_str_variable_value("oauth_allowed_teams")
+    assert teams_value == [safe_team], f"Expected [{safe_team}], got {teams_value}"
 
     # Verify logged user gets unauthorized page (org membership not sufficient)
     github_oauth_app.ensure_authenticated()

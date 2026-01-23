@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
-from pytest_jupyter_deploy.notebook import delete_notebook, run_notebook_in_jupyterlab, upload_notebook
+from pytest_jupyter_deploy.files import (
+    upload_file_on_server,
+    verify_dir_exists_on_server,
+    verify_file_exists_on_server,
+    verify_file_or_dir_does_not_exist_on_server,
+)
 from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
 
 from .constants import ORDER_EXTERNAL_VOLUMES
@@ -41,9 +46,7 @@ def test_external_volumes_provisioning(
         "/home/jovyan/external-efs1",
     ]
     for mount_point in mount_points:
-        result = e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "stat", mount_point])
-        if "No such file or directory" in result.stdout:
-            raise AssertionError(f"Expected mount point {mount_point} to be accessible from jupyterlab")
+        verify_dir_exists_on_server(e2e_deployment, mount_point)
 
     # Verify app is accessible
     github_oauth_app.ensure_authenticated()
@@ -54,7 +57,6 @@ def test_external_volumes_provisioning(
 @pytest.mark.mutating
 def test_external_volumes_ebs(
     e2e_deployment: EndToEndDeployment,
-    github_oauth_app: GitHubOAuth2ProxyApplication,
     logged_user: str,
 ) -> None:
     """Test EBS volumes file and directory operations."""
@@ -62,36 +64,45 @@ def test_external_volumes_ebs(
     e2e_deployment.ensure_server_running()
     e2e_deployment.ensure_authorized([logged_user], "", [])
 
-    # Ensure authenticated in browser
-    github_oauth_app.ensure_authenticated()
-    github_oauth_app.verify_jupyterlab_accessible()
+    # Test file upload and execution on EBS1
+    script_path_ebs1 = "external-ebs1/test_script.sh"
+    test_script = Path(__file__).parent / "files" / "test_script.sh"
+    upload_file_on_server(e2e_deployment, test_script, script_path_ebs1)
+    verify_file_exists_on_server(e2e_deployment, script_path_ebs1)
 
-    # Get path to the notebook
-    notebook_dir = Path(__file__).parent / "notebooks"
-    notebook_path = notebook_dir / "external_volumes_ebs.ipynb"
+    # Test bash script execution
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "sh", script_path_ebs1])
+    assert "Script executed successfully" in result.stdout, "Expected script to execute successfully on EBS1"
 
-    # Upload the notebook
-    upload_notebook(e2e_deployment, notebook_path, "e2e-test/external_volumes_ebs.ipynb")
+    # Create nested directories on EBS2
+    test_top_dir_ebs2 = "external-ebs2/e2e_test_dir"
+    test_dir_ebs2 = f"{test_top_dir_ebs2}/level1/level2/level3"
+    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "mkdir", "-p", test_dir_ebs2])
+    verify_dir_exists_on_server(e2e_deployment, test_dir_ebs2)
 
-    # Restart server to ensure clean session (prevents "Document session error" dialogs)
-    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "restart"])
+    # Create a file in the nested directory on EBS2
+    test_file_in_dir = f"{test_dir_ebs2}/test_file.txt"
+    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "touch", test_file_in_dir])
+    verify_file_exists_on_server(e2e_deployment, test_file_in_dir)
 
-    # Re-authenticate after server restart
-    github_oauth_app.ensure_authenticated()
-    github_oauth_app.verify_jupyterlab_accessible()
+    # Remove the file from EBS2
+    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "rm", "-f", test_file_in_dir])
+    verify_file_or_dir_does_not_exist_on_server(e2e_deployment, test_file_in_dir)
 
-    # Run the notebook in the UI
-    run_notebook_in_jupyterlab(github_oauth_app.page, "e2e-test/external_volumes_ebs.ipynb", timeout_ms=120000)
+    # Cleanup
+    e2e_deployment.cli.run_command(
+        ["jupyter-deploy", "server", "exec", "--", "rm", "-rf", script_path_ebs1, test_top_dir_ebs2]
+    )
 
-    # Clean up - delete the notebook
-    delete_notebook(e2e_deployment, "e2e-test/external_volumes_ebs.ipynb")
+    # Verify cleanup
+    verify_file_or_dir_does_not_exist_on_server(e2e_deployment, script_path_ebs1)
+    verify_file_or_dir_does_not_exist_on_server(e2e_deployment, test_top_dir_ebs2)
 
 
 @pytest.mark.order(ORDER_EXTERNAL_VOLUMES + 2)
 @pytest.mark.mutating
 def test_external_volumes_efs(
     e2e_deployment: EndToEndDeployment,
-    github_oauth_app: GitHubOAuth2ProxyApplication,
     logged_user: str,
 ) -> None:
     """Test EFS volume file and directory operations."""
@@ -99,26 +110,36 @@ def test_external_volumes_efs(
     e2e_deployment.ensure_server_running()
     e2e_deployment.ensure_authorized([logged_user], "", [])
 
-    # Ensure authenticated in browser
-    github_oauth_app.ensure_authenticated()
-    github_oauth_app.verify_jupyterlab_accessible()
+    # Test file upload and execution on EFS1
+    script_path_efs1 = "external-efs1/test_script.sh"
+    test_script = Path(__file__).parent / "files" / "test_script.sh"
+    upload_file_on_server(e2e_deployment, test_script, script_path_efs1)
+    verify_file_exists_on_server(e2e_deployment, script_path_efs1)
 
-    # Get path to the notebook
-    notebook_dir = Path(__file__).parent / "notebooks"
-    notebook_path = notebook_dir / "external_volumes_efs.ipynb"
+    # Test bash script execution
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "sh", script_path_efs1])
+    assert "Script executed successfully" in result.stdout, "Expected script to execute successfully on EFS1"
 
-    # Upload the notebook
-    upload_notebook(e2e_deployment, notebook_path, "e2e-test/external_volumes_efs.ipynb")
+    # Test directory operations on EFS1
+    test_top_dir_efs1 = "external-efs1/e2e_test_dir"
+    test_dir_efs1 = f"{test_top_dir_efs1}/level1/level2/level3"
+    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "mkdir", "-p", test_dir_efs1])
+    verify_dir_exists_on_server(e2e_deployment, test_dir_efs1)
 
-    # Restart server to ensure clean session (prevents "Document session error" dialogs)
-    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "restart"])
+    # Create a file in the nested directory
+    test_file_in_dir = f"{test_dir_efs1}/test_file.txt"
+    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "touch", test_file_in_dir])
+    verify_file_exists_on_server(e2e_deployment, test_file_in_dir)
 
-    # Re-authenticate after server restart
-    github_oauth_app.ensure_authenticated()
-    github_oauth_app.verify_jupyterlab_accessible()
+    # Remove the file
+    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "rm", "-f", test_file_in_dir])
+    verify_file_or_dir_does_not_exist_on_server(e2e_deployment, test_file_in_dir)
 
-    # Run the notebook in the UI
-    run_notebook_in_jupyterlab(github_oauth_app.page, "e2e-test/external_volumes_efs.ipynb", timeout_ms=120000)
+    # Cleanup
+    e2e_deployment.cli.run_command(
+        ["jupyter-deploy", "server", "exec", "--", "rm", "-rf", script_path_efs1, test_top_dir_efs1]
+    )
 
-    # Clean up - delete the notebook
-    delete_notebook(e2e_deployment, "e2e-test/external_volumes_efs.ipynb")
+    # Verify cleanup
+    verify_file_or_dir_does_not_exist_on_server(e2e_deployment, script_path_efs1)
+    verify_file_or_dir_does_not_exist_on_server(e2e_deployment, test_top_dir_efs1)

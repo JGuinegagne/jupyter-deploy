@@ -108,7 +108,8 @@ Examples:
 - Run all E2E tests: `just test-e2e sandbox3 "" mutate=true`
 - Run specific test file: `just test-e2e sandbox3 test_users` (possibly needs `mutate=true`)
 
-The test container saves screenshots of failed tests to `./test-results`
+**NOTE:** mutate tests are long, pipe to log stream to file: `just test-e2e <project-dir> TEST-SELECTOR mutate=true 2>&1 | tee results.log`   
+The test container saves screenshots of failed tests to `./test-results`, use the read image tool.
 
 # Debugging and Investing Deployments
 
@@ -121,7 +122,7 @@ Essential commands for debugging a deployed instance that uses the base template
 - `jd server exec -s SERVICE -- CMD` - Execute commands in the container on the instance
 - `jd host exec -- tail -50 /var/log/jupyter-deploy/LOG-FILENAME` - View command logs (e.g. `update-server.log` for `jd server restart` logs)
 - `jd host exec -- tail -50 /var/log/services/LOG-FILENAME` - View historic service logs (survives container restart)
-- `jd server logs -s [service]` - View service logs
+- `jd server logs -s SERVICE` - View service logs
 - `jd config` - Reconfigure deployment (generates terraform plan)
 - `jd up` - Apply infrastructure changes
 - `jd show --variables --list` - Display list of available variables

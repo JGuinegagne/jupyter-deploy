@@ -6,6 +6,7 @@ import pytest
 from pytest_jupyter_deploy.cli import JDCliError
 from pytest_jupyter_deploy.constants import E2E_UPGRADE_INSTANCE_LOG_FILE
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
+from pytest_jupyter_deploy.files import verify_file_exists_on_server, verify_file_or_dir_does_not_exist_on_server
 from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
 from pytest_jupyter_deploy.plugin import skip_if_testvars_not_set
 
@@ -24,24 +25,43 @@ def test_upgrade_config(
 ) -> None:
     """Test upgrading to a larger instance type and log retention days.
 
-    This test:
-    1. Skips if current config already equals the larger values
-    2. Stops the server before config change
+    This test verifies that data persists across instance type changes:
+    1. Provisions external volumes (EBS + EFS) using ensure_deployed_with
+    2. Creates flag files in home volume (main EBS) and external volumes (EBS + EFS)
     3. Updates variables.yaml to set larger log_files_retention_days
     4. Updates the instance type directly with `jd config --instance-type`
-    5. Runs `jd config` and `jd up -y` to apply the changes
+    5. Runs `jd config` and `jd up -y` to apply the changes (triggers instance swap)
     6. Restarts the server after change
-    7. Saves logs to e2e-upgrade-instance.log
-    8. Verifies the app is still accessible
+    7. Verifies the app is still accessible
+    8. Confirms all flag files persisted across the instance swap
+    9. Cleans up the flag files
 
     Note: It would be tempting to test raising the volume size
     However AWS EBS has cooldown rate limits between volume modifications (6 hour).
     We use a more innocuous parameter (log_files_retention_days) instead.
     """
+    # Provision external volumes first
+    e2e_deployment.ensure_deployed_with(
+        [
+            "--additional-ebs-mounts",
+            "name=ebs1,mount_point=external-ebs1,size_gb=50",
+            "--additional-efs-mounts",
+            "name=efs1,mount_point=external-efs1",
+        ]
+    )
+
     # Prerequisites
-    e2e_deployment.ensure_deployed()
+    e2e_deployment.ensure_server_running()
     e2e_deployment.ensure_authorized([logged_user], "", [])
-    e2e_deployment.ensure_server_stopped_and_host_is_running()
+
+    # Add flag files to all volumes (home + external)
+    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "touch", "e2e_flag_home.txt"])
+    e2e_deployment.cli.run_command(
+        ["jupyter-deploy", "server", "exec", "--", "touch", "external-ebs1/e2e_flag_ebs.txt"]
+    )
+    e2e_deployment.cli.run_command(
+        ["jupyter-deploy", "server", "exec", "--", "touch", "external-efs1/e2e_flag_efs.txt"]
+    )
 
     # Update one variable value using 'variables.yaml'
     e2e_deployment.update_override_value("log_files_retention_days", larger_log_retention_days)
@@ -50,7 +70,14 @@ def test_upgrade_config(
     # Note: --instance-type flag is added dynamically at runtime by a decorator
     # based on the template's variables, so it appears only on jd config --help
     # from inside a jupyter-deploy project
-    e2e_deployment.cli.run_command(["jupyter-deploy", "config", "--instance-type", larger_instance_type])
+    e2e_deployment.cli.run_command(
+        [
+            "jupyter-deploy",
+            "config",
+            "--instance-type",
+            larger_instance_type,
+        ]
+    )
 
     # Apply the changes
     # Note: We tolerate failure here because config changes that modify the instance
@@ -79,3 +106,27 @@ def test_upgrade_config(
     # Verify app is accessible
     github_oauth_app.ensure_authenticated()
     github_oauth_app.verify_jupyterlab_accessible()
+
+    # Verify that all flag files persisted across instance swap
+    verify_file_exists_on_server(e2e_deployment, "e2e_flag_home.txt")
+    verify_file_exists_on_server(e2e_deployment, "external-ebs1/e2e_flag_ebs.txt")
+    verify_file_exists_on_server(e2e_deployment, "external-efs1/e2e_flag_efs.txt")
+
+    # Clean up flag files
+    e2e_deployment.cli.run_command(
+        [
+            "jupyter-deploy",
+            "server",
+            "exec",
+            "--",
+            "rm",
+            "e2e_flag_home.txt",
+            "external-ebs1/e2e_flag_ebs.txt",
+            "external-efs1/e2e_flag_efs.txt",
+        ]
+    )
+
+    # Verify cleanup succeeded
+    verify_file_or_dir_does_not_exist_on_server(e2e_deployment, "e2e_flag_home.txt")
+    verify_file_or_dir_does_not_exist_on_server(e2e_deployment, "external-ebs1/e2e_flag_ebs.txt")
+    verify_file_or_dir_does_not_exist_on_server(e2e_deployment, "external-efs1/e2e_flag_efs.txt")

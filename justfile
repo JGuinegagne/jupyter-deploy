@@ -92,13 +92,14 @@ e2e-sync:
 
 # Run E2E tests in containerized environment
 # Usage: just test-e2e [project-dir] [test-filter] [options]
-# Options: comma-separated key=value pairs (e.g., mutate=true,destroy=true)
+# Options: comma-separated key=value pairs (e.g., mutate=true,destroy=true,log-level=debug)
 # Example: just test-e2e                                      # deploy sandbox-e2e from scratch (includes mutating tests)
 # Example: just test-e2e sandbox-e2e                          # deploy sandbox-e2e from scratch (explicit)
 # Example: just test-e2e sandbox2                             # test existing project (skips mutating tests)
 # Example: just test-e2e sandbox2 test_users                  # test specific test on existing project
 # Example: just test-e2e sandbox2 test_config_changes mutate=true   # test existing project with mutating tests
 # Example: just test-e2e sandbox-e2e "" mutate=true,destroy=true    # deploy from scratch and destroy after tests
+# Example: just test-e2e sandbox2 "" log-level=debug          # test with debug logging
 test-e2e project_dir="sandbox-e2e" test_filter="" options="":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -183,13 +184,16 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="":
         PYTEST_ARGS="$PYTEST_ARGS -k {{test_filter}}"
     fi
 
+    # Default log level
+    LOG_LEVEL="WARNING"
+
     # Parse options (comma-separated key=value pairs)
     OPTIONS_STR="{{options}}"
     if [ -n "$OPTIONS_STR" ]; then
         echo "Options: $OPTIONS_STR"
 
         # List of recognized options (for validation)
-        RECOGNIZED_OPTIONS="mutate destroy"
+        RECOGNIZED_OPTIONS="mutate destroy log-level"
 
         # Validate all options are recognized
         IFS=',' read -ra OPTS <<< "$OPTIONS_STR"
@@ -227,6 +231,12 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="":
             echo "  - destroy after tests: enabled"
         fi
 
+        # Parse log-level option
+        if echo "$OPTIONS_STR" | grep -qE "log-level=(info|debug|warning|error)"; then
+            LOG_LEVEL=$(echo "$OPTIONS_STR" | grep -oE "log-level=(info|debug|warning|error)" | cut -d'=' -f2 | tr '[:lower:]' '[:upper:]')
+            echo "  - log level: $LOG_LEVEL"
+        fi
+
         # Future options can be added here:
         # if echo "$OPTIONS_STR" | grep -q "stream-logs=true"; then
         #     RECOGNIZED_OPTIONS="$RECOGNIZED_OPTIONS stream-logs"
@@ -235,7 +245,7 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="":
     fi
 
     # Add common pytest options
-    PYTEST_ARGS="$PYTEST_ARGS --screenshot only-on-failure --verbose --browser firefox"
+    PYTEST_ARGS="$PYTEST_ARGS --screenshot only-on-failure --verbose --browser firefox --log-cli-level=$LOG_LEVEL"
 
     echo "Running E2E tests for project: {{project_dir}}"
     echo "Test filter: {{test_filter}}"

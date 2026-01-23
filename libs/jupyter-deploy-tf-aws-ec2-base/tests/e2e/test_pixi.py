@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
-from pytest_jupyter_deploy.notebook import delete_notebook, run_notebook_in_jupyterlab, upload_notebook
+from pytest_jupyter_deploy.notebook import (
+    delete_notebook,
+    run_notebook_in_jupyterlab,
+    upload_notebook,
+)
 from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
 
 from .constants import ORDER_PIXI
@@ -19,7 +23,7 @@ def test_pixi_switch_to_pixi(
 ) -> None:
     """Test switching to Pixi package manager."""
     # Switch to Pixi package manager
-    e2e_deployment.ensure_server_stopped_and_host_is_running()
+    e2e_deployment.ensure_server_running()
     e2e_deployment.ensure_deployed_with(["--jupyter-package-manager", "pixi"])
 
     # Ensure server is running and user is authorized
@@ -47,7 +51,6 @@ def test_pixi_switch_to_pixi(
 
 @pytest.mark.order(ORDER_PIXI + 1)
 @pytest.mark.mutating
-@pytest.mark.flaky(reruns=1)
 def test_pixi_install_and_persist(
     e2e_deployment: EndToEndDeployment,
     github_oauth_app: GitHubOAuth2ProxyApplication,
@@ -81,16 +84,8 @@ def test_pixi_install_and_persist(
     # Upload the notebook
     upload_notebook(e2e_deployment, notebook_path, "e2e-test/pixi_install_libraries.ipynb")
 
-    # Restart server to ensure clean session (prevents "Document session error" dialogs)
-    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "restart"])
-    e2e_deployment.ensure_server_running()
-
-    # Re-authenticate after server restart
-    github_oauth_app.ensure_authenticated()
-    github_oauth_app.verify_jupyterlab_accessible()
-
     # Run the notebook in the UI
-    run_notebook_in_jupyterlab(github_oauth_app.page, "e2e-test/pixi_install_libraries.ipynb", timeout_ms=180000)
+    run_notebook_in_jupyterlab(github_oauth_app.page, "e2e-test/pixi_install_libraries.ipynb", timeout_ms=120000)
 
     # Clean up - delete the notebook
     delete_notebook(e2e_deployment, "e2e-test/pixi_install_libraries.ipynb")
