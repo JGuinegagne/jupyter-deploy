@@ -185,7 +185,7 @@ def test_switch_from_gpu_to_cpu(
 ) -> None:
     """Test switching back to CPU instance."""
     # Switch back to CPU instance and UV package manager
-    e2e_deployment.ensure_server_stopped_and_host_is_running()
+    e2e_deployment.ensure_server_running()
     e2e_deployment.ensure_deployed_with(["--instance-type", cpu_instance_type, "--jupyter-package-manager", "uv"])
 
     # Prerequisites

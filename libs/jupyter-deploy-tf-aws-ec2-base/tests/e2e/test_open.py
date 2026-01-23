@@ -36,7 +36,7 @@ def test_open_show_correct_url(e2e_deployment: EndToEndDeployment) -> None:
     assert url.startswith("https://"), f"Expected HTTPS URL, got: {url}"
 
     # Verify URL matches the expected domain from variables.yaml
-    subdomain = e2e_deployment.suite_config.variables_config.required["subdomain"]
-    domain = e2e_deployment.suite_config.variables_config.required["domain"]
+    subdomain = e2e_deployment.get_str_variable_value("subdomain")
+    domain = e2e_deployment.get_str_variable_value("domain")
     expected_url = f"https://{subdomain}.{domain}"
     assert url == expected_url, f"Expected URL '{expected_url}', but got '{url}'"
