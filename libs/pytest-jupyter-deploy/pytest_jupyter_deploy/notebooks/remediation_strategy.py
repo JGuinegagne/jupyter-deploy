@@ -9,7 +9,6 @@ from playwright.sync_api import Page
 from pytest_jupyter_deploy.notebooks.notebook_utils import (
     close_all_tabs_and_stop_sessions,
     copy_and_clean_notebook,
-    delete_notebook_via_api,
     dismiss_document_session_error_if_present,
     prepare_jupyterlab_to_run_notebook,
 )
@@ -88,18 +87,19 @@ class CloseReopenStrategy(RemediationStrategy):
 
 
 class CopyCleanStrategy(RemediationStrategy):
-    """Copy notebook to a new path, clean execution state, and delete the original.
+    """Copy notebook to a new path and clean execution state.
 
     This creates a fresh Y-doc room in jupyter-server-documents, avoiding any
     corrupted session state from the original file's room. The strategy:
     1. Copies the notebook to a new path with cleaned execution state
-    2. Deletes the original notebook
-    3. Closes all tabs and reopens the clean copy
-    4. Returns the new path for the recursive call to use
+    2. Closes all tabs and reopens the clean copy
+    3. Returns the new path for the recursive call to use
+
+    Note: The original notebook is left in place for test cleanup to handle.
     """
 
     def apply(self, page: Page, notebook_path: str) -> str | None:
-        logger.info("Applying remediation: copy/clean/delete notebook...")
+        logger.info("Applying remediation: copy/clean notebook...")
 
         # Extract base URL from current page
         # At this point we're on the notebook page (e.g., https://host/lab/tree/work/test.ipynb)
@@ -113,10 +113,6 @@ class CopyCleanStrategy(RemediationStrategy):
         clean_path = copy_and_clean_notebook(base_url, notebook_path)
         logger.info(f"Created clean copy: {clean_path}")
 
-        # Delete the original notebook to avoid confusion
-        delete_notebook_via_api(base_url, notebook_path)
-        logger.info(f"Deleted original notebook: {notebook_path}")
-
         # Dismiss any error dialogs and close all tabs
         dismissed_error_dialog = dismiss_document_session_error_if_present(page)
         extra_sleep_seconds = 1.5 if dismissed_error_dialog else 0.0
@@ -125,8 +121,8 @@ class CopyCleanStrategy(RemediationStrategy):
         # Navigate to the clean copy, wait for it to load, and click Run All Cells
         prepare_jupyterlab_to_run_notebook(page, clean_path)
 
-        logger.info(f"Copy/clean/delete complete, execution restarted with new path: {clean_path}")
+        logger.info(f"Copy/clean complete, execution restarted with new path: {clean_path}")
         return clean_path  # Return new path for recursive call
 
     def description(self) -> str:
-        return "copy/clean/delete notebook and restart execution"
+        return "copy/clean notebook and restart execution"

@@ -331,25 +331,6 @@ def verify_executed_and_no_cell_error(cells_info: list[dict[str, str]], notebook
         raise RuntimeError(f"Notebook {notebook_path} execution failed with errors.")
 
 
-def delete_notebook_via_api(base_url: str, notebook_path: str) -> None:
-    """Delete a notebook using the Jupyter Contents API.
-
-    Args:
-        base_url: The base URL of the Jupyter server
-        notebook_path: Path to the notebook relative to /home/jovyan (e.g., "e2e-test/application_simple.ipynb")
-
-    Raises:
-        requests.HTTPError: If the delete request fails
-    """
-    delete_url = f"{base_url}/api/contents/{notebook_path}"
-    logger.debug(f"Deleting notebook via API: {delete_url}")
-
-    response = requests.delete(delete_url)
-    response.raise_for_status()
-
-    logger.debug(f"Successfully deleted notebook: {notebook_path}")
-
-
 def copy_and_clean_notebook(base_url: str, notebook_path: str, suffix: str = "-clean") -> str:
     """Copy a notebook and clean its execution state using the Jupyter Contents API.
 

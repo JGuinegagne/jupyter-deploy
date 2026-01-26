@@ -208,7 +208,7 @@ def run_notebook_in_jupyterlab(
                 # No more strategies, fail with detailed error
                 raise RuntimeError(
                     f"Notebook execution stuck: {executed_count}/{total_count} cells executed. "
-                    f"All remediation strategies exhausted."
+                    f"All remediation strategies exhausted or none specified."
                 )
 
         # Not done yet, wait and check again
