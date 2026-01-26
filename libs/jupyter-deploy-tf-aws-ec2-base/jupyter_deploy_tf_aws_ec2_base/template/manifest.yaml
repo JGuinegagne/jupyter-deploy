@@ -93,6 +93,9 @@ commands:
   - result-name: host.exec.stderr
     source: result
     source-key: '[0].StandardErrorContent'
+  - result-name: host.exec.returncode
+    source: result
+    source-key: '[0].ResponseCode'
 - cmd: server.status
   sequence:
   - api-name: aws.ssm.wait-command-sync
@@ -201,6 +204,9 @@ commands:
   - result-name: server.exec.stderr
     source: result
     source-key: '[0].StandardErrorContent'
+  - result-name: server.exec.returncode
+    source: result
+    source-key: '[0].ResponseCode'
 - cmd: server.connect
   sequence:
   - api-name: aws.ssm.start-session

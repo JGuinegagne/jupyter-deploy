@@ -132,7 +132,7 @@ def exec(
         handler = host_handler.HostHandler()
         console = handler.get_console()
 
-        stdout, stderr = handler.exec_command(command_args)
+        stdout, stderr, returncode = handler.exec_command(command_args)
 
         if stdout:
             console.rule("stdout")
@@ -144,3 +144,6 @@ def exec(
             console.rule("stderr")
             console.print(stderr)
             console.rule()
+
+        if returncode != 0:
+            raise typer.Exit(code=returncode)

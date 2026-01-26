@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from pytest_jupyter_deploy.commands import verify_server_command_fails
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
 from pytest_jupyter_deploy.notebook import (
     delete_notebook,
@@ -86,11 +87,8 @@ def test_uv_install_and_persist(
     e2e_deployment.ensure_server_running()
 
     # Verify ipywidgets is still installed after restart
-    result = e2e_deployment.cli.run_command(
-        ["jupyter-deploy", "server", "exec", "--", "uv", "pip", "show", "ipywidgets"]
-    )
-    if "Name: ipywidgets" not in result.stdout:
-        raise AssertionError(f"Expected ipywidgets install to survive server restart: {result.stdout}")
+    # Command fails with retcode 1 if ipywidgets is not installed
+    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "uv", "pip", "show", "ipywidgets"])
 
 
 @pytest.mark.order(ORDER_UV + 2)
@@ -129,15 +127,13 @@ def test_uv_environment_recovery(
     github_oauth_app.verify_jupyterlab_accessible()
 
     # Verify jupyterlab was reinstalled
-    result = e2e_deployment.cli.run_command(
-        ["jupyter-deploy", "server", "exec", "--", "uv", "pip", "show", "jupyterlab"]
-    )
-    if "Name: jupyterlab" not in result.stdout:
-        raise AssertionError(f"Expected jupyterlab to be present after recovery: {result.stdout}")
+    # Command fails with retcode 1 if jupyterlab is not installed
+    e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "uv", "pip", "show", "jupyterlab"])
 
     # Verify ipywidgets is NO LONGER installed (user packages are not preserved during recovery)
-    result = e2e_deployment.cli.run_command(
-        ["jupyter-deploy", "server", "exec", "--", "uv", "pip", "show", "ipywidgets"]
+    verify_server_command_fails(
+        e2e_deployment,
+        ["jupyter-deploy", "server", "exec", "--", "uv", "pip", "show", "ipywidgets"],
+        expected_returncode=1,
+        stderr_contains="not found",
     )
-    if "Package(s) not found" not in result.stdout:
-        raise AssertionError(f"Expected ipywidgets to be missing after recovery: {result.stdout}")

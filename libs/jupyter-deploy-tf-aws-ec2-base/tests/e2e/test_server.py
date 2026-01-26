@@ -1,4 +1,8 @@
+import subprocess
+
 import pexpect
+import pytest
+from pytest_jupyter_deploy.cli import JDCliError
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
 from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
 
@@ -161,15 +165,16 @@ def test_server_exec_failed_command(e2e_deployment: EndToEndDeployment) -> None:
     # Prerequisites
     e2e_deployment.ensure_server_running()
 
-    # Execute non-existent command in jupyter service
-    result = e2e_deployment.cli.run_command(
-        ["jupyter-deploy", "server", "exec", "-s", "jupyter", "--", "command_that_does_not_exist"]
-    )
+    # Execute non-existent command in jupyter service - should raise JDCliError with non-zero exit code
+    with pytest.raises(JDCliError) as exc_info:
+        e2e_deployment.cli.run_command(
+            ["jupyter-deploy", "server", "exec", "-s", "jupyter", "--", "command_that_does_not_exist"]
+        )
 
-    # Command should complete but indicate failure
-    # Check for error message in output (could be in stdout or stderr)
-    output = result.stdout + result.stderr
-    assert "not found" in output or "command" in output.lower(), f"Expected error message in output, got: {output}"
+    # Verify the exception wraps a CalledProcessError with exit code 126 (OCI runtime exec failure)
+    assert exc_info.value.__cause__ is not None
+    assert isinstance(exc_info.value.__cause__, subprocess.CalledProcessError)
+    assert exc_info.value.__cause__.returncode == 126
 
 
 def test_server_connect_default_service(e2e_deployment: EndToEndDeployment) -> None:

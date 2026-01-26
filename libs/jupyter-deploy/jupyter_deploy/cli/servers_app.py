@@ -229,7 +229,7 @@ def exec(
         console = handler.get_console()
 
         try:
-            stdout, stderr = handler.exec_command(service=service, command_args=command_args)
+            stdout, stderr, returncode = handler.exec_command(service=service, command_args=command_args)
         except InvalidServiceError as e:
             console.print(f":x: {e}", style="red")
             raise typer.Exit(code=1) from e
@@ -244,6 +244,9 @@ def exec(
             console.rule("stderr")
             console.print(stderr)
             console.rule()
+
+        if returncode != 0:
+            raise typer.Exit(code=returncode)
 
 
 @servers_app.command()

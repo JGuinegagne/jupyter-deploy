@@ -17,7 +17,11 @@ from jupyter_deploy.provider.resolved_argdefs import (
     require_arg,
     retrieve_optional_arg,
 )
-from jupyter_deploy.provider.resolved_resultdefs import ResolvedInstructionResult, StrResolvedInstructionResult
+from jupyter_deploy.provider.resolved_resultdefs import (
+    IntResolvedInstructionResult,
+    ResolvedInstructionResult,
+    StrResolvedInstructionResult,
+)
 
 START_SESSION_CMD = ["aws", "ssm", "start-session"]
 
@@ -121,6 +125,7 @@ class AwsSsmRunner(InstructionRunner):
         command_status = response["Status"]
         command_stdout = response.get("StandardOutputContent", "").rstrip()
         command_stderr = response.get("StandardErrorContent", "").rstrip()
+        command_response_code = response.get("ResponseCode", 0)
 
         if command_status == "Failed":
             console.print(f":x: command {doc_name_arg.value} failed.", style="red")
@@ -143,6 +148,7 @@ class AwsSsmRunner(InstructionRunner):
                 result_name="StandardErrorContent",
                 value=command_stderr,
             ),
+            "ResponseCode": IntResolvedInstructionResult(result_name="ResponseCode", value=command_response_code),
         }
 
     def _send_cmd_to_one_instance_using_default_shell_doc_and_wait_sync(
@@ -182,6 +188,7 @@ class AwsSsmRunner(InstructionRunner):
         command_status = response["Status"]
         command_stdout = response.get("StandardOutputContent", "").rstrip()
         command_stderr = response.get("StandardErrorContent", "").rstrip()
+        command_response_code = response.get("ResponseCode", 0)
 
         if command_status == "Failed":
             console.print(":x: command execution failed.", style="red")
@@ -204,6 +211,7 @@ class AwsSsmRunner(InstructionRunner):
                 result_name="StandardErrorContent",
                 value=command_stderr,
             ),
+            "ResponseCode": IntResolvedInstructionResult(result_name="ResponseCode", value=command_response_code),
         }
 
     def _start_session(

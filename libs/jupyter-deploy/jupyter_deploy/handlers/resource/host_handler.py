@@ -80,8 +80,8 @@ class HostHandler(BaseProjectHandler):
             cli_paramdefs={},
         )
 
-    def exec_command(self, command_args: list[str]) -> tuple[str, str]:
-        """Execute a command on the host, return the stdout and stderr."""
+    def exec_command(self, command_args: list[str]) -> tuple[str, str, int]:
+        """Execute a command on the host, return the stdout, stderr, and exit code."""
         command = self.project_manifest.get_command("host.exec")
         console = self.get_console()
         runner = cmd_runner.ManifestCommandRunner(
@@ -97,4 +97,5 @@ class HostHandler(BaseProjectHandler):
         )
         stdout = runner.get_result_value(command, "host.exec.stdout", str)
         stderr = runner.get_result_value(command, "host.exec.stderr", str)
-        return stdout, stderr
+        returncode = runner.get_result_value_with_fallback(command, "host.exec.returncode", int, 0)
+        return stdout, stderr, returncode

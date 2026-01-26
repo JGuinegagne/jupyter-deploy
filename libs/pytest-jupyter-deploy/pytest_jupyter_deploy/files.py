@@ -1,37 +1,64 @@
 """File operation utilities for E2E tests."""
 
 import base64
+import subprocess
 from pathlib import Path
 
+from pytest_jupyter_deploy.cli import JDCliError
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
 
 
 def verify_file_exists_on_server(e2e_deployment: EndToEndDeployment, file_path: str) -> None:
     """Verify that a file exists on the server."""
-    result = e2e_deployment.cli.run_command(
-        ["jupyter-deploy", "server", "exec", "--", "stat", "--format=%F", file_path]
-    )
-    assert "No such file or directory" not in result.stdout, f"Expected file {file_path} to exist on server"
+    try:
+        result = e2e_deployment.cli.run_command(
+            ["jupyter-deploy", "server", "exec", "--", "stat", "--format=%F", file_path]
+        )
+    except JDCliError as e:
+        raise AssertionError(f"Expected file {file_path} to exist on server, but stat failed: {e}") from e
+
     assert "file" in result.stdout, f"Expected file {file_path} to be of type file: {result.stdout}"
 
 
 def verify_dir_exists_on_server(e2e_deployment: EndToEndDeployment, dir_path: str) -> None:
-    """Verify that a file exists on the server."""
-    result = e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "stat", "--format=%F", dir_path])
-    assert "No such file or directory" not in result.stdout, f"Expected dir {dir_path} to exist on server"
+    """Verify that a directory exists on the server."""
+    try:
+        result = e2e_deployment.cli.run_command(
+            ["jupyter-deploy", "server", "exec", "--", "stat", "--format=%F", dir_path]
+        )
+    except JDCliError as e:
+        raise AssertionError(f"Expected directory {dir_path} to exist on server, but stat failed: {e}") from e
+
     assert "directory" in result.stdout, f"Expected directory {dir_path} to be of type dir: {result.stdout}"
 
 
 def verify_file_or_dir_does_not_exist_on_server(e2e_deployment: EndToEndDeployment, file_path: str) -> None:
-    """Verify that a file does not exist on the server."""
-    result = e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "stat", file_path])
-    # When stat fails, the error message appears in stdout (captured by the CLI wrapper)
-    # The message may be split across lines, so normalize whitespace before checking
-    stdout_normalized = " ".join(result.stdout.split())
-    stderr_normalized = " ".join(result.stderr.split())
-    assert "No such file or directory" in stdout_normalized or "No such file or directory" in stderr_normalized, (
-        f"Expected file {file_path} to not exist on server"
-    )
+    """Verify that a file or directory does not exist on the server."""
+    try:
+        result = e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "stat", file_path])
+        # If stat succeeded, the file exists - this is unexpected
+        raise AssertionError(
+            f"Expected file {file_path} to not exist on server, but stat succeeded with output: {result.stdout}"
+        )
+    except JDCliError as e:
+        # Verify it failed because the file doesn't exist, not some other error
+        if e.__cause__ and isinstance(e.__cause__, subprocess.CalledProcessError):
+            # Verify exit code is 1 (stat returns 1 for "No such file or directory")
+            actual_returncode = e.__cause__.returncode
+            if actual_returncode != 1:
+                raise AssertionError(
+                    f"Expected exit code 1 for non-existent file {file_path}, but got {actual_returncode}. Error: {e}"
+                ) from e
+
+            # Normalize whitespace to handle error messages split across lines
+            error_output_normalized = " ".join(str(e).split())
+            if "No such file or directory" not in error_output_normalized:
+                raise AssertionError(
+                    f"Expected file {file_path} to not exist, but stat failed for a different reason: {e}"
+                ) from e
+            # File doesn't exist as expected
+        else:
+            raise AssertionError(f"Unexpected error type when checking if {file_path} exists: {e}") from e
 
 
 def upload_file_on_server(e2e_deployment: EndToEndDeployment, src_path: str | Path, target_path: str) -> None:

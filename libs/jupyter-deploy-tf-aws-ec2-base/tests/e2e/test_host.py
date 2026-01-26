@@ -1,6 +1,10 @@
 """E2E tests for deployment."""
 
+import subprocess
+
 import pexpect
+import pytest
+from pytest_jupyter_deploy.cli import JDCliError
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
 
 
@@ -96,10 +100,11 @@ def test_host_exec_failed_command(e2e_deployment: EndToEndDeployment) -> None:
     e2e_deployment.ensure_host_running()
     e2e_deployment.wait_for_ssm_ready()
 
-    # Execute non-existent command
-    result = e2e_deployment.cli.run_command(["jupyter-deploy", "host", "exec", "--", "command_that_does_not_exist"])
+    # Execute non-existent command - should raise JDCliError with non-zero exit code
+    with pytest.raises(JDCliError) as exc_info:
+        e2e_deployment.cli.run_command(["jupyter-deploy", "host", "exec", "--", "command_that_does_not_exist"])
 
-    # Command should complete but indicate failure
-    # Check for error message in output (could be in stdout or stderr)
-    output = result.stdout + result.stderr
-    assert "not found" in output or "command" in output.lower(), f"Expected error message in output, got: {output}"
+    # Verify the exception wraps a CalledProcessError with exit code 127 (command not found)
+    assert exc_info.value.__cause__ is not None
+    assert isinstance(exc_info.value.__cause__, subprocess.CalledProcessError)
+    assert exc_info.value.__cause__.returncode == 127
