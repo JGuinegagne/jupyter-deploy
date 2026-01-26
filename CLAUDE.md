@@ -77,6 +77,11 @@ The E2E tests run in a local container using `pytest` where `playwright` and web
 Look at `./justfile` for more details.
 IMPORTANT: you CANNOT run any e2e directly with `uv run pytest E2E-TEST-SELECTOR`, you MUST use a `just` command.
 
+**IMPORTANT**: Deployment directories contain their own copy of template files.
+When testing template changes in an existing deployment (e.g., sandbox-e2e),
+you must manually copy the modified template files from `libs/jupyter-deploy-tf-aws-ec2-base/jupyter_deploy_tf_aws_ec2_base/template/`
+to the deployment directory BEFORE running configuration tests or deploying.
+
 ## Prerequisites
 1. A deployed project to test against located in a dir relative to the workspace root (e.g., `./sandbox`)
 2. Some E2E tests require environment variables to be set:
@@ -89,9 +94,14 @@ IMPORTANT: you CANNOT run any e2e directly with `uv run pytest E2E-TEST-SELECTOR
 The configuration test verifies a template project is correctly wired up.
 In the case of the base template, this corresponds to the `terraform plan` operation succeeding.
 
+**Before running configuration tests on modified template files**:
+- Copy changed template files from base template to the test deployment directory
+- The configuration test validates the LOCAL files in the deployment directory, not the installed package
+
 To run the configuration test:
 1. ask the user for the `<project-dir>` to use
-2. run `just test-e2e <project-dir> test_configuration`
+2. if testing modified template files, ensure they've been copied to `<project-dir>`
+3. run `just test-e2e <project-dir> test_configuration`
 
 ## Authentication Setup for the base template
 Before running E2E tests, ask the user to run GitHub OAuth authentication: `just auth-setup <project-dir>`.

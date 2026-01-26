@@ -8,6 +8,6 @@ c.ServerApp.terminado_settings = {
     "shell_command": [
         "bash",
         "-c",
-        "echo \"This is a UV-managed shell, use 'uv add' or 'uv pip' instead of 'pip'!\"; bash",
+        "echo \"This is a UV-managed environment, use 'uv add' or 'uv pip' instead of 'pip'!\"; bash",
     ]
 }
