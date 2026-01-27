@@ -185,7 +185,7 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="":
     fi
 
     # Default log level
-    LOG_LEVEL="WARNING"
+    LOG_LEVEL="INFO"
 
     # Parse options (comma-separated key=value pairs)
     OPTIONS_STR="{{options}}"

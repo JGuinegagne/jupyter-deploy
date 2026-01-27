@@ -325,6 +325,7 @@ mainSteps:
   - action: aws:runShellScript
     name: DownloadUtilityScripts
     inputs:
+      onFailure: exit
       runCommand:
         - |
           mkdir -p /usr/local/bin
@@ -338,6 +339,7 @@ mainSteps:
   - action: aws:runShellScript
     name: CloudInit
     inputs:
+      onFailure: exit
       runCommand:
         - |
           ${local.cloud_init_indented}
@@ -345,6 +347,7 @@ mainSteps:
   - action: aws:runShellScript
     name: MountAdditionalVolumes
     inputs:
+      onFailure: exit
       runCommand:
         - |
           ${local.cloudinit_volumes_indented}
@@ -352,6 +355,7 @@ mainSteps:
   - action: aws:runShellScript
     name: DownloadDockerFiles
     inputs:
+      onFailure: exit
       runCommand:
         - |
           BUCKET="${module.s3_bucket.bucket_name}"
@@ -371,6 +375,7 @@ mainSteps:
   - action: aws:runShellScript
     name: SyncCertificates
     inputs:
+      onFailure: exit
       runCommand:
         - |
           sh /usr/local/bin/sync-acme.sh
@@ -378,6 +383,7 @@ mainSteps:
   - action: aws:runShellScript
     name: StartDockerServices
     inputs:
+      onFailure: exit
       runCommand:
         - |
           sh /opt/docker/docker-startup.sh
