@@ -589,6 +589,108 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
         # Verify that SSM agent connection was checked
         mock_verify.assert_called_once_with(instance_id=instance_id, console=console)
 
+    @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
+    @patch("jupyter_deploy.api.aws.ssm.ssm_command.send_cmd_to_one_instance_and_wait_sync")
+    def test_execute_includes_response_code_in_results(self, mock_send_cmd: Mock, mock_verify: Mock) -> None:
+        # Arrange
+        runner = AwsSsmRunner(region_name="us-west-2")
+        console = Mock(spec=Console)
+        document_name = "AWS-RunShellScript"
+        instance_id = "i-1234567890abcdef0"
+
+        mock_verify.return_value = True
+        mock_send_cmd.return_value = {
+            "Status": "Success",
+            "StandardOutputContent": "Command output",
+            "StandardErrorContent": "",
+            "ResponseCode": 0,
+        }
+
+        resolved_arguments: dict[str, ResolvedInstructionArgument] = {
+            "document_name": StrResolvedInstructionArgument(argument_name="document_name", value=document_name),
+            "instance_id": StrResolvedInstructionArgument(argument_name="instance_id", value=instance_id),
+        }
+
+        # Act
+        result = runner.execute_instruction(
+            instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
+            resolved_arguments=resolved_arguments,
+            console=console,
+        )
+
+        # Assert
+        self.assertIn("ResponseCode", result)
+        self.assertEqual(result["ResponseCode"].value, 0)
+        self.assertEqual(result["ResponseCode"].result_name, "ResponseCode")
+
+    @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
+    @patch("jupyter_deploy.api.aws.ssm.ssm_command.send_cmd_to_one_instance_and_wait_sync")
+    def test_execute_includes_non_zero_response_code(self, mock_send_cmd: Mock, mock_verify: Mock) -> None:
+        # Arrange
+        runner = AwsSsmRunner(region_name="us-west-2")
+        console = Mock(spec=Console)
+        document_name = "AWS-RunShellScript"
+        instance_id = "i-1234567890abcdef0"
+
+        mock_verify.return_value = True
+        # Simulate command failure with exit code 127 (command not found)
+        mock_send_cmd.return_value = {
+            "Status": "Failed",
+            "StandardOutputContent": "",
+            "StandardErrorContent": "command not found",
+            "ResponseCode": 127,
+        }
+
+        resolved_arguments: dict[str, ResolvedInstructionArgument] = {
+            "document_name": StrResolvedInstructionArgument(argument_name="document_name", value=document_name),
+            "instance_id": StrResolvedInstructionArgument(argument_name="instance_id", value=instance_id),
+        }
+
+        # Act
+        result = runner.execute_instruction(
+            instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
+            resolved_arguments=resolved_arguments,
+            console=console,
+        )
+
+        # Assert
+        self.assertIn("ResponseCode", result)
+        self.assertEqual(result["ResponseCode"].value, 127)
+        self.assertEqual(result["Status"].value, "Failed")
+
+    @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
+    @patch("jupyter_deploy.api.aws.ssm.ssm_command.send_cmd_to_one_instance_and_wait_sync")
+    def test_execute_defaults_response_code_to_zero_when_missing(self, mock_send_cmd: Mock, mock_verify: Mock) -> None:
+        # Arrange
+        runner = AwsSsmRunner(region_name="us-west-2")
+        console = Mock(spec=Console)
+        document_name = "AWS-RunShellScript"
+        instance_id = "i-1234567890abcdef0"
+
+        mock_verify.return_value = True
+        # Simulate response without ResponseCode (backward compatibility)
+        mock_send_cmd.return_value = {
+            "Status": "Success",
+            "StandardOutputContent": "Command output",
+            "StandardErrorContent": "",
+        }
+
+        resolved_arguments: dict[str, ResolvedInstructionArgument] = {
+            "document_name": StrResolvedInstructionArgument(argument_name="document_name", value=document_name),
+            "instance_id": StrResolvedInstructionArgument(argument_name="instance_id", value=instance_id),
+        }
+
+        # Act
+        result = runner.execute_instruction(
+            instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
+            resolved_arguments=resolved_arguments,
+            console=console,
+        )
+
+        # Assert - Should default to 0 when ResponseCode is missing
+        self.assertIn("ResponseCode", result)
+        self.assertEqual(result["ResponseCode"].value, 0)
+
 
 class TestStartSession(unittest.TestCase):
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.cmd_utils.run_cmd_and_pipe_to_terminal")
@@ -1022,3 +1124,102 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
             )
 
         mock_verify.assert_called_once_with(instance_id=instance_id, console=console)
+
+    @patch("jupyter_deploy.provider.aws.aws_ssm_runner.ssm_command.send_cmd_to_one_instance_and_wait_sync")
+    @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
+    def test_includes_response_code_in_results(self, mock_verify: Mock, mock_send_cmd: Mock) -> None:
+        # Arrange
+        runner = AwsSsmRunner(region_name="us-west-2")
+        console = Mock(spec=Console)
+        instance_id = "i-1234567890abcdef0"
+
+        mock_verify.return_value = True
+        mock_send_cmd.return_value = {
+            "Status": "Success",
+            "StandardOutputContent": "jovyan",
+            "StandardErrorContent": "",
+            "ResponseCode": 0,
+        }
+
+        resolved_arguments: dict[str, ResolvedInstructionArgument] = {
+            "instance_id": StrResolvedInstructionArgument(argument_name="instance_id", value=instance_id),
+            "commands": ListStrResolvedInstructionArgument(argument_name="commands", value=["whoami"]),
+        }
+
+        # Act
+        result = runner.execute_instruction(
+            instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
+            resolved_arguments=resolved_arguments,
+            console=console,
+        )
+
+        # Assert
+        self.assertIn("ResponseCode", result)
+        self.assertEqual(result["ResponseCode"].value, 0)
+        self.assertEqual(result["ResponseCode"].result_name, "ResponseCode")
+
+    @patch("jupyter_deploy.provider.aws.aws_ssm_runner.ssm_command.send_cmd_to_one_instance_and_wait_sync")
+    @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
+    def test_includes_non_zero_response_code_on_failure(self, mock_verify: Mock, mock_send_cmd: Mock) -> None:
+        # Arrange
+        runner = AwsSsmRunner(region_name="us-west-2")
+        console = Mock(spec=Console)
+        instance_id = "i-1234567890abcdef0"
+
+        mock_verify.return_value = True
+        # Simulate command failure with exit code 1
+        mock_send_cmd.return_value = {
+            "Status": "Failed",
+            "StandardOutputContent": "",
+            "StandardErrorContent": "command failed",
+            "ResponseCode": 1,
+        }
+
+        resolved_arguments: dict[str, ResolvedInstructionArgument] = {
+            "instance_id": StrResolvedInstructionArgument(argument_name="instance_id", value=instance_id),
+            "commands": ListStrResolvedInstructionArgument(argument_name="commands", value=["false"]),
+        }
+
+        # Act
+        result = runner.execute_instruction(
+            instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
+            resolved_arguments=resolved_arguments,
+            console=console,
+        )
+
+        # Assert
+        self.assertIn("ResponseCode", result)
+        self.assertEqual(result["ResponseCode"].value, 1)
+        self.assertEqual(result["Status"].value, "Failed")
+
+    @patch("jupyter_deploy.provider.aws.aws_ssm_runner.ssm_command.send_cmd_to_one_instance_and_wait_sync")
+    @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
+    def test_defaults_response_code_to_zero_when_missing(self, mock_verify: Mock, mock_send_cmd: Mock) -> None:
+        # Arrange
+        runner = AwsSsmRunner(region_name="us-west-2")
+        console = Mock(spec=Console)
+        instance_id = "i-1234567890abcdef0"
+
+        mock_verify.return_value = True
+        # Simulate response without ResponseCode (backward compatibility)
+        mock_send_cmd.return_value = {
+            "Status": "Success",
+            "StandardOutputContent": "output",
+            "StandardErrorContent": "",
+        }
+
+        resolved_arguments: dict[str, ResolvedInstructionArgument] = {
+            "instance_id": StrResolvedInstructionArgument(argument_name="instance_id", value=instance_id),
+            "commands": ListStrResolvedInstructionArgument(argument_name="commands", value=["echo", "test"]),
+        }
+
+        # Act
+        result = runner.execute_instruction(
+            instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
+            resolved_arguments=resolved_arguments,
+            console=console,
+        )
+
+        # Assert - Should default to 0 when ResponseCode is missing
+        self.assertIn("ResponseCode", result)
+        self.assertEqual(result["ResponseCode"].value, 0)

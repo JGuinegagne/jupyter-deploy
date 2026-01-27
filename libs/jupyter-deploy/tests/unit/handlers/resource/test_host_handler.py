@@ -44,15 +44,18 @@ class TestHostHandler(unittest.TestCase):
         mock_cmd_runner_handler = Mock()
         mock_run_command_sequence = Mock()
         mock_get_result_value = Mock()
+        mock_get_result_value_with_fallback = Mock()
 
         mock_cmd_runner_handler.run_command_sequence = mock_run_command_sequence
         mock_cmd_runner_handler.get_result_value = mock_get_result_value
+        mock_cmd_runner_handler.get_result_value_with_fallback = mock_get_result_value_with_fallback
 
         mock_get_result_value.return_value = "running"
 
         return mock_cmd_runner_handler, {
             "run_command_sequence": mock_run_command_sequence,
             "get_result_value": mock_get_result_value,
+            "get_result_value_with_fallback": mock_get_result_value_with_fallback,
         }
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
@@ -126,6 +129,9 @@ class TestHostHandler(unittest.TestCase):
         with self.assertRaises(NotImplementedError):
             handler.connect()
 
+        with self.assertRaises(NotImplementedError):
+            handler.exec_command(["echo", "hello"])
+
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("jupyter_deploy.engine.terraform.tf_outputs.TerraformOutputsHandler")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
@@ -166,6 +172,13 @@ class TestHostHandler(unittest.TestCase):
         mock_cmd_runner_fns["run_command_sequence"].reset_mock()
         handler.restart_host()
         mock_cmd_runner_fns["run_command_sequence"].assert_called_with(mock.ANY, cli_paramdefs={})
+
+        # Test exec_command
+        mock_cmd_runner_fns["run_command_sequence"].reset_mock()
+        handler.exec_command(["echo", "hello"])
+        cli_paramdefs = mock_cmd_runner_fns["run_command_sequence"].call_args[1]["cli_paramdefs"]
+        self.assertIn("commands", cli_paramdefs)
+        self.assertEqual(cli_paramdefs["commands"].value, ["echo hello"])
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("jupyter_deploy.engine.terraform.tf_outputs.TerraformOutputsHandler")
@@ -422,3 +435,108 @@ class TestHostHandler(unittest.TestCase):
         self.assertEqual(mock_cmd_runner_class.call_args[1]["output_handler"], mock_output_handler)
         self.assertEqual(mock_cmd_runner_class.call_args[1]["variable_handler"], mock_variable_handler)
         mock_cmd_runner_fns["run_command_sequence"].assert_called_once_with(mock_cmd, cli_paramdefs={})
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("jupyter_deploy.engine.terraform.tf_outputs.TerraformOutputsHandler")
+    @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
+    @patch("jupyter_deploy.provider.manifest_command_runner.ManifestCommandRunner")
+    def test_exec_command_calls_run_command_and_returns_stdout_stderr_returncode(
+        self,
+        mock_cmd_runner_class: Mock,
+        mock_tf_variables_handler: Mock,
+        mock_tf_outputs_handler: Mock,
+        mock_retrieve_manifest: Mock,
+    ) -> None:
+        # Setup
+        mock_manifest, mock_manifest_fns = self.get_mock_manifest_and_fns()
+        mock_cmd = Mock()
+        mock_manifest_fns["get_command"].return_value = mock_cmd
+
+        mock_retrieve_manifest.return_value = mock_manifest
+        mock_output_handler, _ = self.get_mock_outputs_handler_and_fns()
+
+        mock_tf_outputs_handler.return_value = mock_output_handler
+        mock_variable_handler = Mock()
+        mock_tf_variables_handler.return_value = mock_variable_handler
+
+        mock_cmd_runner, mock_cmd_runner_fns = self.get_mock_manifest_cmd_runner_and_fns()
+        mock_cmd_runner_class.return_value = mock_cmd_runner
+
+        # Setup get_result_value and get_result_value_with_fallback behavior
+        mock_cmd_runner_fns["get_result_value"].side_effect = ["test stdout", "test stderr"]
+        mock_cmd_runner_fns["get_result_value_with_fallback"].return_value = 0
+
+        # Act
+        handler = HostHandler()
+        stdout, stderr, returncode = handler.exec_command(["echo", "hello"])
+
+        # Verify
+        self.assertEqual(stdout, "test stdout")
+        self.assertEqual(stderr, "test stderr")
+        self.assertEqual(returncode, 0)
+
+        mock_cmd_runner_class.assert_called_once()
+        mock_manifest_fns["get_command"].assert_called_once_with("host.exec")
+        self.assertEqual(mock_cmd_runner_class.call_args[1]["output_handler"], mock_output_handler)
+        self.assertEqual(mock_cmd_runner_class.call_args[1]["variable_handler"], mock_variable_handler)
+
+        # Check CLI parameters
+        cli_paramdefs = mock_cmd_runner_fns["run_command_sequence"].call_args[1]["cli_paramdefs"]
+        self.assertEqual(len(cli_paramdefs), 1)
+        self.assertIn("commands", cli_paramdefs)
+        self.assertEqual(cli_paramdefs["commands"].parameter_name, "commands")
+        self.assertEqual(cli_paramdefs["commands"].value, ["echo hello"])
+
+        # Verify get_result_value was called for stdout and stderr
+        self.assertEqual(mock_cmd_runner_fns["get_result_value"].call_count, 2)
+        self.assertEqual(mock_cmd_runner_fns["get_result_value"].mock_calls[0][1][1], "host.exec.stdout")
+        self.assertEqual(mock_cmd_runner_fns["get_result_value"].mock_calls[1][1][1], "host.exec.stderr")
+
+        # Verify get_result_value_with_fallback was called for returncode
+        mock_cmd_runner_fns["get_result_value_with_fallback"].assert_called_once_with(
+            mock_cmd, "host.exec.returncode", int, 0
+        )
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("jupyter_deploy.engine.terraform.tf_outputs.TerraformOutputsHandler")
+    @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
+    @patch("jupyter_deploy.provider.manifest_command_runner.ManifestCommandRunner")
+    def test_exec_command_returns_non_zero_returncode_on_failure(
+        self,
+        mock_cmd_runner_class: Mock,
+        mock_tf_variables_handler: Mock,
+        mock_tf_outputs_handler: Mock,
+        mock_retrieve_manifest: Mock,
+    ) -> None:
+        # Setup
+        mock_manifest, mock_manifest_fns = self.get_mock_manifest_and_fns()
+        mock_cmd = Mock()
+        mock_manifest_fns["get_command"].return_value = mock_cmd
+
+        mock_retrieve_manifest.return_value = mock_manifest
+        mock_output_handler, _ = self.get_mock_outputs_handler_and_fns()
+
+        mock_tf_outputs_handler.return_value = mock_output_handler
+        mock_variable_handler = Mock()
+        mock_tf_variables_handler.return_value = mock_variable_handler
+
+        mock_cmd_runner, mock_cmd_runner_fns = self.get_mock_manifest_cmd_runner_and_fns()
+        mock_cmd_runner_class.return_value = mock_cmd_runner
+
+        # Setup get_result_value and get_result_value_with_fallback behavior
+        mock_cmd_runner_fns["get_result_value"].side_effect = ["", "command not found"]
+        mock_cmd_runner_fns["get_result_value_with_fallback"].return_value = 127
+
+        # Act
+        handler = HostHandler()
+        stdout, stderr, returncode = handler.exec_command(["command_that_does_not_exist"])
+
+        # Verify
+        self.assertEqual(stdout, "")
+        self.assertEqual(stderr, "command not found")
+        self.assertEqual(returncode, 127)
+
+        # Verify get_result_value_with_fallback was called for returncode
+        mock_cmd_runner_fns["get_result_value_with_fallback"].assert_called_once_with(
+            mock_cmd, "host.exec.returncode", int, 0
+        )

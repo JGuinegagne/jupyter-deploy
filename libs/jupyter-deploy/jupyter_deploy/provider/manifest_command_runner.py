@@ -119,6 +119,19 @@ class ManifestCommandRunner:
             )
         return value  # type: ignore
 
+    def get_result_value_with_fallback(
+        self, cmd_def: JupyterDeployCommandV1, result_name: str, expect_type: type[R], fallback: R
+    ) -> R:
+        """Return the transformed result value, or fallback if not found.
+
+        This method provides backward compatibility when results may not be defined
+        in older manifest versions.
+        """
+        try:
+            return self.get_result_value(cmd_def, result_name, expect_type)
+        except (StopIteration, KeyError):
+            return fallback
+
     def update_variables(self, cmd_def: JupyterDeployCommandV1) -> None:
         """Update the project variables based on the results."""
         updates = cmd_def.updates

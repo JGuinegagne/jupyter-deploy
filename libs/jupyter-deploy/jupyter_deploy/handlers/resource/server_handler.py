@@ -103,8 +103,8 @@ class ServerHandler(BaseProjectHandler):
         stderr = runner.get_result_value(command, "server.errors", str)
         return stdout, stderr
 
-    def exec_command(self, service: str, command_args: list[str]) -> tuple[str, str]:
-        """Execute a command inside a service container, return the stdout and stderr."""
+    def exec_command(self, service: str, command_args: list[str]) -> tuple[str, str, int]:
+        """Execute a command inside a service container, return the stdout, stderr, and exit code."""
         command = self.project_manifest.get_command("server.exec")
         validated_service = self.project_manifest.get_validated_service(service, allow_all=False)
         console = self.get_console()
@@ -124,7 +124,8 @@ class ServerHandler(BaseProjectHandler):
         )
         stdout = runner.get_result_value(command, "server.exec.stdout", str)
         stderr = runner.get_result_value(command, "server.exec.stderr", str)
-        return stdout, stderr
+        returncode = runner.get_result_value_with_fallback(command, "server.exec.returncode", int, 0)
+        return stdout, stderr, returncode
 
     def connect(self, service: str) -> None:
         """Start an interactive shell session inside a service container."""

@@ -604,7 +604,7 @@ class TestServerExecCmd(unittest.TestCase):
         mock_server_handler.exec_command = mock_exec_command
         mock_server_handler.get_console = mock_get_console
 
-        mock_exec_command.return_value = ("stdout output", "stderr output")
+        mock_exec_command.return_value = ("stdout output", "stderr output", 0)
         mock_get_console.return_value = Mock()
 
         return mock_server_handler, {
@@ -669,7 +669,7 @@ class TestServerExecCmd(unittest.TestCase):
 
         mock_console = Mock()
         mock_handler_fns["get_console"].return_value = mock_console
-        mock_handler_fns["exec_command"].return_value = ("test stdout", "test stderr")
+        mock_handler_fns["exec_command"].return_value = ("test stdout", "test stderr", 0)
         mock_project_dir.return_value.__enter__.return_value = None
 
         # Execute
@@ -682,6 +682,23 @@ class TestServerExecCmd(unittest.TestCase):
         print_calls = [str(call) for call in mock_console.print.mock_calls]
         self.assertTrue(any("test stdout" in call for call in print_calls))
         self.assertTrue(any("test stderr" in call for call in print_calls))
+
+    @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_exits_with_underlying_error_code(self, mock_project_dir: Mock, mock_server_handler_class: Mock) -> None:
+        # Setup
+        mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
+        mock_server_handler_class.return_value = mock_server_handler
+        mock_handler_fns["exec_command"].return_value = ("stdout output", "stderr output", 1)
+        mock_project_dir.return_value.__enter__.return_value = None
+
+        # Execute
+        runner = CliRunner()
+        result = runner.invoke(servers_app, ["exec", "-s", "jupyter", "--", "false"])
+
+        # Assert
+        self.assertEqual(result.exit_code, 1)
+        mock_handler_fns["exec_command"].assert_called_once_with(service="jupyter", command_args=["false"])
 
     @patch("jupyter_deploy.cli.servers_app.Console")
     def test_fails_when_no_command_provided(self, mock_console_class: Mock) -> None:

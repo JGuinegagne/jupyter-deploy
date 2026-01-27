@@ -377,6 +377,136 @@ class TestManifestCommandRunner(unittest.TestCase):
     @patch(
         "jupyter_deploy.provider.instruction_runner_factory.InstructionRunnerFactory.get_provider_instruction_runner"
     )
+    def test_get_result_value_with_fallback_returns_value_specified_in_manifest(
+        self, mock_get_provider_instruction_runner: Mock
+    ) -> None:
+        """Test that get_result_value_with_fallback returns the value when it exists."""
+        # Arrange
+        cmd = self.get_cmd_def()
+        mock_output_defs = self.get_project_outputs()
+        mock_cliparam_defs = self.get_cli_inputs()
+
+        console_mock = Mock()
+        output_handler_mock = Mock()
+        output_handler_mock.get_full_project_outputs.return_value = mock_output_defs
+
+        mock_result_1 = self.get_mocked_first_instruction_results()
+        mock_result_2 = self.get_mocked_second_instruction_results()
+        mock_runner = Mock()
+        mock_get_provider_instruction_runner.return_value = mock_runner
+        mock_runner.execute_instruction.side_effect = [mock_result_1, mock_result_2]
+
+        # Act
+        runner = ManifestCommandRunner(
+            console=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
+        )
+        success, results = runner.run_command_sequence(cmd, mock_cliparam_defs)
+
+        # Verify results are available
+        self.assertTrue(success)
+
+        # Test get_result_value_with_fallback with existing result
+        hours_of_hangover = runner.get_result_value_with_fallback(cmd, "hours-of-hangover", str, "0")
+        self.assertEqual(hours_of_hangover, "24")
+
+        # Test with list result
+        party = runner.get_result_value_with_fallback(cmd, "party", list[str], [])
+        self.assertEqual(party, ["Ross", "Rachel", "Monika", "Phoebe", "Joey", "Chandler", "You"])
+
+    @patch(
+        "jupyter_deploy.provider.instruction_runner_factory.InstructionRunnerFactory.get_provider_instruction_runner"
+    )
+    def test_get_result_value_with_fallback_returns_fallback_when_output_not_specified_in_manifest(
+        self, mock_get_provider_instruction_runner: Mock
+    ) -> None:
+        """Test that get_result_value_with_fallback returns fallback when result doesn't exist."""
+        # Arrange
+        cmd = self.get_cmd_def()
+        mock_output_defs = self.get_project_outputs()
+        mock_cliparam_defs = self.get_cli_inputs()
+
+        console_mock = Mock()
+        output_handler_mock = Mock()
+        output_handler_mock.get_full_project_outputs.return_value = mock_output_defs
+
+        mock_result_1 = self.get_mocked_first_instruction_results()
+        mock_result_2 = self.get_mocked_second_instruction_results()
+        mock_runner = Mock()
+        mock_get_provider_instruction_runner.return_value = mock_runner
+        mock_runner.execute_instruction.side_effect = [mock_result_1, mock_result_2]
+
+        # Act
+        runner = ManifestCommandRunner(
+            console=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
+        )
+        success, results = runner.run_command_sequence(cmd, mock_cliparam_defs)
+
+        # Verify results are available
+        self.assertTrue(success)
+
+        # Test with non-existent result name - should return fallback
+        non_existent = runner.get_result_value_with_fallback(cmd, "non-existent-result", str, "fallback-value")
+        self.assertEqual(non_existent, "fallback-value")
+
+        # Test with list fallback
+        non_existent_list = runner.get_result_value_with_fallback(cmd, "non-existent-list", list[str], ["default"])
+        self.assertEqual(non_existent_list, ["default"])
+
+        # Test with int fallback
+        non_existent_int = runner.get_result_value_with_fallback(cmd, "non-existent-int", int, 0)
+        self.assertEqual(non_existent_int, 0)
+
+    @patch(
+        "jupyter_deploy.provider.instruction_runner_factory.InstructionRunnerFactory.get_provider_instruction_runner"
+    )
+    def test_get_result_value_with_fallback_returns_fallback_for_invalid_source_key(
+        self, mock_get_provider_instruction_runner: Mock
+    ) -> None:
+        """Test that get_result_value_with_fallback returns fallback when source key is invalid."""
+        # Arrange
+        cmd = self.get_cmd_def()
+        mock_output_defs = self.get_project_outputs()
+        mock_cliparam_defs = self.get_cli_inputs()
+
+        console_mock = Mock()
+        output_handler_mock = Mock()
+        output_handler_mock.get_full_project_outputs.return_value = mock_output_defs
+
+        mock_result_1 = self.get_mocked_first_instruction_results()
+        mock_result_2 = self.get_mocked_second_instruction_results()
+        mock_runner = Mock()
+        mock_get_provider_instruction_runner.return_value = mock_runner
+        mock_runner.execute_instruction.side_effect = [mock_result_1, mock_result_2]
+
+        # Act
+        runner = ManifestCommandRunner(
+            console=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
+        )
+        success, results = runner.run_command_sequence(cmd, mock_cliparam_defs)
+        self.assertTrue(success)
+
+        # Create a modified command with invalid source key
+        modified_cmd = self.get_cmd_def()
+        invalid_result = JupyterDeployCommandV1.model_validate(
+            {
+                "cmd": "test",
+                "sequence": [],
+                "results": [{"result-name": "invalid-result", "source": "result", "source-key": "[99].invalid"}],
+            }
+        ).results[0]  # type: ignore
+
+        if modified_cmd.results is None:
+            modified_cmd.results = [invalid_result]
+        else:
+            modified_cmd.results.append(invalid_result)
+
+        # Test with invalid source key - should return fallback instead of raising
+        result = runner.get_result_value_with_fallback(modified_cmd, "invalid-result", str, "fallback")
+        self.assertEqual(result, "fallback")
+
+    @patch(
+        "jupyter_deploy.provider.instruction_runner_factory.InstructionRunnerFactory.get_provider_instruction_runner"
+    )
     def test_update_variables_correctly_sets_values(self, mock_get_provider_instruction_runner: Mock) -> None:
         # Arrange
         cmd = self.get_cmd_def()

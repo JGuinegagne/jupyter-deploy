@@ -389,7 +389,7 @@ class TestHostExecCommand(unittest.TestCase):
         mock_host_handler.exec_command = mock_exec_command
         mock_host_handler.get_console = mock_get_console
 
-        mock_exec_command.return_value = ("stdout output", "stderr output")
+        mock_exec_command.return_value = ("stdout output", "stderr output", 0)
         mock_get_console.return_value = Mock()
 
         return mock_host_handler, {
@@ -451,7 +451,7 @@ class TestHostExecCommand(unittest.TestCase):
 
         mock_console = Mock()
         mock_handler_fns["get_console"].return_value = mock_console
-        mock_handler_fns["exec_command"].return_value = ("test stdout", "test stderr")
+        mock_handler_fns["exec_command"].return_value = ("test stdout", "test stderr", 0)
         mock_project_dir.return_value.__enter__.return_value = None
 
         # Execute
@@ -464,6 +464,23 @@ class TestHostExecCommand(unittest.TestCase):
         print_calls = [str(call) for call in mock_console.print.mock_calls]
         self.assertTrue(any("test stdout" in call for call in print_calls))
         self.assertTrue(any("test stderr" in call for call in print_calls))
+
+    @patch("jupyter_deploy.handlers.resource.host_handler.HostHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_exits_with_underlying_error_code(self, mock_project_dir: Mock, mock_host_handler_class: Mock) -> None:
+        # Setup
+        mock_host_handler, mock_handler_fns = self.get_mock_host_handler()
+        mock_host_handler_class.return_value = mock_host_handler
+        mock_handler_fns["exec_command"].return_value = ("stdout output", "stderr output", 127)
+        mock_project_dir.return_value.__enter__.return_value = None
+
+        # Execute
+        runner = CliRunner()
+        result = runner.invoke(host_app, ["exec", "--", "command_that_does_not_exist"])
+
+        # Assert
+        self.assertEqual(result.exit_code, 127)
+        mock_handler_fns["exec_command"].assert_called_once_with(["command_that_does_not_exist"])
 
     @patch("jupyter_deploy.handlers.resource.host_handler.HostHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
