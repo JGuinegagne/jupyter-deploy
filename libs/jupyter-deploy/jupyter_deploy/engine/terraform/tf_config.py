@@ -10,13 +10,14 @@ from rich import console as rich_console
 from jupyter_deploy import cmd_utils, fs_utils, verify_utils
 from jupyter_deploy.engine.engine_config import EngineConfigHandler
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.engine.terraform import tf_plan, tf_vardefs, tf_variables
+from jupyter_deploy.engine.terraform import tf_plan, tf_plan_metadata, tf_vardefs, tf_variables
 from jupyter_deploy.engine.terraform.tf_constants import (
     TF_DEFAULT_PLAN_FILENAME,
     TF_ENGINE_DIR,
     TF_INIT_CMD,
     TF_PARSE_PLAN_CMD,
     TF_PLAN_CMD,
+    TF_PLAN_METADATA_FILENAME,
     TF_PRESETS_DIR,
     get_preset_filename,
 )
@@ -132,18 +133,17 @@ class TerraformConfigHandler(EngineConfigHandler):
         if plan_retcode != 0 or plan_timed_out:
             console.line()
             console.print(":x: Error generating Terraform plan.", style="red")
+            return False
 
         # on successful plan generation, terraform prints out where the plan is saved,
         # hence no need to print it again.
-        return plan_retcode == 0 and not plan_timed_out
+        return True
 
     def record(self, record_vars: bool = False, record_secrets: bool = False) -> None:
-        if not record_vars and not record_secrets:
-            return
-
         console = rich_console.Console()
         cmds = TF_PARSE_PLAN_CMD + [f"{self.plan_out_path.absolute()}"]
 
+        # Parse the plan (needed for both metadata and variables/secrets)
         try:
             plan_content_str = cmd_utils.run_cmd_and_capture_output(cmds, exec_dir=self.engine_dir_path)
         except CalledProcessError as e:
@@ -152,8 +152,36 @@ class TerraformConfigHandler(EngineConfigHandler):
             console.print(e.stderr)
             return
 
+        # Parse JSON once for efficiency
         try:
-            variables, secrets = tf_plan.extract_variables_from_json_plan(plan_content_str)
+            plan = tf_plan.extract_plan(plan_content_str)
+        except (ValueError, ValidationError):
+            console.print(f":x: invalid plan at: {self.plan_out_path.name}")
+            return
+
+        # Extract and save plan metadata (resource counts) - always done
+        metadata_path = self.engine_dir_path / TF_PLAN_METADATA_FILENAME
+        try:
+            to_add, to_change, to_destroy = tf_plan.extract_resource_counts_from_plan(plan)
+            metadata = tf_plan_metadata.TerraformPlanMetadata(
+                to_add=to_add,
+                to_change=to_change,
+                to_destroy=to_destroy,
+            )
+            tf_plan_metadata.save_plan_metadata(metadata, metadata_path)
+        except (ValueError, ValidationError):
+            # If we can't parse the plan metadata, just skip it
+            # This is not critical for the record operation
+            console.print(f":x: failed to save plan metadata at: {metadata_path}")
+            pass
+
+        # Early return if we don't need to record vars/secrets
+        if not record_vars and not record_secrets:
+            return
+
+        # Extract variables and secrets for recording
+        try:
+            variables, secrets = tf_plan.extract_variables_from_plan(plan)
         except (ValueError, ValidationError):  # noqa: B904
             console.print(f":x: invalid plan at: {self.plan_out_path.name}")
             return

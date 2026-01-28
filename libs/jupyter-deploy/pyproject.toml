@@ -68,6 +68,7 @@ disallow_untyped_defs = true
 check_untyped_defs = true
 mypy_path = ["."]
 packages = ["jupyter_deploy"]
+plugins = ["pydantic.mypy"]
 
 [tool.ruff]
 extend-exclude = [".conda/"]

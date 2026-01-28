@@ -5,7 +5,10 @@ from typing import Any
 import yaml
 
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.manifest import InvalidServiceError, JupyterDeployManifestV1
+from jupyter_deploy.manifest import (
+    InvalidServiceError,
+    JupyterDeployManifestV1,
+)
 
 
 class TestJupyterDeployManifestV1(unittest.TestCase):

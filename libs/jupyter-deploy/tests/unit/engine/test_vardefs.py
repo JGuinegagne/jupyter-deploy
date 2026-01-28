@@ -43,7 +43,7 @@ class TestTemplateVariableClasses(unittest.TestCase):
 
     def test_should_add_non_none_default_as_preset_to_description(self) -> None:
         # Setup
-        var_def = TemplateVariableDefinition(
+        var_def: TemplateVariableDefinition = TemplateVariableDefinition(
             variable_name="test_var", description="Test description", default="default_value"
         )
 

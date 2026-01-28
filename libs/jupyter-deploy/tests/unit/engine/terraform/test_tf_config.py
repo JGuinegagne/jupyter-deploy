@@ -489,24 +489,52 @@ class TestTerraformConfigHandler(unittest.TestCase):
         self.assertTrue(type(mock_print_call[1][0]) == str)  # noqa: E721
         self.assertTrue(len(mock_print_call[1][0]) > 0)
 
+    @patch("jupyter_deploy.engine.terraform.tf_plan_metadata.save_plan_metadata")
+    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_resource_counts_from_plan")
+    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_variables_from_plan")
+    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_plan")
     @patch("jupyter_deploy.cmd_utils.run_cmd_and_capture_output")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
-    def test_record_noop_when_both_flags_are_false(self, mock_variable_handler_cls: Mock, mock_capture: Mock) -> None:
+    def test_record_only_plan_metadata_when_both_flags_are_false(
+        self,
+        mock_variable_handler_cls: Mock,
+        mock_capture: Mock,
+        mock_parse: Mock,
+        mock_extract_vars: Mock,
+        mock_extract_counts: Mock,
+        mock_save_metadata: Mock,
+    ) -> None:
         # Arrange
         mock_vars_handler, mock_vars_fns = self.get_mock_variable_handler_and_fns()
         mock_variable_handler_cls.return_value = mock_vars_handler
         handler = TerraformConfigHandler(Path("/fake/path"), Mock())
 
+        # Mock the plan parsing and resource counts extraction (always happens)
+        mock_capture.return_value = "plan-json-string"
+        mock_plan = Mock()
+        mock_plan.resource_changes = []
+        mock_parse.return_value = mock_plan
+        mock_extract_counts.return_value = (5, 3, 2)  # to_add, to_change, to_destroy
+
         # Act
         handler.record()
 
-        # Assert
-        mock_capture.assert_not_called()
+        # Assert - plan is parsed and metadata is saved, but variables are not extracted or recorded
+        mock_capture.assert_called_once()
+        mock_parse.assert_called_once_with("plan-json-string")
+        mock_extract_counts.assert_called_once_with(mock_plan)
+        mock_save_metadata.assert_called_once()
+
+        # Variables should NOT be extracted when flags are false
+        mock_extract_vars.assert_not_called()
         mock_vars_fns["sync_project_variables_config"].assert_not_called()
 
+    @patch("jupyter_deploy.engine.terraform.tf_plan_metadata.save_plan_metadata")
+    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_resource_counts_from_plan")
     @patch("jupyter_deploy.fs_utils.write_inline_file_content")
     @patch("jupyter_deploy.engine.terraform.tf_plan.format_plan_variables")
-    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_variables_from_json_plan")
+    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_variables_from_plan")
+    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_plan")
     @patch("jupyter_deploy.cmd_utils.run_cmd_and_capture_output")
     @patch("rich.console.Console")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
@@ -515,9 +543,12 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_variable_handler_cls: Mock,
         mock_console: Mock,
         mock_capture: Mock,
+        mock_parse: Mock,
         mock_extract: Mock,
         mock_format: Mock,
         mock_write: Mock,
+        mock_extract_counts: Mock,
+        mock_save_metadata: Mock,
     ) -> None:
         # Arrange
         mock_vars_handler, mock_vars_fns = self.get_mock_variable_handler_and_fns()
@@ -525,6 +556,10 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_console_instance = Mock()
         mock_console.return_value = mock_console_instance
         mock_capture.return_value = "i-am-a-serialized-plan"
+        mock_plan = Mock()
+        mock_plan.resource_changes = []
+        mock_parse.return_value = mock_plan
+        mock_extract_counts.return_value = (5, 3, 2)
 
         mock_var1 = Mock()
         mock_var2 = Mock()
@@ -546,7 +581,10 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_plan_cmd_capture = mock_capture.mock_calls[0]
         self.assertEqual(mock_plan_cmd_capture[1][0][:3], ["terraform", "show", "-json"])
 
-        mock_extract.assert_called_once_with("i-am-a-serialized-plan")
+        mock_parse.assert_called_once_with("i-am-a-serialized-plan")
+        mock_extract_counts.assert_called_once_with(mock_plan)
+        mock_save_metadata.assert_called_once()
+        mock_extract.assert_called_once_with(mock_plan)
         mock_format.assert_called_once_with({"var1": mock_var1, "var2": mock_var2})
         mock_write.assert_called_once()
 
@@ -557,9 +595,12 @@ class TestTerraformConfigHandler(unittest.TestCase):
 
         mock_vars_fns["sync_project_variables_config"].assert_called_once_with({"var1": 1, "var2": "two"})
 
+    @patch("jupyter_deploy.engine.terraform.tf_plan_metadata.save_plan_metadata")
+    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_resource_counts_from_plan")
     @patch("jupyter_deploy.fs_utils.write_inline_file_content")
     @patch("jupyter_deploy.engine.terraform.tf_plan.format_plan_variables")
-    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_variables_from_json_plan")
+    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_variables_from_plan")
+    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_plan")
     @patch("jupyter_deploy.cmd_utils.run_cmd_and_capture_output")
     @patch("rich.console.Console")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
@@ -568,9 +609,12 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_variable_handler_cls: Mock,
         mock_console: Mock,
         mock_capture: Mock,
+        mock_parse: Mock,
         mock_extract: Mock,
         mock_format: Mock,
         mock_write: Mock,
+        mock_extract_counts: Mock,
+        mock_save_metadata: Mock,
     ) -> None:
         # Arrange
         mock_vars_handler, mock_vars_fns = self.get_mock_variable_handler_and_fns()
@@ -578,6 +622,10 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_console_instance = Mock()
         mock_console.return_value = mock_console_instance
         mock_capture.return_value = "i-am-a-serialized-plan"
+        mock_plan = Mock()
+        mock_plan.resource_changes = []
+        mock_parse.return_value = mock_plan
+        mock_extract_counts.return_value = (5, 3, 2)
 
         mock_var1 = Mock()
         mock_var2 = Mock()
@@ -596,7 +644,10 @@ class TestTerraformConfigHandler(unittest.TestCase):
 
         # Assert
         mock_capture.assert_called_once()
-        mock_extract.assert_called_once_with("i-am-a-serialized-plan")
+        mock_parse.assert_called_once_with("i-am-a-serialized-plan")
+        mock_extract_counts.assert_called_once_with(mock_plan)
+        mock_save_metadata.assert_called_once()
+        mock_extract.assert_called_once_with(mock_plan)
         mock_format.assert_called_once_with({"secret1": mock_secret})
         mock_write.assert_called_once()
 
@@ -606,9 +657,12 @@ class TestTerraformConfigHandler(unittest.TestCase):
 
         mock_vars_fns["sync_project_variables_config"].assert_called_once_with({"secret1": "nuclear-codes"})
 
+    @patch("jupyter_deploy.engine.terraform.tf_plan_metadata.save_plan_metadata")
+    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_resource_counts_from_plan")
     @patch("jupyter_deploy.fs_utils.write_inline_file_content")
     @patch("jupyter_deploy.engine.terraform.tf_plan.format_plan_variables")
-    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_variables_from_json_plan")
+    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_variables_from_plan")
+    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_plan")
     @patch("jupyter_deploy.cmd_utils.run_cmd_and_capture_output")
     @patch("rich.console.Console")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
@@ -617,9 +671,12 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_variable_handler_cls: Mock,
         mock_console: Mock,
         mock_capture: Mock,
+        mock_parse: Mock,
         mock_extract: Mock,
         mock_format: Mock,
         mock_write: Mock,
+        mock_extract_counts: Mock,
+        mock_save_metadata: Mock,
     ) -> None:
         # Arrange
         mock_vars_handler, mock_vars_fns = self.get_mock_variable_handler_and_fns()
@@ -629,6 +686,10 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_print = Mock()
         mock_console_instance.print = mock_print
         mock_capture.return_value = "i-am-a-serialized-plan"
+        mock_plan = Mock()
+        mock_plan.resource_changes = []
+        mock_parse.return_value = mock_plan
+        mock_extract_counts.return_value = (5, 3, 2)
         mock_var1 = Mock()
         mock_var2 = Mock()
         mock_secret = Mock()
@@ -646,7 +707,10 @@ class TestTerraformConfigHandler(unittest.TestCase):
 
         # Assert
         mock_capture.assert_called_once()
-        mock_extract.assert_called_once_with("i-am-a-serialized-plan")
+        mock_parse.assert_called_once_with("i-am-a-serialized-plan")
+        mock_extract_counts.assert_called_once_with(mock_plan)
+        mock_save_metadata.assert_called_once()
+        mock_extract.assert_called_once_with(mock_plan)
         self.assertEqual(mock_format.call_count, 2)
         self.assertEqual(mock_write.call_count, 2)
 
@@ -687,20 +751,30 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_write.assert_not_called()
         mock_vars_fns["sync_project_variables_config"].assert_not_called()
 
+    @patch("jupyter_deploy.engine.terraform.tf_plan_metadata.save_plan_metadata")
+    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_resource_counts_from_plan")
     @patch("jupyter_deploy.fs_utils.write_inline_file_content")
-    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_variables_from_json_plan")
+    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_variables_from_plan")
+    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_plan")
     @patch("jupyter_deploy.cmd_utils.run_cmd_and_capture_output")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
     def test_catches_plan_validation_errors(
         self,
         mock_variable_handler_cls: Mock,
         mock_capture: Mock,
+        mock_parse: Mock,
         mock_extract: Mock,
         mock_write: Mock,
+        mock_extract_counts: Mock,
+        mock_save_metadata: Mock,
     ) -> None:
         # Arrange
         mock_vars_handler, mock_vars_fns = self.get_mock_variable_handler_and_fns()
         mock_variable_handler_cls.return_value = mock_vars_handler
+        mock_capture.return_value = '{"resource_changes": []}'  # Valid JSON for metadata extraction
+        mock_plan = Mock()
+        mock_parse.return_value = mock_plan
+        mock_extract_counts.return_value = (5, 3, 2)
         mock_extract.side_effect = ValidationError("some error", [])
         handler = TerraformConfigHandler(Path("/fake/path"), Mock())
 
@@ -709,25 +783,29 @@ class TestTerraformConfigHandler(unittest.TestCase):
 
         # Assert
         mock_capture.assert_called_once()
+        mock_parse.assert_called_once()
+        mock_extract_counts.assert_called_once()
+        mock_save_metadata.assert_called_once()
+        mock_extract.assert_called_once()
         mock_write.assert_not_called()
         mock_vars_fns["sync_project_variables_config"].assert_not_called()
 
     @patch("jupyter_deploy.fs_utils.write_inline_file_content")
-    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_variables_from_json_plan")
+    @patch("jupyter_deploy.engine.terraform.tf_plan.extract_plan")
     @patch("jupyter_deploy.cmd_utils.run_cmd_and_capture_output")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
     def test_catches_plan_json_parse_errors(
         self,
         mock_variable_handler_cls: Mock,
         mock_capture: Mock,
-        mock_extract: Mock,
+        mock_parse: Mock,
         mock_write: Mock,
     ) -> None:
         # Arrange
         mock_vars_handler, mock_vars_fns = self.get_mock_variable_handler_and_fns()
         mock_variable_handler_cls.return_value = mock_vars_handler
         mock_capture.return_value = "i-am-a-serialized-plan"
-        mock_extract.side_effect = ValueError("Invalid JSON")
+        mock_parse.side_effect = ValueError("Invalid JSON")
         handler = TerraformConfigHandler(Path("/fake/path"), Mock())
 
         # Act
@@ -735,6 +813,6 @@ class TestTerraformConfigHandler(unittest.TestCase):
 
         # Assert
         mock_capture.assert_called_once()
-        mock_extract.assert_called_once()
+        mock_parse.assert_called_once()
         mock_write.assert_not_called()
         mock_vars_fns["sync_project_variables_config"].assert_not_called()
