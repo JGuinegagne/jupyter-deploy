@@ -19,15 +19,13 @@ class TestCreateTerraformExecutorNoManifestNorPlan(unittest.TestCase):
         """Test that paths are passed correctly to executor."""
         exec_dir = Path("/mock/exec")
         log_file = Path("/mock/log.txt")
-        progress_cb = Mock()
-        log_cb = Mock()
+        execution_cb = Mock()
 
         executor = create_terraform_executor(
             sequence_id=TerraformSequenceId.config_init,
             exec_dir=exec_dir,
             log_file=log_file,
-            progress_callback=progress_cb,
-            log_callback=log_cb,
+            execution_callback=execution_cb,
         )
 
         self.assertEqual(executor.exec_dir, exec_dir)
@@ -37,34 +35,29 @@ class TestCreateTerraformExecutorNoManifestNorPlan(unittest.TestCase):
         """Test that callbacks are passed correctly to executor."""
         exec_dir = Path("/mock/exec")
         log_file = Path("/mock/log.txt")
-        progress_cb = Mock()
-        log_cb = Mock()
+        execution_cb = Mock()
 
         executor = create_terraform_executor(
             sequence_id=TerraformSequenceId.config_init,
             exec_dir=exec_dir,
             log_file=log_file,
-            progress_callback=progress_cb,
-            log_callback=log_cb,
+            execution_callback=execution_cb,
         )
 
-        self.assertIs(executor._progress_callback, progress_cb)
-        self.assertIs(executor._log_callback, log_cb)
+        self.assertIs(executor._execution_callback, execution_cb)
 
     def test_return_a_supervisor_executor_for_all_terraform_sequence_id(self) -> None:
         """Test that SupervisedExecutor is returned for all sequence IDs."""
         exec_dir = Path("/mock/exec")
         log_file = Path("/mock/log.txt")
-        progress_cb = Mock()
-        log_cb = Mock()
+        execution_cb = Mock()
 
         for sequence_id in TerraformSequenceId:
             executor = create_terraform_executor(
                 sequence_id=sequence_id,
                 exec_dir=exec_dir,
                 log_file=log_file,
-                progress_callback=progress_cb,
-                log_callback=log_cb,
+                execution_callback=execution_cb,
             )
             self.assertIsInstance(executor, SupervisedExecutor)
 
@@ -72,15 +65,13 @@ class TestCreateTerraformExecutorNoManifestNorPlan(unittest.TestCase):
         """Test config_init creates executor with correct default phase."""
         exec_dir = Path("/mock/exec")
         log_file = Path("/mock/log.txt")
-        progress_cb = Mock()
-        log_cb = Mock()
+        execution_cb = Mock()
 
         executor = create_terraform_executor(
             sequence_id=TerraformSequenceId.config_init,
             exec_dir=exec_dir,
             log_file=log_file,
-            progress_callback=progress_cb,
-            log_callback=log_cb,
+            execution_callback=execution_cb,
         )
 
         self.assertEqual(executor._default_phase.label, "Configuring terraform dependencies")
@@ -90,15 +81,13 @@ class TestCreateTerraformExecutorNoManifestNorPlan(unittest.TestCase):
         """Test config_plan creates executor with correct default phase."""
         exec_dir = Path("/mock/exec")
         log_file = Path("/mock/log.txt")
-        progress_cb = Mock()
-        log_cb = Mock()
+        execution_cb = Mock()
 
         executor = create_terraform_executor(
             sequence_id=TerraformSequenceId.config_plan,
             exec_dir=exec_dir,
             log_file=log_file,
-            progress_callback=progress_cb,
-            log_callback=log_cb,
+            execution_callback=execution_cb,
         )
 
         self.assertEqual(executor._default_phase.label, "Configuring terraform dependencies")
@@ -108,23 +97,20 @@ class TestCreateTerraformExecutorNoManifestNorPlan(unittest.TestCase):
         """Test that config_init and config_plan have consistent weight distribution."""
         exec_dir = Path("/mock/exec")
         log_file = Path("/mock/log.txt")
-        progress_cb = Mock()
-        log_cb = Mock()
+        execution_cb = Mock()
 
         init_executor = create_terraform_executor(
             sequence_id=TerraformSequenceId.config_init,
             exec_dir=exec_dir,
             log_file=log_file,
-            progress_callback=progress_cb,
-            log_callback=log_cb,
+            execution_callback=execution_cb,
         )
 
         plan_executor = create_terraform_executor(
             sequence_id=TerraformSequenceId.config_plan,
             exec_dir=exec_dir,
             log_file=log_file,
-            progress_callback=progress_cb,
-            log_callback=log_cb,
+            execution_callback=execution_cb,
         )
 
         # config_init: starts at 0%
@@ -143,15 +129,13 @@ class TestCreateTerraformExecutorNoManifestNorPlan(unittest.TestCase):
         """Test up_apply creates executor with correct default phase."""
         exec_dir = Path("/mock/exec")
         log_file = Path("/mock/log.txt")
-        progress_cb = Mock()
-        log_cb = Mock()
+        execution_cb = Mock()
 
         executor = create_terraform_executor(
             sequence_id=TerraformSequenceId.up_apply,
             exec_dir=exec_dir,
             log_file=log_file,
-            progress_callback=progress_cb,
-            log_callback=log_cb,
+            execution_callback=execution_cb,
         )
 
         self.assertEqual(executor._default_phase.label, "Configuring terraform dependencies")
@@ -161,15 +145,13 @@ class TestCreateTerraformExecutorNoManifestNorPlan(unittest.TestCase):
         """Test down_destroy creates executor with default phase and one declared phase."""
         exec_dir = Path("/mock/exec")
         log_file = Path("/mock/log.txt")
-        progress_cb = Mock()
-        log_cb = Mock()
+        execution_cb = Mock()
 
         executor = create_terraform_executor(
             sequence_id=TerraformSequenceId.down_destroy,
             exec_dir=exec_dir,
             log_file=log_file,
-            progress_callback=progress_cb,
-            log_callback=log_cb,
+            execution_callback=execution_cb,
         )
 
         self.assertEqual(executor._default_phase.label, "Evaluating resources to destroy")
@@ -180,15 +162,13 @@ class TestCreateTerraformExecutorNoManifestNorPlan(unittest.TestCase):
         """Test down_destroy declared phase has weight less than 100."""
         exec_dir = Path("/mock/exec")
         log_file = Path("/mock/log.txt")
-        progress_cb = Mock()
-        log_cb = Mock()
+        execution_cb = Mock()
 
         executor = create_terraform_executor(
             sequence_id=TerraformSequenceId.down_destroy,
             exec_dir=exec_dir,
             log_file=log_file,
-            progress_callback=progress_cb,
-            log_callback=log_cb,
+            execution_callback=execution_cb,
         )
 
         self.assertLess(executor._declared_phases[0].weight, 100)
@@ -212,15 +192,13 @@ class TestCreateTerraformExecutorWithManifest(unittest.TestCase):
         """Test config_init uses manifest configuration."""
         exec_dir = Path("/mock/exec")
         log_file = Path("/mock/log.txt")
-        progress_cb = Mock()
-        log_cb = Mock()
+        execution_cb = Mock()
 
         executor = create_terraform_executor(
             sequence_id=TerraformSequenceId.config_init,
             exec_dir=exec_dir,
             log_file=log_file,
-            progress_callback=progress_cb,
-            log_callback=log_cb,
+            execution_callback=execution_cb,
             manifest=self.manifest,
         )
 
@@ -231,15 +209,13 @@ class TestCreateTerraformExecutorWithManifest(unittest.TestCase):
         """Test config_plan uses manifest configuration."""
         exec_dir = Path("/mock/exec")
         log_file = Path("/mock/log.txt")
-        progress_cb = Mock()
-        log_cb = Mock()
+        execution_cb = Mock()
 
         executor = create_terraform_executor(
             sequence_id=TerraformSequenceId.config_plan,
             exec_dir=exec_dir,
             log_file=log_file,
-            progress_callback=progress_cb,
-            log_callback=log_cb,
+            execution_callback=execution_cb,
             manifest=self.manifest,
         )
 
@@ -250,15 +226,13 @@ class TestCreateTerraformExecutorWithManifest(unittest.TestCase):
         """Test up_apply uses manifest configuration with phases."""
         exec_dir = Path("/mock/exec")
         log_file = Path("/mock/log.txt")
-        progress_cb = Mock()
-        log_cb = Mock()
+        execution_cb = Mock()
 
         executor = create_terraform_executor(
             sequence_id=TerraformSequenceId.up_apply,
             exec_dir=exec_dir,
             log_file=log_file,
-            progress_callback=progress_cb,
-            log_callback=log_cb,
+            execution_callback=execution_cb,
             manifest=self.manifest,
         )
 
@@ -274,15 +248,13 @@ class TestCreateTerraformExecutorWithManifest(unittest.TestCase):
         """Test down_destroy uses manifest configuration."""
         exec_dir = Path("/mock/exec")
         log_file = Path("/mock/log.txt")
-        progress_cb = Mock()
-        log_cb = Mock()
+        execution_cb = Mock()
 
         executor = create_terraform_executor(
             sequence_id=TerraformSequenceId.down_destroy,
             exec_dir=exec_dir,
             log_file=log_file,
-            progress_callback=progress_cb,
-            log_callback=log_cb,
+            execution_callback=execution_cb,
             manifest=self.manifest,
         )
 
@@ -298,8 +270,7 @@ class TestCreateTerraformExecutorWithManifest(unittest.TestCase):
         """Test up_apply with plan metadata overrides estimate dynamically."""
         exec_dir = Path("/mock/exec")
         log_file = Path("/mock/log.txt")
-        progress_cb = Mock()
-        log_cb = Mock()
+        execution_cb = Mock()
 
         # Create plan metadata with specific counts
         plan_metadata = TerraformPlanMetadata(to_add=10, to_change=5, to_destroy=2)
@@ -308,8 +279,7 @@ class TestCreateTerraformExecutorWithManifest(unittest.TestCase):
             sequence_id=TerraformSequenceId.up_apply,
             exec_dir=exec_dir,
             log_file=log_file,
-            progress_callback=progress_cb,
-            log_callback=log_cb,
+            execution_callback=execution_cb,
             manifest=self.manifest,
             plan_metadata=plan_metadata,
         )

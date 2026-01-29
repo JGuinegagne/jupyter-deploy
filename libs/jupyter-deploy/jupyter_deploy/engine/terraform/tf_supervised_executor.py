@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from jupyter_deploy.engine.supervised_execution import LogCallback, ProgressCallback
+from jupyter_deploy.engine.supervised_execution import ExecutionCallback
 from jupyter_deploy.engine.supervised_executor import SupervisedExecutor
 from jupyter_deploy.engine.supervised_phase import SupervisedDefaultPhase, SupervisedPhase
 
@@ -20,8 +20,7 @@ def create_terraform_executor(
     sequence_id: TerraformSequenceId,
     exec_dir: Path,
     log_file: Path,
-    progress_callback: ProgressCallback,
-    log_callback: LogCallback,
+    execution_callback: ExecutionCallback,
     manifest: JupyterDeployManifest | None = None,
     plan_metadata: TerraformPlanMetadata | None = None,
 ) -> SupervisedExecutor:
@@ -31,8 +30,7 @@ def create_terraform_executor(
         sequence_id: Command sequence ID
         exec_dir: Working directory for terraform execution
         log_file: Path where logs should be written
-        progress_callback: Callback for progress updates
-        log_callback: Callback for live log line updates
+        execution_callback: Callback for execution events (progress, logs)
         manifest: Optional manifest to extract command-specific configuration
         plan_metadata: Optional plan metadata for dynamic progress estimate extraction
 
@@ -135,8 +133,7 @@ def create_terraform_executor(
     return SupervisedExecutor(
         exec_dir=exec_dir,
         log_file=log_file,
-        progress_callback=progress_callback,
-        log_callback=log_callback,
+        execution_callback=execution_callback,
         default_phase=default_phase,
         phases=phases,
         phase_sequence_weight=phase_sequence_weight,

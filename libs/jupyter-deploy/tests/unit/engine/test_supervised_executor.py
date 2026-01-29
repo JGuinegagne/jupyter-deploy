@@ -76,9 +76,12 @@ class TestSupervisedExecutor(unittest.TestCase):
         phases: list[Mock] | None = None,
     ) -> tuple[SupervisedExecutor, dict[str, Any]]:
         """Helper to create SupervisedExecutor with mocks."""
-        # Create mocks
-        mock_progress_callback = Mock()
-        mock_log_callback = Mock()
+        # Create mock execution callback (implements ExecutionCallback protocol)
+        mock_execution_callback = Mock()
+        mock_execution_callback.on_progress = Mock()
+        mock_execution_callback.on_log_line = Mock()
+        mock_execution_callback.is_requesting_user_input = Mock(return_value=False)  # Default: no interaction
+        mock_execution_callback.handle_interaction = Mock()
 
         # Create default phase
         default_phase_instance, default_phase_mocks = self._create_mocked_default_phase_and_mocks()
@@ -95,8 +98,7 @@ class TestSupervisedExecutor(unittest.TestCase):
             phases_mocks_list = []
 
         mocks_dict: dict[str, Any] = {
-            "progress_callback": mock_progress_callback,
-            "log_callback": mock_log_callback,
+            "execution_callback": mock_execution_callback,
             "default_phase": default_phase_mocks,
             "phases": phases_mocks_list,
         }
@@ -106,8 +108,7 @@ class TestSupervisedExecutor(unittest.TestCase):
             log_file=log_file or Path("/mock/log.txt"),
             default_phase=default_phase_instance,  # type: ignore[arg-type]
             phases=test_phases,  # type: ignore[arg-type]
-            progress_callback=mock_progress_callback,
-            log_callback=mock_log_callback,
+            execution_callback=mock_execution_callback,
         )
 
         return executor, mocks_dict
@@ -124,7 +125,7 @@ class TestSupervisedExecutor(unittest.TestCase):
 
         self.assertEqual(executor.exec_dir, exec_dir)
         self.assertEqual(executor.log_file, log_file)
-        self.assertEqual(executor._progress_callback, mocks["progress_callback"])
+        self.assertEqual(executor._execution_callback, mocks["execution_callback"])
 
     def test_execute_creates_log_directory(self) -> None:
         """Test that execute creates log directory if it doesn't exist."""
@@ -250,7 +251,7 @@ class TestSupervisedExecutor(unittest.TestCase):
             executor.execute(["echo", "test"])
 
             # Verify callback was called
-            mocks["progress_callback"].on_progress.assert_called()
+            mocks["execution_callback"].on_progress.assert_called()
 
     def test_execute_returns_zero_on_success(self) -> None:
         """Test that execute returns 0 when all commands succeed."""
@@ -381,7 +382,7 @@ class TestSupervisedExecutor(unittest.TestCase):
         self.assertEqual(executor._accumulated_percentage, 100)
 
         # Verify progress callback was called
-        mocks["progress_callback"].on_progress.assert_called()
+        mocks["execution_callback"].on_progress.assert_called()
 
     def test_parse_output_line_declared_phase_evaluates_next_subphase(self) -> None:
         """Test that _parse_output_line completes subphase when transition is detected."""
@@ -413,7 +414,7 @@ class TestSupervisedExecutor(unittest.TestCase):
         self.assertEqual(executor._accumulated_percentage, 25)
 
         # Verify progress callback was called
-        mocks["progress_callback"].on_progress.assert_called()
+        mocks["execution_callback"].on_progress.assert_called()
 
     def test_parse_output_line_declared_phase_evaluates_progress(self) -> None:
         """Test that _parse_output_line increments progress when event is detected."""
@@ -446,7 +447,7 @@ class TestSupervisedExecutor(unittest.TestCase):
         self.assertEqual(executor._accumulated_percentage, 5)
 
         # Verify progress callback was called
-        mocks["progress_callback"].on_progress.assert_called()
+        mocks["execution_callback"].on_progress.assert_called()
 
     def test_parse_output_line_no_active_phase_enters_declared_phase(self) -> None:
         """Test that _parse_output_line enters declared phase when signal is detected."""
@@ -471,7 +472,7 @@ class TestSupervisedExecutor(unittest.TestCase):
         self.assertEqual(executor._active_declared_phase, mock_phase)
 
         # Verify progress callback was called
-        mocks["progress_callback"].on_progress.assert_called()
+        mocks["execution_callback"].on_progress.assert_called()
 
     def test_parse_output_line_no_active_phase_evaluates_default_phase_progress(self) -> None:
         """Test that _parse_output_line tracks default phase progress."""
@@ -503,7 +504,7 @@ class TestSupervisedExecutor(unittest.TestCase):
         self.assertEqual(executor._accumulated_percentage, 10)
 
         # Verify progress callback was called
-        mocks["progress_callback"].on_progress.assert_called()
+        mocks["execution_callback"].on_progress.assert_called()
 
     def test_parse_output_line_no_match_does_not_emit_progress(self) -> None:
         """Test that _parse_output_line does not emit progress when no patterns match."""
@@ -522,7 +523,7 @@ class TestSupervisedExecutor(unittest.TestCase):
         executor._parse_output_line("no match")
 
         # Verify no progress callback was called
-        mocks["progress_callback"].on_progress.assert_not_called()
+        mocks["execution_callback"].on_progress.assert_not_called()
 
         # Verify accumulated percentage unchanged
         self.assertEqual(executor._accumulated_percentage, 0)

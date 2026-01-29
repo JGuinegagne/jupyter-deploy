@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 from typing import IO
 
-from jupyter_deploy.engine.supervised_execution import ExecutionProgress, LogCallback, ProgressCallback
+from jupyter_deploy.engine.supervised_execution import ExecutionCallback, ExecutionProgress
 from jupyter_deploy.engine.supervised_phase import SupervisedDefaultPhase, SupervisedPhase
 from jupyter_deploy.manifest import (
     JupyterDeploySupervisedExecutionPhaseV1,
@@ -27,8 +27,7 @@ class SupervisedExecutor:
         self,
         exec_dir: Path,
         log_file: Path,
-        progress_callback: ProgressCallback,
-        log_callback: LogCallback,
+        execution_callback: ExecutionCallback,
         default_phase: SupervisedDefaultPhase,
         phases: list[SupervisedPhase] | None = None,
         phase_sequence_weight: int = 100,
@@ -39,8 +38,7 @@ class SupervisedExecutor:
         Args:
             exec_dir: Working directory for command execution
             log_file: Path where logs should be written
-            progress_callback: Callback for progress updates
-            log_callback: Callback for live log line updates
+            execution_callback: Callback for execution events (progress, logs)
             default_phase: Default phase instance for progress tracking when not in declared phases
             phases: Optional explicitly declared phases
             phase_sequence_weight: Weight of this command in the overall sequence (0-100)
@@ -51,8 +49,7 @@ class SupervisedExecutor:
 
         self.exec_dir = exec_dir
         self.log_file = log_file
-        self._progress_callback = progress_callback
-        self._log_callback = log_callback
+        self._execution_callback = execution_callback
         self.phase_sequence_weight = phase_sequence_weight
         self.phase_sequence_percentage_start = phase_sequence_percentage_start
         self._log_handle: IO[str] | None = None
@@ -119,8 +116,15 @@ class SupervisedExecutor:
                 stripped_line = line.rstrip("\n")
                 self._last_log_line = stripped_line
 
-                # Emit log line to callback
-                self._log_callback.on_log_line(stripped_line)
+                # Check if this line is requesting user input (cheap check first)
+                if self._execution_callback.is_requesting_user_input(stripped_line):
+                    # Handle interaction line (adds to context buffer only, not display buffer)
+                    self._execution_callback.handle_interaction(stripped_line)
+                    # Skip phase detection during interactive prompts
+                    continue
+
+                # Normal log line: emit to callback (handles buffering and display)
+                self._execution_callback.on_log_line(stripped_line)
 
                 # Parse the line for progress tracking
                 self._parse_output_line(stripped_line)
@@ -146,7 +150,7 @@ class SupervisedExecutor:
 
     def _emit_progress(self, progress: ExecutionProgress) -> None:
         """Emit a progress update via the callback."""
-        self._progress_callback.on_progress(progress)
+        self._execution_callback.on_progress(progress)
 
     def get_current_phase_and_subphase(
         self,
