@@ -69,58 +69,65 @@ class TerraformSupervisedExecutionCallback(EngineExecutionCallback):
         elif self.sequence_id in [TerraformSequenceId.up_apply, TerraformSequenceId.down_destroy]:
             return self._extract_plan_summary_context()
 
-        # Fallback: return last few lines (excluding prompt line)
+        # Fallback: return last few lines (including prompt line)
+        # Cap at buffer size to be defensive
         buffer_list = list(self._line_buffer)
-        return InteractionContext(lines=buffer_list[-10:-1] if len(buffer_list) > 1 else [])
+        fallback_lines = min(10, self._line_buffer.maxlen or 10)
+        return InteractionContext(lines=buffer_list[-fallback_lines:])
 
     def _extract_variable_context(self) -> InteractionContext:
         """Extract context for variable prompts.
 
         Looks backward in buffer for the most recent line starting with "var."
-        and returns all lines from that point up to (but NOT including) the
-        "Enter a value:" prompt line. This captures the full variable description
-        that terraform displays before prompting.
+        and returns all lines from that point including the "Enter a value:"
+        prompt line. This captures the full variable description that terraform
+        displays before prompting.
 
         Returns:
-            InteractionContext with variable description lines (excluding prompt line)
+            InteractionContext with variable description lines (including prompt line)
         """
         # Note: list() conversion is O(n) but acceptable here because:
         # 1. This method is only called when _detect_interaction() finds a prompt (rare)
         # 2. We need backwards search + slicing which deque doesn't efficiently support
         buffer_list = list(self._line_buffer)
         for i in range(len(buffer_list) - 1, -1, -1):
-            if buffer_list[i].startswith("var."):
-                # Return lines from var. up to (but not including) the last line
-                # The last line is "Enter a value:" which should appear outside the box
-                return InteractionContext(lines=buffer_list[i:-1])
+            # Strip ANSI codes before checking (terraform wraps var names in ANSI codes)
+            clean_line = ANSI_ESCAPE.sub("", buffer_list[i])
+            if clean_line.startswith("var."):
+                # Return lines from var. including the prompt line
+                return InteractionContext(lines=buffer_list[i:])
 
-        # Fallback: return last 10 lines (excluding prompt line) if no var. found
-        return InteractionContext(lines=buffer_list[-10:-1])
+        # Fallback: return last 10 lines (including prompt line) if no var. found
+        # Cap at buffer size to be defensive
+        fallback_lines = min(10, self._line_buffer.maxlen or 10)
+        return InteractionContext(lines=buffer_list[-fallback_lines:])
 
     def _extract_plan_summary_context(self) -> InteractionContext:
         """Extract context for confirmation prompts (up/down commands).
 
         Looks backward in buffer for the most recent line containing terraform's
         plan summary (e.g., "Plan: 5 to add, 0 to change, 3 to destroy") and
-        returns all lines from that point up to (but NOT including) the
-        "Enter a value:" prompt line.
+        returns all lines from that point including the "Enter a value:"
+        prompt line.
 
         Returns:
-            InteractionContext with plan summary lines (excluding prompt line)
+            InteractionContext with plan summary lines (including prompt line)
         """
         # Note: list() conversion is O(n) but acceptable here because:
         # 1. This method is only called when _detect_interaction() finds a prompt (rare)
         # 2. We need backwards search + slicing which deque doesn't efficiently support
         buffer_list = list(self._line_buffer)
         for i in range(len(buffer_list) - 1, -1, -1):
-            line = buffer_list[i]
-            if "Plan:" in line and ("to add" in line or "to destroy" in line):
-                # Return lines from Plan: up to (but not including) the last line
-                # The last line is "Enter a value:" which should appear outside the box
-                return InteractionContext(lines=buffer_list[i:-1])
+            # Strip ANSI codes before checking (terraform wraps plan summary in ANSI codes)
+            clean_line = ANSI_ESCAPE.sub("", buffer_list[i])
+            if "Plan:" in clean_line and ("to add" in clean_line or "to destroy" in clean_line):
+                # Return lines from Plan: including the prompt line
+                return InteractionContext(lines=buffer_list[i:])
 
-        # Fallback: return last 20 lines (excluding prompt line) if no Plan: found
-        return InteractionContext(lines=buffer_list[-20:-1])
+        # Fallback: return last 20 lines (including prompt line) if no Plan: found
+        # Cap at buffer size to be defensive
+        fallback_lines = min(20, self._line_buffer.maxlen or 20)
+        return InteractionContext(lines=buffer_list[-fallback_lines:])
 
     def _is_interaction_complete(self, line: str) -> bool:
         """Detect if terraform interaction is complete.

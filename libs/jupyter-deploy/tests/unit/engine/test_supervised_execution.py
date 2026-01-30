@@ -1,6 +1,5 @@
 import unittest
 from dataclasses import is_dataclass
-from pathlib import Path
 from typing import get_type_hints
 
 from jupyter_deploy.engine.supervised_execution import (
@@ -18,21 +17,21 @@ class TestExecutionProgress(unittest.TestCase):
         """Test initialization with all fields."""
         progress = ExecutionProgress(
             label="Creating infrastructure",
-            percentage=20,
+            reward=20,
         )
 
         self.assertEqual(progress.label, "Creating infrastructure")
-        self.assertEqual(progress.percentage, 20)
+        self.assertEqual(progress.reward, 20)
 
-    def test_init_with_zero_percentage(self) -> None:
-        """Test initialization with zero percentage (indeterminate progress)."""
+    def test_init_with_zero_reward(self) -> None:
+        """Test initialization with zero reward (indeterminate progress)."""
         progress = ExecutionProgress(
             label="Initializing",
-            percentage=0,
+            reward=0,
         )
 
         self.assertEqual(progress.label, "Initializing")
-        self.assertEqual(progress.percentage, 0)
+        self.assertEqual(progress.reward, 0)
 
     def test_is_dataclass(self) -> None:
         """Test that ExecutionProgress is a dataclass."""
@@ -104,18 +103,15 @@ class TestExecutionError(unittest.TestCase):
 
     def test_init_sets_attributes(self) -> None:
         """Test that initialization sets all attributes correctly."""
-        log_file = Path("/tmp/test.log")
         error = ExecutionError(
             command="up",
             retcode=1,
             message="Terraform apply failed",
-            log_file=log_file,
         )
 
         self.assertEqual(error.command, "up")
         self.assertEqual(error.retcode, 1)
         self.assertEqual(error.message, "Terraform apply failed")
-        self.assertEqual(error.log_file, log_file)
 
     def test_is_exception(self) -> None:
         """Test that ExecutionError is an Exception."""
@@ -123,7 +119,6 @@ class TestExecutionError(unittest.TestCase):
             command="config",
             retcode=2,
             message="Invalid configuration",
-            log_file=Path("/tmp/config.log"),
         )
 
         self.assertIsInstance(error, Exception)
@@ -135,7 +130,6 @@ class TestExecutionError(unittest.TestCase):
             command="down",
             retcode=1,
             message=message,
-            log_file=Path("/tmp/down.log"),
         )
 
         self.assertEqual(str(error), message)
@@ -147,14 +141,12 @@ class TestExecutionError(unittest.TestCase):
                 command="up",
                 retcode=1,
                 message="Test error",
-                log_file=Path("/tmp/test.log"),
             )
 
         error = context.exception
         self.assertEqual(error.command, "up")
         self.assertEqual(error.retcode, 1)
         self.assertEqual(error.message, "Test error")
-        self.assertEqual(error.log_file, Path("/tmp/test.log"))
 
     def test_different_commands(self) -> None:
         """Test ExecutionError with different command types."""
@@ -165,7 +157,6 @@ class TestExecutionError(unittest.TestCase):
                 command=cmd,
                 retcode=1,
                 message=f"{cmd} failed",
-                log_file=Path(f"/tmp/{cmd}.log"),
             )
 
             self.assertEqual(error.command, cmd)
@@ -178,7 +169,6 @@ class TestExecutionError(unittest.TestCase):
                 command="test",
                 retcode=retcode,
                 message="Error",
-                log_file=Path("/tmp/test.log"),
             )
 
             self.assertEqual(error.retcode, retcode)

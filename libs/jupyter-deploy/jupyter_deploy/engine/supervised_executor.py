@@ -4,34 +4,42 @@ import subprocess
 from pathlib import Path
 from typing import IO
 
-from jupyter_deploy.engine.supervised_execution import ExecutionCallback, ExecutionProgress
+from jupyter_deploy.engine.supervised_execution import ExecutionProgress
+from jupyter_deploy.engine.supervised_execution_callback import ExecutionCallbackInterface
 from jupyter_deploy.engine.supervised_phase import SupervisedDefaultPhase, SupervisedPhase
-from jupyter_deploy.manifest import (
-    JupyterDeploySupervisedExecutionPhaseV1,
-    JupyterDeploySupervisedExecutionSubPhaseV1,
-)
+from jupyter_deploy.prompt_handler import PromptHandler
 
 
 class SupervisedExecutor:
-    """Base class for executing commands with progress tracking and logging.
+    """Execution and progress handler for a sequence of events in Jupyter-deploy command.
 
-    This class handles:
+    On successful completion of the underlying command, the SupervisedExecutor
+    grants its full reward. On failure (non-zero retcode), it communicates the
+    error message and return code.
+
+    To calculate intermediate rewards, a SupervisedExecutor tracks a sequence
+    of declared phases (SupervisedPhase) - which may be empty - and
+    a single default phase (SupervisedDefaultPhase).
+
+    At any point, a phase MUST be active; either a SupervisedPhase or
+    the SupervisedDefaultPhase. The SupervisedExecutor delegates to the active
+    phase the task of calculating the incremental reward.
+
+    Furthermore, the SupervisedExecutor handles:
     - Streaming command output line by line
     - Writing output to log files
     - Emitting progress updates via callback
-    - Managing subprocess execution
-    - Phase tracking and transitions
     """
 
     def __init__(
         self,
         exec_dir: Path,
         log_file: Path,
-        execution_callback: ExecutionCallback,
+        execution_callback: ExecutionCallbackInterface,
         default_phase: SupervisedDefaultPhase,
         phases: list[SupervisedPhase] | None = None,
-        phase_sequence_weight: int = 100,
-        phase_sequence_percentage_start: int = 0,
+        start_reward: float = 0.0,
+        end_reward: float = 100.0,
     ):
         """Initialize the executor.
 
@@ -41,8 +49,10 @@ class SupervisedExecutor:
             execution_callback: Callback for execution events (progress, logs)
             default_phase: Default phase instance for progress tracking when not in declared phases
             phases: Optional explicitly declared phases
-            phase_sequence_weight: Weight of this command in the overall sequence (0-100)
-            phase_sequence_percentage_start: Starting percentage offset for this command
+            start_reward: Accumulated reward (0-100) from previous sub-command executions of the
+                jupyter-deploy command. Corresponds to the sum of all preceding SupervisedExecutors
+                rewards.
+            end_reward: Reward on successful completion of the SupervisedExecutor (0-100).
         """
         if not phases:
             phases = []
@@ -50,9 +60,12 @@ class SupervisedExecutor:
         self.exec_dir = exec_dir
         self.log_file = log_file
         self._execution_callback = execution_callback
-        self.phase_sequence_weight = phase_sequence_weight
-        self.phase_sequence_percentage_start = phase_sequence_percentage_start
+        self._should_parse_progress = execution_callback.should_parse_progress()
         self._log_handle: IO[str] | None = None
+
+        # Reward calculation
+        self.end_reward = end_reward
+        self._accumulated_reward = start_reward
 
         # Initialize declared phases as objects
         self._default_phase = default_phase
@@ -62,9 +75,6 @@ class SupervisedExecutor:
         self._active_declared_phase: SupervisedPhase | None = None
         self._next_declared_phase_index: int = 0  # Index of next phase to check
         self._next_declared_phase: SupervisedPhase | None = self._declared_phases[0] if self._declared_phases else None
-
-        # Accumulated percentage from completed phases
-        self._accumulated_percentage = 0.0
 
         # Helper
         self._last_log_line = ""
@@ -79,64 +89,113 @@ class SupervisedExecutor:
         # Open log file for appending (handler may call execute() multiple times)
         with open(self.log_file, "a") as log_handle:
             self._log_handle = log_handle
-            retcode = self._execute_command(command)
+            retcode = self._handle_execute_command(command)
             self._log_handle = None
 
         return retcode
 
-    def _execute_command(self, cmd: list[str]) -> int:
-        """Execute a single command and stream its output, return retcode.
-
-        Args:
-            cmd: The command to execute as a list of strings
-        """
+    def _handle_execute_command(self, cmd: list[str]) -> int:
+        """Execute a single command and stream its output, return retcode."""
         process = subprocess.Popen(
             cmd,
-            stdin=None,  # Inherit stdin from parent for interactive prompts
+            stdin=subprocess.PIPE,  # Pipe stdin for prompt coordination
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,  # Merge stderr into stdout
+            stderr=subprocess.PIPE,  # Keep stderr separate to prevent jumbling
             cwd=self.exec_dir,
             text=True,
-            bufsize=1,  # Line buffered
+            bufsize=0,  # Unbuffered for character-by-character reading
         )
 
-        # Stream output line by line
-        if process.stdout:
-            for line in iter(process.stdout.readline, ""):
-                if not line:
-                    break
-
-                # Write to log file
-                self._write_to_log(line)
-
-                # Print to stdout for user to see (important for interactive prompts!)
-                print(line, end="", flush=True)
-
-                # Track last log line (used for progress updates)
-                stripped_line = line.rstrip("\n")
-                self._last_log_line = stripped_line
-
-                # Check if this line is requesting user input (cheap check first)
-                if self._execution_callback.is_requesting_user_input(stripped_line):
-                    # Handle interaction line (adds to context buffer only, not display buffer)
-                    self._execution_callback.handle_interaction(stripped_line)
-                    # Skip phase detection during interactive prompts
-                    continue
-
-                # Normal log line: emit to callback (handles buffering and display)
-                self._execution_callback.on_log_line(stripped_line)
-
-                # Parse the line for progress tracking
-                self._parse_output_line(stripped_line)
+        # Handle stdout+stdin with prompt detection and coordination
+        if process.stdout and process.stdin:
+            self._handle_io_with_prompt_detection(process)
 
         # Wait for process to complete
         retcode = process.wait()
 
-        # Complete any remaining progress
         if retcode == 0:
+            # Happy case: complete any remaining progress
             self._complete_execution(self._last_log_line)
+        else:
+            # Something went wrong: delegate to the execution callback
+            # the job of displaying the right error message.
+            self._execution_callback.on_execution_error(retcode)
 
         return retcode
+
+    def _handle_io_with_prompt_detection(self, process: subprocess.Popen) -> None:
+        """Handle subprocess I/O with prompt detection and stdin coordination.
+
+        Uses PromptHandler to manage stdout reading, stdin piping, and coordination
+        between them via event signaling.
+
+        Args:
+            process: The subprocess to manage I/O for
+        """
+
+        def is_prompt(buffer: str) -> bool:
+            """Check if buffer looks like a prompt."""
+            stripped = buffer.rstrip()
+            return self._execution_callback.is_requesting_user_input(stripped)
+
+        def on_line(line: str) -> None:
+            """Handle a complete line."""
+            self._process_line(line)
+
+        def on_prompt(prompt: str) -> None:
+            """Handle a detected prompt."""
+            # Treat prompt as a line - _process_line will route to handle_interaction
+            self._process_line(prompt)
+
+        def on_stderr(stderr_lines: list[str]) -> None:
+            """Handle buffered stderr lines after stdout completes."""
+            for line in stderr_lines:
+                # Write to log file
+                self._write_to_log(line)
+                # Process as normal log line (adds to buffer, emits to callback)
+                stripped_line = line.rstrip("\n")
+                self._last_log_line = stripped_line
+                self._execution_callback.on_log_line(stripped_line)
+
+        handler = PromptHandler(
+            process=process,
+            on_line=on_line,
+            is_prompt=is_prompt,
+            on_prompt=on_prompt,
+            on_char=None,  # No character echo (handled by callback)
+            on_stderr=on_stderr,
+            buffer_size=200,  # Match the callback buffer size
+        )
+        handler.start()
+
+    def _process_line(self, line: str) -> None:
+        """Process a complete line of output.
+
+        The complete line (may or may not have trailing newline)
+        """
+        # Write to log file (ensure newline)
+        log_line = line if line.endswith("\n") else line + "\n"
+        self._write_to_log(log_line)
+
+        # Track last log line (used for progress updates)
+        stripped_line = line.rstrip("\n")
+        self._last_log_line = stripped_line
+
+        # Check if we're in an interaction or this line starts one
+        if self._execution_callback.is_waiting_for_interaction() or self._execution_callback.is_requesting_user_input(
+            stripped_line
+        ):
+            # Handle interaction line (adds to context buffer only, not display buffer)
+            self._execution_callback.handle_interaction(stripped_line)
+            # Skip phase detection during interactive prompts
+            return
+
+        # Normal log line: emit to callback (handles buffering, display, and printing)
+        self._execution_callback.on_log_line(stripped_line)
+
+        # Parse the line for progress tracking (only if callback needs it)
+        if self._should_parse_progress:
+            self._parse_output_line(stripped_line)
 
     def _write_to_log(self, line: str) -> None:
         """Write a line to the log file.
@@ -152,32 +211,6 @@ class SupervisedExecutor:
         """Emit a progress update via the callback."""
         self._execution_callback.on_progress(progress)
 
-    def get_current_phase_and_subphase(
-        self,
-    ) -> tuple[JupyterDeploySupervisedExecutionPhaseV1 | None, JupyterDeploySupervisedExecutionSubPhaseV1 | None]:
-        """Get the current phase and sub-phase.
-
-        Returns:
-            A tuple of (current_phase, current_sub_phase).
-            Returns (None, None) if no phases are defined, not in a phase, or if there's no active sub-phase.
-        """
-        if not self._active_declared_phase:
-            return None, None
-
-        current_phase_config = self._active_declared_phase.config
-        current_sub_phase_config = None
-
-        # Check if there's an active subphase
-        if (
-            self._active_declared_phase._current_sub_phase_index >= 0
-            and self._active_declared_phase._current_sub_phase_index < len(self._active_declared_phase.sub_phases)
-        ):
-            current_sub_phase_config = self._active_declared_phase.sub_phases[
-                self._active_declared_phase._current_sub_phase_index
-            ].config
-
-        return current_phase_config, current_sub_phase_config
-
     def _parse_output_line(self, line: str) -> None:
         """Parse an output line and emit progress updates.
 
@@ -192,8 +225,8 @@ class SupervisedExecutor:
             # 1.1: Check for exit
             if self._active_declared_phase.evaluate_exit(line):
                 # Complete this phase, move to next declared phase, activate default
-                points_earned = self._active_declared_phase.complete()
-                self._accumulated_percentage += points_earned
+                full_phase_reward = self._active_declared_phase.complete()
+                self._accumulated_reward += full_phase_reward
                 self._active_declared_phase = None
                 self._next_declared_phase_index += 1
                 self._next_declared_phase = (
@@ -207,16 +240,16 @@ class SupervisedExecutor:
             # 1.2: Check for next subphase
             if self._active_declared_phase.evaluate_next_subphase(line):
                 # Sub-phase transition - emit progress, keep phase active
-                points_earned = self._active_declared_phase.complete_subphase()
-                self._accumulated_percentage += points_earned
+                subphase_reward = self._active_declared_phase.complete_subphase()
+                self._accumulated_reward += subphase_reward
                 self._emit_current_progress(line)
                 return
 
             # 1.3: Check for progress event
             if self._active_declared_phase.evaluate_progress(line):
                 # Incremental event detected - emit progress, keep phase active
-                points_earned = self._active_declared_phase.complete_progress_event()
-                self._accumulated_percentage += points_earned
+                progress_reward = self._active_declared_phase.complete_progress_event()
+                self._accumulated_reward += progress_reward
                 self._emit_current_progress(line)
                 return
 
@@ -231,18 +264,19 @@ class SupervisedExecutor:
 
             # 2.2: Otherwise evaluate default phase progress
             if self._default_phase.evaluate_progress(line):
-                points_earned = self._default_phase.complete_progress_event()
-                self._accumulated_percentage += points_earned
+                progress_reward = self._default_phase.complete_progress_event()
+                self._accumulated_reward += progress_reward
                 self._emit_current_progress(line)
                 return
 
     def _complete_execution(self, line: str) -> None:
         """Complete execution and emit 100% progress for this command."""
-        # Emit final progress at 100% for this command
-        overall_percentage = self.phase_sequence_percentage_start + self.phase_sequence_weight
+        # Use last active phase label, or default phase label if none
+        label = self._active_declared_phase.label if self._active_declared_phase else self._default_phase.label
+
         progress = ExecutionProgress(
-            label="",
-            percentage=overall_percentage,
+            label=label,
+            reward=self.end_reward,
         )
         self._emit_progress(progress)
 
@@ -250,16 +284,10 @@ class SupervisedExecutor:
         """Emit a progress update based on current execution state."""
         # Get label and capped percentage
         label = self._active_declared_phase.label if self._active_declared_phase else self._default_phase.label
-        applicable_percentage = min(int(self._accumulated_percentage), 100)
-
-        # Scale to overall percentage based on command sequence position
-        overall_percentage = self.phase_sequence_percentage_start + (
-            applicable_percentage * self.phase_sequence_weight // 100
-        )
 
         # Emit progress
         progress = ExecutionProgress(
             label=label,
-            percentage=overall_percentage,
+            reward=self._accumulated_reward,
         )
         self._emit_progress(progress)

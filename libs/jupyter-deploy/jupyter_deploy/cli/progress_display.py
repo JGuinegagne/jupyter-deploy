@@ -42,6 +42,15 @@ class ProgressDisplayManager:
         self._is_started = False
         self._in_interaction = False  # Track if we're in an interactive prompt
 
+    def __enter__(self) -> "ProgressDisplayManager":
+        """Enter context manager - start the display."""
+        self.start()
+        return self
+
+    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: object) -> None:
+        """Exit context manager - stop the display."""
+        self.stop()
+
     def start(self) -> None:
         """Initialize and start the Rich display."""
         if self._is_started:
@@ -60,12 +69,12 @@ class ProgressDisplayManager:
         # Add initial task
         self._task_id = self._progress.add_task("Starting...", total=100)
 
-        # Create Live display
+        # Create Live display (transient=True makes it disappear when stopped)
         self._live = Live(
             self._get_display_panel(),
             console=self.console,
             refresh_per_second=4,
-            transient=False,
+            transient=True,
         )
         self._live.start()
         self._is_started = True
@@ -90,11 +99,14 @@ class ProgressDisplayManager:
             self._progress.update(
                 self._task_id,
                 description=progress.label,
-                completed=progress.percentage,
+                completed=progress.reward,
             )
 
-            # Update Live display
-            if self._live and self._is_started:
+            # Update Live display (restart if stopped after interaction)
+            if self._live and not self._in_interaction:
+                if not self._is_started:
+                    self._live.start()
+                    self._is_started = True
                 self._live.update(self._get_display_panel())
 
     def update_log_box(self, lines: list[str]) -> None:
@@ -108,16 +120,18 @@ class ProgressDisplayManager:
         """
         self._log_lines = lines
 
-        # Update Live display
-        if self._live and self._is_started:
+        # Update Live display (restart if stopped after interaction)
+        if self._live and not self._in_interaction:
+            if not self._is_started:
+                self._live.start()
+                self._is_started = True
             self._live.update(self._get_display_panel())
 
     def on_interaction_start(self, context: InteractionContext) -> None:
-        """Freeze progress bar and expand log box for user interaction.
+        """Stop Live display and print interaction context to console.
 
-        The progress bar remains visible but frozen. The log box shows
-        all context lines (e.g., full variable description). The prompt appears
-        below the panel.
+        Stops the Live display (which disappears due to transient=True) and prints
+        the context to allow terminal to handle user input naturally.
 
         Args:
             context: Context lines to display before the prompt
@@ -125,33 +139,50 @@ class ProgressDisplayManager:
         if not self._live or not self._is_started:
             return
 
-        # Mark that we're in interaction mode
+        # Stop Live display (box disappears automatically with transient=True)
+        self._live.stop()
+        self._is_started = False
         self._in_interaction = True
 
-        # Update log box with all context lines (expand the log box)
-        self._log_lines = context.lines.copy()
-
-        # Update display one last time with frozen progress bar + expanded log box
-        self._live.update(self._get_display_panel())
-
-        # Stop Live auto-refresh so prompt can appear below
-        self._live.stop()
+        # Print context lines raw (so terminal interprets ANSI codes from terraform)
+        if context.lines:
+            print()  # Blank line for spacing
+            for i, line in enumerate(context.lines):
+                if i < len(context.lines) - 1:
+                    # Not the last line - add newline
+                    print(line, flush=True)
+                else:
+                    # Last line (prompt) - no extra newline, but ensure trailing space
+                    if not line.endswith(" "):
+                        line = line + " "
+                    print(line, end="", flush=True)
 
     def on_interaction_end(self) -> None:
-        """Resume Rich display after user interaction.
+        """Mark interaction as complete.
 
-        The engine callback is responsible for updating the log box
-        back to its normal size via update_log_box().
+        Clears the interaction flag. Live display will resume automatically
+        on the next progress/log update, avoiding box stacking.
         """
-        if not self._live or not self._is_started:
-            return
-
-        # Clear interaction mode
+        # Clear interaction mode - next update will restart Live if needed
         self._in_interaction = False
 
-        # Resume Live display (progress bar will continue updating)
-        # Engine callback will call update_log_box() to shrink it back
-        self._live.start()
+    def display_error_context(self, lines: list[str]) -> None:
+        """Display error context when command execution fails.
+
+        Stops the live display and prints error context lines.
+
+        Args:
+            lines: Error context lines to display
+        """
+        # Stop live display if running
+        if self._live and self._is_started:
+            self._live.stop()
+
+        # Print error context
+        if lines:
+            self.console.print("[red]Error context:[/red]")
+            for line in lines:
+                self.console.print(f"  {line}")
 
     def _get_display_panel(self) -> Panel:
         """Create Rich Panel with progress bar and log box.
@@ -165,7 +196,7 @@ class ProgressDisplayManager:
         if self._progress:
             content_parts.append(self._progress)
 
-        # Add log box if we have lines to display
+        # Show small log box
         if self._log_lines:
             log_text = "\n".join(self._log_lines)
             content_parts.append(f"\n[dim]{log_text}[/dim]")

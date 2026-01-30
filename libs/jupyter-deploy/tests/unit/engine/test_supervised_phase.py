@@ -18,13 +18,13 @@ class TestSupervisedSubPhase(unittest.TestCase):
             label="Test SubPhase",
             weight=50,
         )
-        self.total_weight = 100
-        self.subphase = SupervisedSubPhase(config=self.config, total_subphase_weights=self.total_weight)
+        self.phase_scale_factor = 0.5
+        self.subphase = SupervisedSubPhase(config=self.config, phase_scale_factor=self.phase_scale_factor)
 
     def test_instantiates_correctly(self) -> None:
         """Test that SupervisedSubPhase instantiates with correct attributes."""
         self.assertEqual(self.subphase.config, self.config)
-        self.assertEqual(self.subphase.phase_progress_percentage, 0.5)  # 50/100
+        self.assertEqual(self.subphase.reward, 25)  # 50 * 0.5
 
     def test_labels_is_correct(self) -> None:
         """Test that label property returns correct value."""
@@ -68,9 +68,10 @@ class TestSupervisedClassWithoutSubphases(unittest.TestCase):
             progress_pattern=r"Progress: \d+%",
             progress_events_estimate=10,
             label="Test Phase",
-            weight=100,
+            weight=80,
         )
-        self.phase = SupervisedPhase(config=self.config)
+        self.sequence_scale_factor = 0.25
+        self.phase = SupervisedPhase(config=self.config, sequence_scale_factor=self.sequence_scale_factor)
 
     def test_instantiates_correctly(self) -> None:
         """Test that SupervisedPhase instantiates with correct attributes."""
@@ -78,6 +79,10 @@ class TestSupervisedClassWithoutSubphases(unittest.TestCase):
         self.assertFalse(self.phase.is_active)
         self.assertFalse(self.phase.is_completed)
         self.assertEqual(len(self.phase.sub_phases), 0)
+
+    def test_calculates_rewards_correctly(self) -> None:
+        self.assertAlmostEqual(self.phase._accumulated_reward, 0)
+        self.assertAlmostEqual(self.phase.full_reward, 20)  # 80 * 0.25
 
     def test_label_is_correct(self) -> None:
         """Test that label property returns correct value."""
@@ -89,6 +94,7 @@ class TestSupervisedClassWithoutSubphases(unittest.TestCase):
         result = self.phase.evaluate_enter(line)
         self.assertTrue(result)
         self.assertTrue(self.phase.is_active)
+        self.assertAlmostEqual(self.phase._accumulated_reward, 0)
 
     def test_evaluate_enter_return_false_when_no_match(self) -> None:
         """Test that evaluate_enter returns False when pattern doesn't match."""
@@ -96,6 +102,7 @@ class TestSupervisedClassWithoutSubphases(unittest.TestCase):
         result = self.phase.evaluate_enter(line)
         self.assertFalse(result)
         self.assertFalse(self.phase.is_active)
+        self.assertAlmostEqual(self.phase._accumulated_reward, 0)
 
     def test_evaluate_enter_does_not_crash_unexpected_values(self) -> None:
         """Test that evaluate_enter handles unexpected input gracefully."""
@@ -114,6 +121,7 @@ class TestSupervisedClassWithoutSubphases(unittest.TestCase):
         line = "Exiting phase"
         result = self.phase.evaluate_exit(line)
         self.assertTrue(result)
+        self.assertAlmostEqual(self.phase._accumulated_reward, 0)
 
     def test_evaluate_exit_return_false_when_no_match(self) -> None:
         """Test that evaluate_exit returns False when pattern doesn't match."""
@@ -121,6 +129,7 @@ class TestSupervisedClassWithoutSubphases(unittest.TestCase):
         line = "Something else"
         result = self.phase.evaluate_exit(line)
         self.assertFalse(result)
+        self.assertAlmostEqual(self.phase._accumulated_reward, 0)
 
     def test_evaluate_exit_does_not_crash_on_unexpected_values(self) -> None:
         """Test that evaluate_exit handles unexpected input gracefully."""
@@ -137,6 +146,7 @@ class TestSupervisedClassWithoutSubphases(unittest.TestCase):
         line = "Progress: 50%"
         result = self.phase.evaluate_progress(line)
         self.assertTrue(result)
+        self.assertAlmostEqual(self.phase._accumulated_reward, 0)
 
     def test_evaluate_progress_return_false_when_no_match(self) -> None:
         """Test that evaluate_progress returns False when pattern doesn't match."""
@@ -144,6 +154,7 @@ class TestSupervisedClassWithoutSubphases(unittest.TestCase):
         line = "Something else"
         result = self.phase.evaluate_progress(line)
         self.assertFalse(result)
+        self.assertAlmostEqual(self.phase._accumulated_reward, 0)
 
     def test_evaluate_progress_does_not_crash_on_unexpected_values(self) -> None:
         """Test that evaluate_progress handles unexpected input gracefully."""
@@ -159,28 +170,32 @@ class TestSupervisedClassWithoutSubphases(unittest.TestCase):
         self.phase.is_active = True
         result = self.phase.evaluate_next_subphase("any line")
         self.assertFalse(result)
+        self.assertAlmostEqual(self.phase._accumulated_reward, 0)
 
     def test_complete_progress_event_return_correct_value(self) -> None:
         """Test that complete_progress_event returns correct percentage."""
         self.phase.is_active = True
-        # With 10 events estimate, each event should be ~10%
-        points = self.phase.complete_progress_event()
-        self.assertGreaterEqual(points, 0)
-        self.assertLessEqual(points, 100)
+        reward = self.phase.complete_progress_event()
+
+        # phase weights 80, sequence 25%, expect 10 events
+        # this means each event awards 80 * 0.25 / 10 = 2
+        self.assertAlmostEqual(reward, 2)
+        self.assertAlmostEqual(self.phase._accumulated_reward, 2)
 
     def test_complete_subphase_does_not_crash(self) -> None:
         """Test that complete_subphase handles being called without subphases."""
         self.phase.is_active = True
         # Should not crash even without subphases
-        points = self.phase.complete_subphase()
-        self.assertGreaterEqual(points, 0)
+        reward = self.phase.complete_subphase()
+        self.assertAlmostEqual(reward, 0)
+        self.assertAlmostEqual(self.phase._accumulated_reward, 0)
 
     def test_complete_return_full_percentage(self) -> None:
         """Test that complete returns full percentage points."""
         self.phase.is_active = True
-        points = self.phase.complete()
-        # progress_bar_ratio = min(100, 100) / 100 = 1.0, floor(1.0) = 1
-        self.assertEqual(points, 1)
+        reward = self.phase.complete()
+
+        self.assertAlmostEqual(reward, 20)  # 80 * 0.25
         self.assertFalse(self.phase.is_active)
         self.assertTrue(self.phase.is_completed)
 
@@ -194,21 +209,22 @@ class TestSupervisedClassWithSubphases(unittest.TestCase):
             enter_pattern=r"Entering main phase",
             exit_pattern=r"Exiting main phase",
             label="Main Phase",
-            weight=100,
+            weight=50,
             phases=[
                 JupyterDeploySupervisedExecutionSubPhaseV1(
                     enter_pattern=r"SubPhase 1",
                     label="SubPhase 1",
-                    weight=30,
+                    weight=20,
                 ),
                 JupyterDeploySupervisedExecutionSubPhaseV1(
                     enter_pattern=r"SubPhase 2",
                     label="SubPhase 2",
-                    weight=70,
+                    weight=80,
                 ),
             ],
         )
-        self.phase = SupervisedPhase(config=self.config)
+        self.sequence_scale_factor = 0.5
+        self.phase = SupervisedPhase(config=self.config, sequence_scale_factor=self.sequence_scale_factor)
 
     def test_instantiates_correctly(self) -> None:
         """Test that SupervisedPhase instantiates with subphases correctly."""
@@ -217,6 +233,11 @@ class TestSupervisedClassWithSubphases(unittest.TestCase):
         self.assertFalse(self.phase.is_completed)
         self.assertEqual(len(self.phase.sub_phases), 2)
         self.assertEqual(self.phase._current_sub_phase_index, -1)
+
+    def test_calculates_rewards_correct(self) -> None:
+        """Test that SupervisedPhase calculates its rewards correctly."""
+        self.assertAlmostEqual(self.phase.full_reward, 25)  # 50 * 0.5
+        self.assertAlmostEqual(self.phase._accumulated_reward, 0)
 
     def test_label_is_correct_when_subphase_inactive(self) -> None:
         """Test that label returns main phase label when no subphase is active."""
@@ -239,36 +260,24 @@ class TestSupervisedClassWithSubphases(unittest.TestCase):
         self.assertTrue(result)
 
         # Complete first subphase to move index forward
-        self.phase.complete_subphase()
+        reward1 = self.phase.complete_subphase()
+        self.assertAlmostEqual(reward1, 5)  # 20 * 0.5 * 0.5 = 5
+        self.assertAlmostEqual(self.phase._accumulated_reward, 5)
 
         # Second subphase should now match
         result = self.phase.evaluate_next_subphase("SubPhase 2")
         self.assertTrue(result)
 
         # Complete second subphase
-        self.phase.complete_subphase()
+        reward2 = self.phase.complete_subphase()
+
+        # should be previous reward + subphase reward
+        self.assertAlmostEqual(reward2, 25)  # 5 + 80 * 0.5 * 0.5 = 20
+        self.assertAlmostEqual(self.phase._accumulated_reward, 25)
 
         # No more subphases
         result = self.phase.evaluate_next_subphase("SubPhase 3")
         self.assertFalse(result)
-
-    def test_complete_subphase_increments_percentage(self) -> None:
-        """Test that complete_subphase correctly increments progress."""
-        self.phase.is_active = True
-        self.phase._current_sub_phase_index = 0
-
-        initial_progress = self.phase._current_progress_percentage
-        points = self.phase.complete_subphase()
-
-        # Progress percentage should have increased by subphase weight (30/100 = 0.3)
-        self.assertGreater(self.phase._current_progress_percentage, initial_progress)
-        self.assertAlmostEqual(self.phase._current_progress_percentage, 0.3)
-
-        # Index should have incremented
-        self.assertEqual(self.phase._current_sub_phase_index, 1)
-
-        # Points returned is floor(0.3 * 1.0) = 0
-        self.assertEqual(points, 0)
 
 
 class TestSupervisedPhaseWithEstimate(unittest.TestCase):
@@ -279,18 +288,22 @@ class TestSupervisedPhaseWithEstimate(unittest.TestCase):
         self.config = JupyterDeploySupervisedExecutionPhaseV1(
             enter_pattern=r"Starting",
             progress_pattern=r"Item complete",
-            progress_events_estimate=25,
+            progress_events_estimate=5,
             label="Phase with Estimate",
-            weight=100,
+            weight=20,
         )
-        self.phase = SupervisedPhase(config=self.config)
+        self.sequence_scale_factor: float = 0.5
+        self.phase = SupervisedPhase(config=self.config, sequence_scale_factor=self.sequence_scale_factor)
 
     def test_instantiates_correctly(self) -> None:
-        """Test that SupervisedPhase instantiates with correct progress increment."""
+        """Test that SupervisedPhase instantiates."""
         self.assertEqual(self.phase.config, self.config)
-        # With 25 events estimate, each event should contribute 100/(100*25) = 0.04
-        expected_increment = 100 / (100 * 25)
-        self.assertAlmostEqual(self.phase._event_progress_percentage, expected_increment)
+
+    def test_calculates_reward_correctly(self) -> None:
+        """Test that SupervisedPhase instantiates with correct rewards."""
+        self.assertAlmostEqual(self.phase.full_reward, 10)  # 20 * 0.5
+        self.assertAlmostEqual(self.phase._reward_per_event, 2)  # 20 * 0.5 /10
+        self.assertAlmostEqual(self.phase._accumulated_reward, 0)
 
     def test_label_is_correct(self) -> None:
         """Test that label property returns correct value."""
@@ -301,15 +314,15 @@ class TestSupervisedPhaseWithEstimate(unittest.TestCase):
         self.phase.is_active = True
 
         # Track progress over multiple events
-        first_points = self.phase.complete_progress_event()
-        self.assertGreaterEqual(first_points, 0)
+        reward = self.phase.complete_progress_event()
+        self.assertGreaterEqual(reward, 2)
 
         # After 25 events (the estimate), should be near 100%
-        for _ in range(24):
+        for _ in range(4):
             self.phase.complete_progress_event()
 
-        # Should be close to complete
-        self.assertGreater(self.phase._current_progress_percentage, 0.95)
+        # Should be complete
+        self.assertAlmostEqual(self.phase._accumulated_reward, 10)  # 20 * 0.5
 
 
 class TestSupervisedPhaseWithDynamicEstimate(unittest.TestCase):
@@ -324,14 +337,17 @@ class TestSupervisedPhaseWithDynamicEstimate(unittest.TestCase):
             label="Dynamic Phase",
             weight=100,
         )
-        self.phase = SupervisedPhase(config=self.config)
+        self.sequence_scale_factor = 0.5
+        self.phase = SupervisedPhase(config=self.config, sequence_scale_factor=self.sequence_scale_factor)
 
     def test_instantiates_correctly(self) -> None:
-        """Test that SupervisedPhase instantiates with default estimate initially."""
+        """Test that SupervisedPhase instantiates."""
         self.assertEqual(self.phase.config, self.config)
-        # Before entering, uses default of 10
-        expected_increment = 100 / (100 * 10)
-        self.assertAlmostEqual(self.phase._event_progress_percentage, expected_increment)
+
+    def test_calculates_reward_correctly(self) -> None:
+        """Test that SupervisedPhase instantiates."""
+        self.assertAlmostEqual(self.phase.full_reward, 50)  # 100 * 0.5
+        self.assertAlmostEqual(self.phase._accumulated_reward, 0)
 
     def test_label_is_correct(self) -> None:
         """Test that label property returns correct value."""
@@ -346,8 +362,7 @@ class TestSupervisedPhaseWithDynamicEstimate(unittest.TestCase):
         self.assertTrue(self.phase.is_active)
 
         # Should now use extracted value of 1/50th from estimate
-        expected_increment = 100 / (100 * 50)
-        self.assertAlmostEqual(self.phase._event_progress_percentage, expected_increment)
+        self.assertAlmostEqual(self.phase._reward_per_event, 1)  # 100 * 0.5 / 50
 
     def test_evaluate_enter_handles_invalid_capture_group(self) -> None:
         """Test that evaluate_enter falls back to default when capture fails."""
@@ -359,15 +374,15 @@ class TestSupervisedPhaseWithDynamicEstimate(unittest.TestCase):
             label="Invalid Capture",
             weight=100,
         )
-        phase = SupervisedPhase(config=config)
+        phase = SupervisedPhase(config=config, sequence_scale_factor=1.0)
 
         line = "Plan: 50 to add"
         result = phase.evaluate_enter(line)
 
         self.assertTrue(result)
+
         # Should fall back to default of 1/10th from estimate
-        expected_increment = 100 / (100 * 10)
-        self.assertAlmostEqual(phase._event_progress_percentage, expected_increment)
+        self.assertAlmostEqual(phase._reward_per_event, 10)  # 100 * 1.0 / 10
 
     def test_explicit_estimate_not_overridden_by_capture_group(self) -> None:
         """Test that explicit estimate is not overridden by capture group."""
@@ -379,18 +394,17 @@ class TestSupervisedPhaseWithDynamicEstimate(unittest.TestCase):
             label="Explicit Estimate",
             weight=100,
         )
-        phase = SupervisedPhase(config=config)
+        phase = SupervisedPhase(config=config, sequence_scale_factor=1.0)
 
         # Initial estimate should use explicit value
-        expected_increment = 100 / (100 * 20)
-        self.assertAlmostEqual(phase._event_progress_percentage, expected_increment)
+        self.assertAlmostEqual(phase._reward_per_event, 5)  # 100 * 1.0 / 20
 
         # Enter with different value in capture group
         line = "Plan: 50 to add"
         phase.evaluate_enter(line)
 
-        # Should still use explicit value (20), not extracted (50)
-        self.assertAlmostEqual(phase._event_progress_percentage, expected_increment)
+        # Should still calculate based on explicit value (20), not extracted (50)
+        self.assertAlmostEqual(phase._reward_per_event, 5)
 
 
 class TestSupervisedDefaultPhase(unittest.TestCase):
@@ -399,16 +413,19 @@ class TestSupervisedDefaultPhase(unittest.TestCase):
     def setUp(self) -> None:
         """Set up test fixtures."""
         self.config = JupyterDeploySupervisedExecutionDefaultPhaseV1(
-            **{"progress-pattern": r"complete", "progress-events-estimate": 15}, label="Default Phase"
+            **{"progress-pattern": r"complete", "progress-events-estimate": 10}, label="Default Phase"
         )
-        self.phase = SupervisedDefaultPhase(config=self.config)
+        self.phase = SupervisedDefaultPhase(config=self.config, full_reward=50)
 
     def test_instantiates_correctly(self) -> None:
         """Test that SupervisedDefaultPhase instantiates with correct attributes."""
         self.assertEqual(self.phase.config, self.config)
-        # With 15 events estimate, increment should be 1/15
-        expected_increment = 1 / 15
-        self.assertAlmostEqual(self.phase._events_percentage_increment, expected_increment)
+
+    def test_calculate_rewards_correctly(self) -> None:
+        """Test that SupervisedDefaultPhase calculates reward correctly."""
+        self.assertAlmostEqual(self.phase.full_reward, 50)
+        self.assertAlmostEqual(self.phase._reward_per_event, 5)  # 50 / 10
+        self.assertAlmostEqual(self.phase._accumulated_reward, 0)
 
     def test_label_is_correct(self) -> None:
         """Test that label property returns correct value."""
@@ -428,19 +445,17 @@ class TestSupervisedDefaultPhase(unittest.TestCase):
 
     def test_complete_progress_event_increments_correctly(self) -> None:
         """Test that complete_progress_event increments percentage."""
-        initial_percentage = self.phase._current_progress_percentage
-        points = self.phase.complete_progress_event()
+        reward = self.phase.complete_progress_event()
 
-        self.assertGreater(self.phase._current_progress_percentage, initial_percentage)
-        self.assertGreaterEqual(points, 0)
+        self.assertAlmostEqual(reward, 5)  # 50 / 10
+        self.assertAlmostEqual(self.phase._accumulated_reward, 5)
 
-    def test_override_estimate_takes_precedence(self) -> None:
-        """Test that override_estimate takes precedence over config estimate."""
+    def test_override_takes_precedence_over_config(self) -> None:
+        """Test that estimate_override takes precedence over config estimate."""
         config = JupyterDeploySupervisedExecutionDefaultPhaseV1(
             **{"progress-pattern": r"complete", "progress-events-estimate": 10}, label="Override Test"
         )
-        phase = SupervisedDefaultPhase(config=config, override_estimate=50)
+        phase = SupervisedDefaultPhase(config=config, full_reward=100.0, estimate_override=50)
 
         # Should use override (50), not config (10)
-        expected_increment = 1 / 50
-        self.assertAlmostEqual(phase._events_percentage_increment, expected_increment)
+        self.assertAlmostEqual(phase._reward_per_event, 2)  # 100 / 50

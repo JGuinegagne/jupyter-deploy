@@ -2,7 +2,7 @@ import sys
 import unittest
 from collections.abc import Generator
 from contextlib import contextmanager
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import ANY, MagicMock, Mock, patch
 
 from typer.testing import CliRunner
 
@@ -136,7 +136,8 @@ class TestJupyterDeployConfigCmd(unittest.TestCase):
 
         # Verify
         self.assertEqual(result.exit_code, 0)
-        mock_config_handler.assert_called_once_with(output_filename=None)
+        # Check that ConfigHandler is called with terminal_handler (ProgressDisplayManager instance)
+        mock_config_handler.assert_called_once_with(output_filename=None, terminal_handler=ANY)
         mock_config_fns["validate_and_set_preset"].assert_called_once_with(
             preset_name="all", will_reset_variables=False
         )
@@ -153,7 +154,7 @@ class TestJupyterDeployConfigCmd(unittest.TestCase):
 
         # Verify
         self.assertEqual(result.exit_code, 0)
-        mock_config_handler.assert_called_once_with(output_filename=None)
+        mock_config_handler.assert_called_once_with(output_filename=None, terminal_handler=ANY)
         mock_config_fns["validate_and_set_preset"].assert_called_once_with(preset_name=None, will_reset_variables=False)
         mock_config_fns["has_used_preset"].assert_called_with(None)
 
@@ -168,7 +169,7 @@ class TestJupyterDeployConfigCmd(unittest.TestCase):
 
         # Verify
         self.assertEqual(result.exit_code, 0)
-        mock_config_handler.assert_called_once_with(output_filename=None)
+        mock_config_handler.assert_called_once_with(output_filename=None, terminal_handler=ANY)
         mock_config_fns["validate_and_set_preset"].assert_called_once_with(
             preset_name="some-preset", will_reset_variables=False
         )
@@ -217,17 +218,21 @@ class TestJupyterDeployConfigCmd(unittest.TestCase):
         mock_config_fns["has_used_preset"].assert_not_called()
 
     @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
-    def test_config_stops_if_configure_returns_false(self, mock_config_handler: Mock) -> None:
+    def test_config_stops_if_configure_raises_execution_error(self, mock_config_handler: Mock) -> None:
+        from jupyter_deploy.engine.supervised_execution import ExecutionError
+
         mock_config_handler_instance, mock_config_fns = self.get_mock_config_handler()
         mock_config_handler.return_value = mock_config_handler_instance
-        mock_config_fns["configure"].return_value = False
+        mock_config_fns["configure"].side_effect = ExecutionError(
+            command="config", retcode=1, message="Configuration failed"
+        )
 
         # Act
         runner = CliRunner()
         result = runner.invoke(app_runner.app, ["config"])
 
-        # Verify
-        self.assertEqual(result.exit_code, 0)
+        # Verify - should exit with the error retcode
+        self.assertEqual(result.exit_code, 1)
         mock_config_handler.assert_called_once()
         mock_config_fns["validate_and_set_preset"].assert_called_once()
         mock_config_fns["verify"].assert_called_once()

@@ -1,6 +1,6 @@
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 from jupyter_deploy.handlers.project.config_handler import ConfigHandler
 from jupyter_deploy.manifest import JupyterDeployManifestV1
@@ -89,7 +89,11 @@ class TestConfigHandler(unittest.TestCase):
 
         self.assertIsNone(handler.preset_name)
         mock_tf_handler.assert_called_once_with(
-            project_path=path, project_manifest=self.mock_manifest, output_filename=None
+            project_path=path,
+            project_manifest=self.mock_manifest,
+            command_history_handler=ANY,
+            output_filename=None,
+            terminal_handler=None,
         )
         tf_mock_verify.assert_not_called()
         tf_mock_configure.assert_not_called()

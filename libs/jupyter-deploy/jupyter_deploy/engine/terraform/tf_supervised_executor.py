@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from jupyter_deploy.engine.supervised_execution import ExecutionCallback
+from jupyter_deploy.engine.supervised_execution_callback import ExecutionCallbackInterface
 from jupyter_deploy.engine.supervised_executor import SupervisedExecutor
 from jupyter_deploy.engine.supervised_phase import SupervisedDefaultPhase, SupervisedPhase
 
@@ -20,7 +20,7 @@ def create_terraform_executor(
     sequence_id: TerraformSequenceId,
     exec_dir: Path,
     log_file: Path,
-    execution_callback: ExecutionCallback,
+    execution_callback: ExecutionCallbackInterface,
     manifest: JupyterDeployManifest | None = None,
     plan_metadata: TerraformPlanMetadata | None = None,
 ) -> SupervisedExecutor:
@@ -49,34 +49,37 @@ def create_terraform_executor(
 
     fallback_default_phase_config: JupyterDeploySupervisedExecutionDefaultPhaseV1
     fallback_phase_configs: list[JupyterDeploySupervisedExecutionPhaseV1] = []
-    phase_sequence_weight: int = 100
-    phase_sequence_start: int = 0
+    end_reward: int = 100
+    start_reward: int = 0
 
     if sequence_id == TerraformSequenceId.config_init:
-        # Init: no event counting, relies on explicit phases
+        # Init: count initialization events (backend, modules, plugins) and provider installations
         fallback_default_phase_config = JupyterDeploySupervisedExecutionDefaultPhaseV1(
-            label="Configuring terraform dependencies",
-            **{"progress-pattern": "Initializing", "progress-events-estimate": 5},
+            label="Configuring terraform",
+            **{
+                "progress-pattern": r"(Initializing|Installed|Terraform has been successfully initialized)",
+                "progress-events-estimate": 8,
+            },
         )
-        phase_sequence_weight = 20
+        end_reward = 20
 
     elif sequence_id == TerraformSequenceId.config_plan:
         # Plan: count read/refresh events using estimates
         fallback_default_phase_config = JupyterDeploySupervisedExecutionDefaultPhaseV1(
-            label="Configuring terraform dependencies",
+            label="Planning changes",
             **{
                 "progress-pattern": r"(Read complete after|Refreshing state\.\.\. \[id=)",
                 "progress-events-estimate": 10,
             },
         )
-        phase_sequence_start = 20
-        phase_sequence_weight = 80
+        start_reward = 20
+        end_reward = 100
 
     elif sequence_id == TerraformSequenceId.up_apply:
         # Apply: count resource creation/modification events
         # Use plan.to_update dynamically if plan_metadata is available
         fallback_default_phase_config = JupyterDeploySupervisedExecutionDefaultPhaseV1(
-            label="Configuring terraform dependencies",
+            label="Mutating resources",
             **{
                 "progress-pattern": (
                     r"(Creation complete after|Modifications complete after|Refreshing state\.\.\. \[id=)"
@@ -106,27 +109,33 @@ def create_terraform_executor(
     else:
         raise NotImplementedError(f"Unknown sequence_id: {sequence_id}")
 
+    # Scale factor calculation
+    scale_factor: float = (end_reward - start_reward) / 100
+
     # Create actual phases
     phase_configs = manifest_phases_configs or fallback_phase_configs
     phases: list[SupervisedPhase] = []
     for phase_config in phase_configs:
-        phases.append(SupervisedPhase(config=phase_config))
+        phases.append(SupervisedPhase(config=phase_config, sequence_scale_factor=scale_factor))
 
     # Create default phase with dynamic override if configured
-    effective_default_weight = max(100 - sum([p.weight for p in phases]), 0)
+    default_phase_weight = max(100 - sum([p.config.weight for p in phases]), 0)
+    default_phase_reward = default_phase_weight * scale_factor
     default_phase_config = manifest_default_phase_config or fallback_default_phase_config
 
     # Extract override from plan metadata if dynamic source is configured
-    override_estimate: int | None = None
+    default_phase_estimate_override: int | None = None
     if plan_metadata and default_phase_config.progress_events_estimate_dynamic_source:
         source_enum = TerraformPlanMetadataSource.from_string(
             default_phase_config.progress_events_estimate_dynamic_source
         )
         if source_enum:
-            override_estimate = plan_metadata.get_value(source_enum)
+            default_phase_estimate_override = plan_metadata.get_value(source_enum)
 
     default_phase = SupervisedDefaultPhase(
-        config=default_phase_config, weight=effective_default_weight, override_estimate=override_estimate
+        config=default_phase_config,
+        full_reward=default_phase_reward,
+        estimate_override=default_phase_estimate_override,
     )
 
     # Instantiates the supervised executor
@@ -136,6 +145,6 @@ def create_terraform_executor(
         execution_callback=execution_callback,
         default_phase=default_phase,
         phases=phases,
-        phase_sequence_weight=phase_sequence_weight,
-        phase_sequence_percentage_start=phase_sequence_start,
+        start_reward=start_reward,
+        end_reward=end_reward,
     )

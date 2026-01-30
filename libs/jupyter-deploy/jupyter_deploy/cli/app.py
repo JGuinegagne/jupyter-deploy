@@ -1,5 +1,6 @@
 import subprocess
 import sys
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Annotated
 
@@ -10,11 +11,13 @@ from rich.console import Console
 from jupyter_deploy import cmd_utils
 from jupyter_deploy.cli.host_app import host_app
 from jupyter_deploy.cli.organization_app import organization_app
+from jupyter_deploy.cli.progress_display import ProgressDisplayManager
 from jupyter_deploy.cli.servers_app import servers_app
 from jupyter_deploy.cli.teams_app import teams_app
 from jupyter_deploy.cli.users_app import users_app
 from jupyter_deploy.cli.variables_decorator import with_project_variables
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.engine.supervised_execution import ExecutionError
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
 from jupyter_deploy.handlers.init_handler import InitHandler
 from jupyter_deploy.handlers.project import config_handler
@@ -187,6 +190,7 @@ def config(
     output_filename: Annotated[
         str | None, typer.Option("--output-filename", "-f", help="Name of the file to store the configuration to.")
     ] = None,
+    verbose: Annotated[bool, typer.Option("--verbose", help="Show full output without progress bar.")] = False,
     variables: Annotated[
         dict[str, TemplateVariableDefinition] | None,
         typer.Option("--variables", "-v", help="Will be removed by the decorator."),
@@ -205,7 +209,11 @@ def config(
     You can specify where to save the planned change with `--output-file` or `-f`.
     """
     preset_name = None if defaults_preset_name == "none" else defaults_preset_name
-    handler = config_handler.ConfigHandler(output_filename=output_filename)
+
+    # Create progress display manager (or None if verbose mode)
+    progress_display = None if verbose else ProgressDisplayManager()
+
+    handler = config_handler.ConfigHandler(output_filename=output_filename, terminal_handler=progress_display)
 
     if not handler.validate_and_set_preset(preset_name=preset_name, will_reset_variables=reset):
         return
@@ -229,10 +237,14 @@ def config(
 
     if run_configure:
         console.rule("[bold]jupyter-deploy:[/] configuring the project")
-        configured = handler.configure(variable_overrides=variables)
 
-        if not configured:
-            return
+        with progress_display or nullcontext():
+            try:
+                handler.configure(variable_overrides=variables)
+            except ExecutionError as e:
+                # Error context already displayed by callback
+                console.print(f":x: {e.message}", style="red")
+                raise typer.Exit(code=e.retcode) from None
 
         console.rule("[bold]jupyter-deploy:[/] recording input values")
         handler.record(record_vars=True, record_secrets=record_secrets)

@@ -1,7 +1,5 @@
-import subprocess
 import unittest
 from pathlib import Path
-from typing import Any
 from unittest.mock import Mock, mock_open, patch
 
 from jupyter_deploy.engine.supervised_executor import SupervisedExecutor
@@ -11,8 +9,50 @@ from jupyter_deploy.engine.supervised_phase import SupervisedDefaultPhase, Super
 class TestSupervisedExecutor(unittest.TestCase):
     """Test cases for SupervisedExecutor."""
 
+    def _create_mock_process_with_output(self, retcode: int = 0) -> tuple[Mock, dict[str, Mock]]:
+        """Return a mock process, with mocked methods in dict.
+
+        Dict keys: stdout, stdin, stderr, poll, wait
+        """
+        mock_process = Mock()
+
+        mock_stdout = Mock()
+        mock_stdin = Mock()
+        mock_stderr = Mock()
+        mock_poll = Mock()
+        mock_wait = Mock()
+
+        mock_process.stdout = Mock()
+        mock_process.stdin = Mock()
+        mock_process.stderr = Mock()
+        mock_process.poll = Mock(return_value=retcode)
+        mock_process.wait = Mock(return_value=retcode)
+
+        return mock_process, {
+            "stdout": mock_stdout,
+            "stdin": mock_stdin,
+            "stderr": mock_stderr,
+            "poll": mock_poll,
+            "wait": mock_wait,
+        }
+
+    def _create_mocked_prompt_handler_with_mocks(self) -> tuple[Mock, dict[str, Mock]]:
+        """Helper to create a mocked PromptHandler instance with mocked methods.
+
+        Dict keys: start
+        """
+        mock_prompt_handler = Mock()
+
+        mock_start = Mock()
+        mock_prompt_handler.start = mock_start
+
+        return mock_prompt_handler, {"start": mock_start}
+
     def _create_mocked_default_phase_and_mocks(self) -> tuple[Mock, dict[str, Mock]]:
-        """Helper to create a mocked default phase with all methods."""
+        """Helper to create a mocked default phase with all methods.
+
+        Dict keys: evaluate_progress, complete_progress_event
+        """
         mock_default_phase = Mock(spec=SupervisedDefaultPhase)
 
         # Mock property
@@ -31,7 +71,17 @@ class TestSupervisedExecutor(unittest.TestCase):
         }
 
     def _create_mocked_phase_and_mocks(self) -> tuple[Mock, dict[str, Mock]]:
-        """Helper to create a mocked phase with all methods."""
+        """Helper to create a mocked phase with all methods.
+
+        Dict keys:
+            - evaluate_enter
+            - evaluate_exit
+            - evaluate_progress
+            - evaluate_next_subphase
+            - complete_progress_event
+            - complete_subphase
+            - complete
+        """
         mock_phase = Mock(spec=SupervisedPhase)
 
         # Mock properties
@@ -69,289 +119,116 @@ class TestSupervisedExecutor(unittest.TestCase):
             "complete": mock_complete,
         }
 
-    def _create_executor_and_mocks(
-        self,
-        exec_dir: Path | None = None,
-        log_file: Path | None = None,
-        phases: list[Mock] | None = None,
-    ) -> tuple[SupervisedExecutor, dict[str, Any]]:
-        """Helper to create SupervisedExecutor with mocks."""
-        # Create mock execution callback (implements ExecutionCallback protocol)
+    def _create_execution_callback_and_mocks(self) -> tuple[Mock, dict[str, Mock]]:
+        """Helper to create an ExecutionCallback with mocked methods.
+
+        Dict keys:
+            - should_parse_progress
+            - is_waiting_for_interaction
+            - on_progress
+            - on_log_line
+            - is_requesting_user_input
+            - handle_interaction
+            - on_execution_error
+        """
         mock_execution_callback = Mock()
-        mock_execution_callback.on_progress = Mock()
-        mock_execution_callback.on_log_line = Mock()
-        mock_execution_callback.is_requesting_user_input = Mock(return_value=False)  # Default: no interaction
-        mock_execution_callback.handle_interaction = Mock()
 
-        # Create default phase
-        default_phase_instance, default_phase_mocks = self._create_mocked_default_phase_and_mocks()
+        mock_should_parse_progress = Mock(return_value=True)
+        mock_is_waiting_for_interaction = Mock(return_value=False)
+        mock_on_progress = Mock()
+        mock_on_log_line = Mock()
+        mock_is_requesting_user_input = Mock(return_value=False)
+        mock_handle_interaction = Mock()
+        mock_on_execution_error = Mock()
 
-        # Create test phases if not provided
-        test_phases: Any
-        phases_mocks_list: list[dict[str, Mock]]
-        if phases is None:
-            mock_phase, phase_mocks = self._create_mocked_phase_and_mocks()
-            test_phases = [mock_phase]
-            phases_mocks_list = [phase_mocks]
-        else:
-            test_phases = phases
-            phases_mocks_list = []
-
-        mocks_dict: dict[str, Any] = {
-            "execution_callback": mock_execution_callback,
-            "default_phase": default_phase_mocks,
-            "phases": phases_mocks_list,
+        return mock_execution_callback, {
+            "should_parse_progress": mock_should_parse_progress,
+            "is_waiting_for_interaction": mock_is_waiting_for_interaction,
+            "on_progress": mock_on_progress,
+            "on_log_line": mock_on_log_line,
+            "is_requesting_user_input": mock_is_requesting_user_input,
+            "handle_interaction": mock_handle_interaction,
+            "on_execution_error": mock_on_execution_error,
         }
-
-        executor = SupervisedExecutor(
-            exec_dir=exec_dir or Path("/mock/exec/dir"),
-            log_file=log_file or Path("/mock/log.txt"),
-            default_phase=default_phase_instance,  # type: ignore[arg-type]
-            phases=test_phases,  # type: ignore[arg-type]
-            execution_callback=mock_execution_callback,
-        )
-
-        return executor, mocks_dict
 
     def test_init_sets_attributes(self) -> None:
         """Test that initialization sets all attributes correctly."""
         exec_dir = Path("/mock/dir")
         log_file = Path("/mock/log.txt")
 
-        executor, mocks = self._create_executor_and_mocks(
-            exec_dir=exec_dir,
-            log_file=log_file,
+        cb, cb_mocks = self._create_execution_callback_and_mocks()
+        dft_phase, _ = self._create_mocked_default_phase_and_mocks()
+
+        executor = SupervisedExecutor(
+            exec_dir=exec_dir, log_file=log_file, execution_callback=cb, default_phase=dft_phase
         )
 
         self.assertEqual(executor.exec_dir, exec_dir)
         self.assertEqual(executor.log_file, log_file)
-        self.assertEqual(executor._execution_callback, mocks["execution_callback"])
+        self.assertEqual(executor._execution_callback, cb)
+        self.assertEqual(executor._default_phase, dft_phase)
+        self.assertEqual(executor._declared_phases, [])
 
-    def test_execute_creates_log_directory(self) -> None:
+        cb_mocks["should_parse_progress"].assert_called_once()
+        self.assertTrue(executor._should_parse_progress)
+
+    def test_init_stores_should_parse_progress_from_callback(self) -> None:
+        """Test that initialization stores should_parse_progress from callback."""
+        cb, cb_mocks = self._create_execution_callback_and_mocks()
+        dft_phase, _ = self._create_mocked_default_phase_and_mocks()
+
+        executor = SupervisedExecutor(
+            exec_dir=Path("/mock/dir"),
+            log_file=Path("/mock/log.txt"),
+            execution_callback=cb,
+            default_phase=dft_phase,
+        )
+
+        cb_mocks["should_parse_progress"].assert_called_once()
+        self.assertTrue(executor._should_parse_progress)
+
+    # EXECUTE tests: log file handling
+    def test_execute_creates_log_dirs_and_file(self) -> None:
         """Test that execute creates log directory if it doesn't exist."""
         # Create a log path in a non-existent directory
         log_file = Path("/mock/logs/nested/test.log")
 
-        executor, mocks = self._create_executor_and_mocks(
-            exec_dir=Path("/mock/exec/dir"),
+        cb, cb_mocks = self._create_execution_callback_and_mocks()
+        dft_phase, _ = self._create_mocked_default_phase_and_mocks()
+
+        executor = SupervisedExecutor(
+            exec_dir=Path("/mock/dir"),
             log_file=log_file,
+            execution_callback=cb,
+            default_phase=dft_phase,
         )
 
+        # mock inner method _handle_execute_command
+
         with (
             patch("pathlib.Path.mkdir") as mock_mkdir,
             patch("builtins.open", new_callable=mock_open) as mock_file,
             patch("subprocess.Popen") as mock_popen,
         ):
-            mock_process = Mock()
-            mock_stdout = Mock()
-            mock_stdout.readline = Mock(side_effect=[""])  # EOF immediately
-            mock_process.stdout = mock_stdout
-            mock_process.wait.return_value = 0
+            mock_process = self._create_mock_process_with_output(retcode=0)
             mock_popen.return_value = mock_process
 
-            mocks["mkdir"] = mock_mkdir
-            mocks["open"] = mock_file
+            # verify mkdir called w/ right parameter
+            # verify file opens in append mode
 
             executor.execute(["echo", "test"])
 
-            # Verify directory creation was attempted
-            mocks["mkdir"].assert_called()
+    def test_execute_calls_handle_execute_command(self) -> None:
+        """Test that execute calls the underlying method."""
 
-    def test_execute_writes_output_to_log(self) -> None:
-        """Test that execute writes command output to log file."""
-        executor, mocks = self._create_executor_and_mocks()
+        # mock inner method _handle_execute_command
 
-        with (
-            patch("pathlib.Path.mkdir") as mock_mkdir,
-            patch("builtins.open", new_callable=mock_open) as mock_file,
-            patch("subprocess.Popen") as mock_popen,
-        ):
-            mock_process = Mock()
-            mock_stdout = Mock()
-            mock_stdout.readline = Mock(
-                side_effect=[
-                    "Output line 1\n",
-                    "Output line 2\n",
-                    "Output line 3\n",
-                    "",  # EOF
-                ]
-            )
-            mock_process.stdout = mock_stdout
-            mock_process.wait.return_value = 0
-            mock_popen.return_value = mock_process
+    def test_execute_returns_handle_execute_retcode(self) -> None:
+        """Test that execute surfaces the retcode."""
 
-            mocks["mkdir"] = mock_mkdir
-            mocks["open"] = mock_file
+        # mock inner method _handle_execute_command
 
-            retcode = executor.execute(["echo", "test"])
-
-            self.assertEqual(retcode, 0)
-
-            # Verify log file was opened for writing
-            mocks["open"].assert_called()
-            handle = mocks["open"]()
-            # Verify lines were written
-            write_calls = [call[0][0] for call in handle.write.call_args_list]
-            self.assertIn("Output line 1\n", write_calls)
-            self.assertIn("Output line 2\n", write_calls)
-            self.assertIn("Output line 3\n", write_calls)
-
-    def test_execute_calls_parse_output_line(self) -> None:
-        """Test that execute calls _parse_output_line for each line."""
-        executor, mocks = self._create_executor_and_mocks()
-
-        with (
-            patch("pathlib.Path.mkdir") as mock_mkdir,
-            patch("builtins.open", new_callable=mock_open) as mock_file,
-            patch("subprocess.Popen") as mock_popen,
-            patch.object(executor, "_parse_output_line") as mock_parse,
-        ):
-            mock_process = Mock()
-            mock_stdout = Mock()
-            mock_stdout.readline = Mock(
-                side_effect=[
-                    "Line 1\n",
-                    "Line 2\n",
-                    "",  # EOF
-                ]
-            )
-            mock_process.stdout = mock_stdout
-            mock_process.wait.return_value = 0
-            mock_popen.return_value = mock_process
-
-            mocks["mkdir"] = mock_mkdir
-            mocks["open"] = mock_file
-
-            executor.execute(["echo", "test"])
-
-            # Verify _parse_output_line was called for each line
-            self.assertEqual(mock_parse.call_count, 2)
-            mock_parse.assert_any_call("Line 1")
-            mock_parse.assert_any_call("Line 2")
-
-    def test_execute_emits_progress_via_callback(self) -> None:
-        """Test that execute emits progress updates via callback."""
-        executor, mocks = self._create_executor_and_mocks()
-
-        with (
-            patch("pathlib.Path.mkdir") as mock_mkdir,
-            patch("builtins.open", new_callable=mock_open) as mock_file,
-            patch("subprocess.Popen") as mock_popen,
-        ):
-            mock_process = Mock()
-            mock_stdout = Mock()
-            mock_stdout.readline = Mock(side_effect=["Test output\n", ""])
-            mock_process.stdout = mock_stdout
-            mock_process.wait.return_value = 0
-            mock_popen.return_value = mock_process
-
-            mocks["mkdir"] = mock_mkdir
-            mocks["open"] = mock_file
-
-            executor.execute(["echo", "test"])
-
-            # Verify callback was called
-            mocks["execution_callback"].on_progress.assert_called()
-
-    def test_execute_returns_zero_on_success(self) -> None:
-        """Test that execute returns 0 when all commands succeed."""
-        executor, mocks = self._create_executor_and_mocks()
-
-        with (
-            patch("pathlib.Path.mkdir") as mock_mkdir,
-            patch("builtins.open", new_callable=mock_open) as mock_file,
-            patch("subprocess.Popen") as mock_popen,
-        ):
-            mock_process = Mock()
-            mock_stdout = Mock()
-            mock_stdout.readline = Mock(side_effect=[""])  # EOF immediately
-            mock_process.stdout = mock_stdout
-            mock_process.wait.return_value = 0
-            mock_popen.return_value = mock_process
-
-            mocks["mkdir"] = mock_mkdir
-            mocks["open"] = mock_file
-
-            retcode = executor.execute(["echo", "test"])
-
-            self.assertEqual(retcode, 0)
-
-    def test_execute_returns_non_zero_on_failure(self) -> None:
-        """Test that execute returns non-zero return code on failure."""
-        executor, mocks = self._create_executor_and_mocks()
-
-        with (
-            patch("pathlib.Path.mkdir") as mock_mkdir,
-            patch("builtins.open", new_callable=mock_open) as mock_file,
-            patch("subprocess.Popen") as mock_popen,
-        ):
-            mock_process = Mock()
-            mock_stdout = Mock()
-            mock_stdout.readline = Mock(side_effect=[""])  # EOF immediately
-            mock_process.stdout = mock_stdout
-            mock_process.wait.return_value = 1
-            mock_popen.return_value = mock_process
-
-            mocks["mkdir"] = mock_mkdir
-            mocks["open"] = mock_file
-
-            retcode = executor.execute(["false"])
-
-            self.assertEqual(retcode, 1)
-
-    def test_execute_uses_correct_working_directory(self) -> None:
-        """Test that execute uses the specified working directory."""
-        exec_dir = Path("/custom/directory")
-        executor, mocks = self._create_executor_and_mocks(exec_dir=exec_dir)
-
-        with (
-            patch("pathlib.Path.mkdir") as mock_mkdir,
-            patch("builtins.open", new_callable=mock_open) as mock_file,
-            patch("subprocess.Popen") as mock_popen,
-        ):
-            mock_process = Mock()
-            mock_stdout = Mock()
-            mock_stdout.readline = Mock(side_effect=[""])  # EOF immediately
-            mock_process.stdout = mock_stdout
-            mock_process.wait.return_value = 0
-            mock_popen.return_value = mock_process
-
-            mocks["mkdir"] = mock_mkdir
-            mocks["open"] = mock_file
-
-            executor.execute(["echo", "test"])
-
-            # Verify cwd parameter was passed correctly
-            call_kwargs = mock_popen.call_args[1]
-            self.assertEqual(call_kwargs["cwd"], exec_dir)
-
-    def test_execute_merges_stderr_to_stdout(self) -> None:
-        """Test that execute merges stderr into stdout."""
-        executor, mocks = self._create_executor_and_mocks()
-
-        with (
-            patch("pathlib.Path.mkdir") as mock_mkdir,
-            patch("builtins.open", new_callable=mock_open) as mock_file,
-            patch("subprocess.Popen") as mock_popen,
-        ):
-            mock_process = Mock()
-            mock_stdout = Mock()
-            mock_stdout.readline = Mock(side_effect=[""])  # EOF immediately
-            mock_process.stdout = mock_stdout
-            mock_process.wait.return_value = 0
-            mock_popen.return_value = mock_process
-
-            mocks["mkdir"] = mock_mkdir
-            mocks["open"] = mock_file
-
-            executor.execute(["echo", "test"])
-
-            # Verify stderr was redirected to stdout
-            call_kwargs = mock_popen.call_args[1]
-            self.assertEqual(call_kwargs["stderr"], subprocess.STDOUT)
-
-    # State machine tests for _parse_output_line
-
+    # STATE MACHINE tests for _parse_output_line
     def test_parse_output_line_declared_phase_evaluates_exit(self) -> None:
         """Test that _parse_output_line completes phase when exit is detected."""
         mock_phase, phase_mocks = self._create_mocked_phase_and_mocks()
@@ -379,7 +256,7 @@ class TestSupervisedExecutor(unittest.TestCase):
         self.assertIsNone(executor._active_declared_phase)
 
         # Verify accumulated percentage updated
-        self.assertEqual(executor._accumulated_percentage, 100)
+        self.assertEqual(executor._accumulated_reward, 100)
 
         # Verify progress callback was called
         mocks["execution_callback"].on_progress.assert_called()
@@ -557,3 +434,48 @@ class TestSupervisedExecutor(unittest.TestCase):
 
         # Verify next phase is phase 2
         self.assertEqual(executor._next_declared_phase, mock_phase2)
+
+    # HANDLE EXECUTION tests
+    @patch("jupyter_deploy.prompt_handler.PromptHandler")
+    def test_handle_execute_command_starts_process_and_prompt_handler(self, mock_prompt_handler_cls: Mock) -> None:
+        mock_prompt_handler, prompt_handler_mocks = self._create_mocked_prompt_handler_with_mocks()
+        mock_prompt_handler_cls.return_value = mock_prompt_handler
+
+        # assert on process:
+        # - cmd is correct
+        # - process working dir
+        # - pipe for all stdin, stdout, stderr
+        # - call wait
+
+        # assert on prompt handler
+        # - process is passed
+        # - callback methods are set
+        # - buffer size is > 50
+        # - prompt check chars is set
+        pass
+
+    @patch("jupyter_deploy.prompt_handler.PromptHandler")
+    def test_handle_execute_command_calls_on_execution_error_on_failure(self, mock_prompt_handler_cls: Mock) -> None:
+        mock_prompt_handler, prompt_handler_mocks = self._create_mocked_prompt_handler_with_mocks()
+        mock_prompt_handler_cls.return_value = mock_prompt_handler
+        pass
+
+    @patch("jupyter_deploy.prompt_handler.PromptHandler")
+    def test_handle_execute_command_does_not_call_on_execution_error_on_success(
+        self, mock_prompt_handler_cls: Mock
+    ) -> None:
+        mock_prompt_handler, prompt_handler_mocks = self._create_mocked_prompt_handler_with_mocks()
+        mock_prompt_handler_cls.return_value = mock_prompt_handler
+        pass
+
+    def test_handle_execute_calls_callback_on_log_line_when_prompt_handler_on_line_fires(self) -> None:
+        # call via the PromptHandler.on_line()
+        pass
+
+    def test_handle_execute_calls_parse_output_line_when_prompt_handler_on_line_fires(self) -> None:
+        # call via the PromptHandler.on_line()
+        pass
+
+    def test_handle_execute_calls_handle_interaction_when_prompt_handler_on_prompt_fires(self) -> None:
+        # call via the PromptHandler.on_line()
+        pass

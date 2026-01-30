@@ -1,14 +1,12 @@
 import os
-import select
 import shutil
 import subprocess
-import sys
 import threading
-import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import IO
+
+from jupyter_deploy.prompt_handler import PromptHandler
 
 
 def check_executable_installation(
@@ -115,21 +113,13 @@ def run_cmd_and_pipe_to_terminal(
             cmds,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.PIPE,  # Keep stderr separate to prevent jumbling
             universal_newlines=True,
             bufsize=0,
         )
 
         retcode: int | None = None
         timer: threading.Timer | None = None
-
-        # Signal for when a prompt is likely waiting for input
-        prompt_ready = threading.Event()
-        stdout_active = threading.Event()
-
-        # Buffer to store the stderr output while running
-        stderr_buffer = []
-        stderr_lock = threading.Lock()
 
         def timerout(p: subprocess.Popen) -> None:
             print(f"Command timed out after {timeout_seconds} second(s).")
@@ -143,126 +133,49 @@ def run_cmd_and_pipe_to_terminal(
             timer = threading.Timer(timeout_seconds, timerout, args=[p])
             timer.start()
 
-        # Create threads to handle input, output, and error streams concurrently
-        def handle_stdin() -> None:
-            try:
-                while p.poll() is None:  # Continue as long as the process is running
-                    # Wait for a prompt to appear
-                    prompt_ready.wait(timeout=0.2)
+        def on_char(char: str) -> None:
+            """Echo each character immediately to stdout."""
+            print(char, end="", flush=True)
 
-                    # Add a small delay to ensure the full prompt is displayed
-                    time.sleep(0.1)
+        def is_prompt(buffer: str) -> bool:
+            """Check if buffer looks like a prompt."""
+            prompt_indicators = ["Enter a value: ", "?", ": "]
+            return any(buffer.endswith(indicator) for indicator in prompt_indicators)
 
-                    # Clear the event for the next prompt
-                    prompt_ready.clear()
+        def on_line(_line: str) -> None:
+            """Called when complete line is read (already echoed via on_char)."""
+            pass
 
-                    try:
-                        if sys.stdin.isatty():  # Check if stdin is a terminal
-                            # Use non-blocking read for terminals
-                            # TODO: check if this works on windows
-                            rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
-                            if rlist and p.stdin:
-                                line = sys.stdin.readline()
-                                if not line:  # EOF (Ctrl+D)
-                                    break
-                                p.stdin.write(line)
-                                p.stdin.flush()
-                        elif p.stdin:
-                            # For non-interactive input (e.g., piped input)
-                            char = sys.stdin.read(1)
-                            if not char:  # EOF
-                                break
-                            p.stdin.write(char)
-                            p.stdin.flush()
-                    except (OSError, BrokenPipeError):
-                        break
-            finally:
-                if p.stdin:
-                    p.stdin.close()
+        def on_prompt(_prompt: str) -> None:
+            """Called when prompt is detected (already echoed via on_char)."""
+            pass
 
-        def read_char_by_char(stream: IO[str]) -> None:
-            """Read output character-by-character to handle prompts without newlines."""
-            output_buffer = ""
-            prompt_indicators = ["Enter a value: ", "?", ": "]  # Common prompt endings
-
-            while True:
-                char = stream.read(1)
-                if not char:
-                    break
-
-                # Print the character immediately
-                print(char, end="", flush=True)
-                output_buffer += char
-
-                # Check for common prompt indicators
-                if any(output_buffer.endswith(indicator) for indicator in prompt_indicators):
-                    prompt_ready.set()
-
-                # Clear buffer after newline for efficiency
-                if char == "\n":
-                    output_buffer = ""
-                    prompt_ready.set()  # Also check after each line
-
-                # Keep a reasonable buffer size
-                if len(output_buffer) > 100:
-                    output_buffer = output_buffer[-50:]
-
-            # Set the prompt_ready event one last time to unblock stdin thread
-            prompt_ready.set()
-            stream.close()
-
-        def buffer_stderr(stream: IO[str]) -> None:
-            """Buffer stderr output to print at the end."""
-            while True:
-                line = stream.readline()
-                if not line:
-                    break
-
-                with stderr_lock:
-                    stderr_buffer.append(line)
-
-            stream.close()
-
-        def handle_stdout() -> None:
-            stdout_active.set()
-            if p.stdout:
-                read_char_by_char(p.stdout)
-            stdout_active.clear()
-
-        def handle_stderr() -> None:
-            if p.stderr:
-                buffer_stderr(p.stderr)
-
-        # Start threads for I/O
-        stdin_thread = threading.Thread(target=handle_stdin)
-        stdout_thread = threading.Thread(target=handle_stdout)
-        stderr_thread = threading.Thread(target=handle_stderr)
-
-        # Set as daemon so it exits when main thread exits
-        stdin_thread.daemon = True
-        stdout_thread.daemon = True
-        stderr_thread.daemon = True
-
-        # Start output threads first
-        stdout_thread.start()
-        stderr_thread.start()
-        stdin_thread.start()
-
-        # Wait for process to complete
-        retcode = p.wait()
-
-        # Signal to unblock any waiting threads
-        prompt_ready.set()
-
-        # Wait for output threads to complete (with timeout to prevent hanging)
-        stdout_thread.join(timeout=1)
-        stderr_thread.join(timeout=1)
-        stdin_thread.join(timeout=1)
-
-        # Print the stderr output (if any) only after stdout is complete
-        if stderr_buffer:
-            for line in stderr_buffer:
+        def on_stderr(stderr_lines: list[str]) -> None:
+            """Print buffered stderr after stdout completes."""
+            for line in stderr_lines:
                 print(line, end="", flush=True)
+
+        # Create and start prompt handler for stdout+stdin coordination
+        if p.stdout and p.stdin:
+            prompt_handler = PromptHandler(
+                process=p,
+                on_line=on_line,
+                is_prompt=is_prompt,
+                on_prompt=on_prompt,
+                on_char=on_char,
+                on_stderr=on_stderr,
+                buffer_size=100,
+                prompt_check_chars=":?",
+            )
+
+            # Start prompt handler (blocks until stdout EOF, manages stdin thread internally)
+            prompt_handler.start()
+
+            # Wait for process to complete
+            retcode = p.wait()
+        else:
+            # Fallback if streams are missing
+            retcode = p.wait()
 
         if timer:
             timer.cancel()

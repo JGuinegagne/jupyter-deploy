@@ -8,6 +8,7 @@ from yaml.parser import ParserError
 from yaml.scanner import ScannerError
 
 from jupyter_deploy import constants, fs_utils, manifest, variables_config
+from jupyter_deploy.handlers.command_history_handler import CommandHistoryHandler
 
 
 class NotADictError(ValueError):
@@ -25,6 +26,7 @@ class BaseProjectHandler:
         """Attempts to identify the engine associated with the project."""
         self._console: rich_console.Console | None = None
         self.project_path = Path.cwd()
+        self.command_history_handler = CommandHistoryHandler(self.project_path)
         manifest_path = self.project_path / constants.MANIFEST_FILENAME
 
         try:

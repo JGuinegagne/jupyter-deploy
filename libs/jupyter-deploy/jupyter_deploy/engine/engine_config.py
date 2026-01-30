@@ -4,6 +4,7 @@ from pathlib import Path
 from jupyter_deploy.engine.engine_variables import EngineVariablesHandler
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
+from jupyter_deploy.handlers.command_history_handler import CommandHistoryHandler
 from jupyter_deploy.manifest import JupyterDeployManifest
 
 
@@ -14,12 +15,14 @@ class EngineConfigHandler(ABC):
         project_manifest: JupyterDeployManifest,
         engine: EngineType,
         variables_handler: EngineVariablesHandler,
+        command_history_handler: CommandHistoryHandler,
     ) -> None:
         """Instantiate the base handler for `jd config` command."""
         self.project_path = project_path
         self.project_manifest = project_manifest
         self.engine = engine
         self.variables_handler = variables_handler
+        self.command_history_handler = command_history_handler
 
     @abstractmethod
     def has_recorded_variables(self) -> bool:

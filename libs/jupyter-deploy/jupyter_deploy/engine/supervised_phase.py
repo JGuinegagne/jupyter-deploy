@@ -1,6 +1,5 @@
 """Phase tracking classes for supervised execution."""
 
-import math
 import re
 
 from jupyter_deploy.manifest import (
@@ -16,15 +15,16 @@ class SupervisedSubPhase:
     Tracks entry and completion of a sub-phase, calculating weight contribution.
     """
 
-    def __init__(self, config: JupyterDeploySupervisedExecutionSubPhaseV1, total_subphase_weights: int):
+    def __init__(self, config: JupyterDeploySupervisedExecutionSubPhaseV1, phase_scale_factor: float):
         """Initialize the sub-phase.
 
         Args:
             config: Sub-phase configuration from manifest
-            total_subphase_weights: Sum of all the sub phase weights of the phase
+            phase_scale_factor: The ratio of how much the parent phase weights in the sum of all
+                phase sequences
         """
         self.config = config
-        self.phase_progress_percentage = self.config.weight / total_subphase_weights
+        self.reward = self.config.weight * phase_scale_factor
 
         # Compile the enter pattern for regex matching
         self._enter_pattern = re.compile(self.config.enter_pattern)
@@ -40,19 +40,30 @@ class SupervisedSubPhase:
 
 
 class SupervisedPhase:
-    """Manages a single execution phase with optional sub-phases.
+    """Manages a single execution phase.
 
-    Tracks phase entry/exit, sub-phase transitions, and calculates weight contributions.
+    A SupervisedPhase tracks either a list of SupervisedSubPhase events matching different regex,
+    a set of countable events all matching the same regex, or both.
+
+    The life-cycle of a SupervisedPhase follows a set pattern:
+    1) enter event: when a log line matches the config.enter-pattern
+    2) progress events: either when a log line matches the config.progress-pattern regex
+        or matches the regex of the next subphase. Grants the accumulated reward.
+    3) exit event: the phase completes, grants the full reward.
     """
 
-    def __init__(self, config: JupyterDeploySupervisedExecutionPhaseV1):
+    def __init__(self, config: JupyterDeploySupervisedExecutionPhaseV1, sequence_scale_factor: float):
         """Initialize the phase.
 
         Args:
             config: Phase configuration from manifest
+            sequence_scale_factor: The ratio of how the weight of the parent phase sequence,
+                represented by a SupervisedExecutor, over the sum of the weights
+                of all the phase sequences in the jupyter-deploy command.
         """
         self.config = config
-        self.progress_bar_ratio: float = min(self.config.weight, 100) / 100
+        self.full_reward: float = self.config.weight * sequence_scale_factor
+        self.scale_factor: float = self.config.weight * sequence_scale_factor / 100
 
         self.is_active = False
         self.is_completed = False
@@ -69,17 +80,17 @@ class SupervisedPhase:
             total_subphase_weight = sum([s.weight for s in config.phases])
             for sp_config in config.phases:
                 # Sub phase calculate how much its own completion impacts the parent phase
-                self.sub_phases.append(SupervisedSubPhase(sp_config, total_subphase_weight))
+                self.sub_phases.append(SupervisedSubPhase(sp_config, self.scale_factor))
 
         # Store total subphase weight for later recalculation
         self._total_subphase_weight = total_subphase_weight
 
         # Initialize countable events (may be updated in evaluate_enter if capture group is set)
         events_estimate = self.config.progress_events_estimate or 10
-        self._event_progress_percentage: float = (100 - total_subphase_weight) / (100 * events_estimate)
+        self._reward_per_event: float = max(self.scale_factor * (100 - total_subphase_weight) / events_estimate, 0.0)
 
         self._current_sub_phase_index: int = -1
-        self._current_progress_percentage: float = 0.0
+        self._accumulated_reward: float = 0.0
 
     @property
     def label(self) -> str:
@@ -88,13 +99,15 @@ class SupervisedPhase:
             return self.sub_phases[self._current_sub_phase_index].label
         return self.config.label
 
-    @property
-    def weight(self) -> int:
-        """Return the weight as declared in the config."""
-        return self.config.weight
-
     def evaluate_enter(self, line: str) -> bool:
-        """Return True if phase just received enter signal, False otherwise."""
+        """Return True if the line signals the phase is now active, False otherwise.
+
+        Calculate the estimate of countable events for this phase from the line based on one
+        of its regex group if the phase.config.progress_events_estimate_capture_group is set.
+
+        Note: if both a phase.config.progress_events_estimate_capture_group and a
+        config.progress_events_estimate are set, config.progress_events_estimate takes precedence.
+        """
         if self.is_active or self.is_completed:
             return False
 
@@ -108,28 +121,30 @@ class SupervisedPhase:
                 and self.config.progress_events_estimate_capture_group is not None
             ):
                 try:
-                    captured = match.group(self.config.progress_events_estimate_capture_group)
-                    extracted_estimate = int(captured)
+                    captured_count = match.group(self.config.progress_events_estimate_capture_group)
+                    extracted_estimate = int(captured_count)
                     # Recalculate event progress percentage with extracted value
-                    self._event_progress_percentage = (100 - self._total_subphase_weight) / (100 * extracted_estimate)
+                    self._reward_per_event = max(
+                        self.scale_factor * (100 - self._total_subphase_weight) / extracted_estimate, 0.0
+                    )
                 except (IndexError, ValueError):
                     # Fall back to default of 10 if extraction fails
-                    self._event_progress_percentage = (100 - self._total_subphase_weight) / (100 * 10)
+                    self._reward_per_event = max(self.scale_factor * (100 - self._total_subphase_weight) / 10, 0.0)
 
             return True
 
         return False
 
     def evaluate_exit(self, line: str) -> bool:
-        """Return True if phase just received exit signal, False otherwise."""
+        """Return True if the line signals the full phase is complete, False otherwise."""
         return bool(self.is_active and self._exit_pattern and self._exit_pattern.search(line))
 
     def evaluate_progress(self, line: str) -> bool:
-        """Return True if phase just received a signal of incremental progress, False otherwise."""
+        """Return True if the line signals a countable event completed, False otherwise."""
         return bool(self.is_active and self._progress_pattern and self._progress_pattern.search(line))
 
     def evaluate_next_subphase(self, line: str) -> bool:
-        """Returns True if any of the subphase completed."""
+        """Returns True if the latest subphase just completed."""
         if not self.is_active or not self.sub_phases:
             return False
 
@@ -140,73 +155,79 @@ class SupervisedPhase:
             return False
 
         next_sub_phase = self.sub_phases[next_index]
-        return next_sub_phase.evaluate_enter(line)
+        result = next_sub_phase.evaluate_enter(line)
 
-    def complete_progress_event(self) -> int:
-        """Mark countable progress event complete, return remaining progress bar percentage points."""
-        self._current_progress_percentage += self._event_progress_percentage
-        return math.floor(self._current_progress_percentage * self.progress_bar_ratio)
+        if result:
+            self._current_sub_phase_index += 1
+            return True
+        return False
 
-    def complete_subphase(self) -> int:
-        """Mark current subphase complete, return remaining progress bar percentage points."""
+    def complete_progress_event(self) -> float:
+        """Mark countable event complete, add its reward, return the accumulated reward."""
+        self._accumulated_reward += self._reward_per_event
+        return self._reward_per_event
+
+    def complete_subphase(self) -> float:
+        """Mark current subphase complete, add its reward, return the accumulated reward."""
         if self._current_sub_phase_index < 0:
             # no subphase active, this is essentially a no-op
             self._current_sub_phase_index += 1
-            return math.floor(self._current_progress_percentage * self.progress_bar_ratio)
+            return self._accumulated_reward
 
         current_subphase = self.sub_phases[self._current_sub_phase_index]
-        self._current_progress_percentage += current_subphase.phase_progress_percentage
-        self._current_sub_phase_index += 1
+        subphase_reward = current_subphase.reward
+        self._accumulated_reward += subphase_reward
 
-        return math.floor(self._current_progress_percentage * self.progress_bar_ratio)
+        return subphase_reward
 
-    def complete(self) -> int:
-        """Mark this phase as complete, return full progress percentage."""
-        if self.is_completed:
-            return math.floor(self.progress_bar_ratio)
-
+    def complete(self) -> float:
+        """Mark this phase as complete, return the full reward."""
         self.is_active = False
         self.is_completed = True
-        self._current_progress_percentage = 1.0
-        return math.floor(self.progress_bar_ratio)
+        return max(self.full_reward - self._accumulated_reward, 0.0)
 
 
 class SupervisedDefaultPhase:
-    """Abstract base class for default progress tracking when not in a declared phase.
+    """Default phase of a phases sequence when no declared phase are active.
 
-    Subclasses implement command-specific progress tracking (e.g., resource counting
-    for terraform apply/destroy, or other metrics for different commands).
+    Calculate its reward based on countable, equally weighted events
+    that it detects by matching a log line to its pattern.
     """
 
     def __init__(
         self,
         config: JupyterDeploySupervisedExecutionDefaultPhaseV1,
-        weight: int = 100,
-        override_estimate: int | None = None,
+        full_reward: float = 100.0,
+        estimate_override: int | None = None,
     ):
         """Initialize the default phase.
 
+        A default phase accumulats its reward based on completion of equally-weights
+        progress event that it matches to a log line using its config.progress-pattern.
+
         Args:
             config: Phase configuration from manifest
-            weight: Weight allocated to default tracking (0-100 percentage points)
-            override_estimate: Optional override for progress_events_estimate from dynamic source
+            full_reward: Reward (0-100 percentage points) associated with all events
+            estimate_override: Optional override of the number of events, from which to derive
+                the reward per event. The handlers provide such values based on the results
+                yielded by previous commands.
         """
-        self._progress_bar_ratio = min(weight, 100) / 100
+        self.full_reward = full_reward
         self.config = config
 
         # Compile the progress pattern for regex matching
         self._progress_pattern = re.compile(self.config.progress_pattern)
 
         # Determine events estimate: override > explicit > default
-        if override_estimate is not None:
-            events_estimate = override_estimate
+        if estimate_override is not None:
+            events_estimate = estimate_override
         elif self.config.progress_events_estimate is not None:
             events_estimate = self.config.progress_events_estimate
         else:
             events_estimate = 10
 
-        self._events_percentage_increment: float = 1 / max(events_estimate, 1)
-        self._current_progress_percentage: float = 0.0
+        self._reward_per_event: float = self.full_reward / events_estimate
+        self._accumulated_reward: float = 0.0
 
     @property
     def label(self) -> str:
@@ -217,11 +238,11 @@ class SupervisedDefaultPhase:
         """Return True if progress was detected on this line, False otherwise."""
         return bool(self._progress_pattern.search(line))
 
-    def complete_progress_event(self) -> int:
-        """Return progress bar percentage points (0 to progress_bar_weight)."""
-        self._current_progress_percentage += self._events_percentage_increment
-        return math.floor(self._progress_bar_ratio * self._current_progress_percentage)
+    def complete_progress_event(self) -> float:
+        """Return the accumulated reward up to the point of the latest event."""
+        self._accumulated_reward += self._reward_per_event
+        return self._reward_per_event
 
-    def complete(self) -> int:
-        """Complete the default phase, return remaining weight."""
-        return math.floor(self._progress_bar_ratio)
+    def complete(self) -> float:
+        """Complete the default phase, return its full reward."""
+        return max(self.full_reward - self._accumulated_reward, 0.0)

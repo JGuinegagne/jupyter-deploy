@@ -1,7 +1,6 @@
 """Core types and protocols for supervised execution with progress tracking."""
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 
@@ -11,11 +10,11 @@ class ExecutionProgress:
 
     Attributes:
         label: Display label for the current execution state (e.g., "Generating plan", "Creating infrastructure")
-        percentage: Progress percentage (0-100). Use 0 when progress is indeterminate.
+        reward: Percentage (0-100) for the level of the progress bar.
     """
 
     label: str
-    percentage: int
+    reward: float
 
 
 class ProgressCallback(Protocol):
@@ -166,6 +165,16 @@ class TerminalHandler(Protocol):
         """
         ...
 
+    def display_error_context(self, lines: list[str]) -> None:
+        """Display error context when command execution fails.
+
+        Called after command fails to show relevant log lines that explain the error.
+
+        Args:
+            lines: Error context lines to display
+        """
+        ...
+
 
 class ExecutionError(Exception):
     """Exception raised when a supervised command execution fails.
@@ -174,12 +183,10 @@ class ExecutionError(Exception):
         command: The command that failed (e.g., "config", "up", "down")
         retcode: The non-zero return code from the failed command
         message: Human-readable error message
-        log_file: Path to the log file containing full output
     """
 
-    def __init__(self, command: str, retcode: int, message: str, log_file: Path):
+    def __init__(self, command: str, retcode: int, message: str):
         self.command = command
         self.retcode = retcode
         self.message = message
-        self.log_file = log_file
         super().__init__(message)
