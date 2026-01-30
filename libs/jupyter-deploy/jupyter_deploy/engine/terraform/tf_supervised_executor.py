@@ -147,4 +147,5 @@ def create_terraform_executor(
         phases=phases,
         start_reward=start_reward,
         end_reward=end_reward,
+        prompt_check_chars=":",  # terraform prompts with "Enter a value: "
     )

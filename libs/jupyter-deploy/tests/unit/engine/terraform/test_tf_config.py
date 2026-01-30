@@ -6,12 +6,14 @@ from unittest.mock import Mock, patch
 
 from pydantic import ValidationError
 
+from jupyter_deploy.engine.supervised_execution import ExecutionError
 from jupyter_deploy.engine.terraform.tf_config import TerraformConfigHandler
 from jupyter_deploy.engine.terraform.tf_constants import (
     TF_DEFAULT_PLAN_FILENAME,
     TF_ENGINE_DIR,
     TF_PRESETS_DIR,
 )
+from jupyter_deploy.engine.terraform.tf_enums import TerraformSequenceId
 from jupyter_deploy.engine.vardefs import (
     BoolTemplateVariableDefinition,
     DictStrTemplateVariableDefinition,
@@ -404,8 +406,6 @@ class TestTerraformConfigHandler(unittest.TestCase):
         handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history())
 
         # Act & Assert - should raise ExecutionError
-        from jupyter_deploy.engine.supervised_execution import ExecutionError
-
         with self.assertRaises(ExecutionError) as context:
             handler.configure()
 
@@ -456,8 +456,6 @@ class TestTerraformConfigHandler(unittest.TestCase):
         handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history())
 
         # Act & Assert - should raise ExecutionError
-        from jupyter_deploy.engine.supervised_execution import ExecutionError
-
         with self.assertRaises(ExecutionError) as context:
             handler.configure()
 
@@ -818,3 +816,110 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_parse.assert_called_once()
         mock_write.assert_not_called()
         mock_vars_fns["sync_project_variables_config"].assert_not_called()
+
+    @patch("jupyter_deploy.engine.terraform.tf_config.TerraformSupervisedExecutionCallback")
+    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
+    def test_configure_with_terminal_handler_uses_supervised_callback(
+        self,
+        mock_variable_handler_cls: Mock,
+        mock_create_executor: Mock,
+        mock_callback_cls: Mock,
+    ) -> None:
+        """Test that configure with terminal_handler uses TerraformSupervisedExecutionCallback."""
+        # Arrange
+        mock_vars_handler, _ = self.get_mock_variable_handler_and_fns()
+        mock_variable_handler_cls.return_value = mock_vars_handler
+
+        # Mock executor for both init and plan - both succeed
+        mock_executor = Mock()
+        mock_executor.execute.return_value = 0
+        mock_create_executor.return_value = mock_executor
+
+        # Mock callback
+        mock_callback = Mock()
+        mock_callback_cls.return_value = mock_callback
+
+        # Create handler WITH terminal_handler
+        mock_terminal_handler = Mock()
+        handler = TerraformConfigHandler(
+            Path("/fake/path"),
+            Mock(),
+            self.get_mock_command_history(),
+            terminal_handler=mock_terminal_handler,  # type: ignore[arg-type]
+        )
+
+        # Act
+        result = handler.configure()
+
+        # Assert
+        self.assertTrue(result)
+
+        # Verify TerraformSupervisedExecutionCallback was created twice (init and plan)
+        self.assertEqual(mock_callback_cls.call_count, 2)
+
+        # Verify init callback
+        init_callback_call = mock_callback_cls.call_args_list[0]
+        self.assertEqual(init_callback_call.kwargs["terminal_handler"], mock_terminal_handler)
+        self.assertEqual(init_callback_call.kwargs["sequence_id"], TerraformSequenceId.config_init)
+
+        # Verify plan callback
+        plan_callback_call = mock_callback_cls.call_args_list[1]
+        self.assertEqual(plan_callback_call.kwargs["terminal_handler"], mock_terminal_handler)
+        self.assertEqual(plan_callback_call.kwargs["sequence_id"], TerraformSequenceId.config_plan)
+
+        # Verify executor was created with the supervised callback
+        self.assertEqual(mock_create_executor.call_count, 2)
+        init_executor_call = mock_create_executor.call_args_list[0]
+        self.assertEqual(init_executor_call.kwargs["execution_callback"], mock_callback)
+
+        plan_executor_call = mock_create_executor.call_args_list[1]
+        self.assertEqual(plan_executor_call.kwargs["execution_callback"], mock_callback)
+
+    @patch("jupyter_deploy.engine.terraform.tf_config.NoopExecutionCallback")
+    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
+    def test_configure_without_terminal_handler_uses_noop_callback(
+        self,
+        mock_variable_handler_cls: Mock,
+        mock_create_executor: Mock,
+        mock_noop_callback_cls: Mock,
+    ) -> None:
+        """Test that configure without terminal_handler uses NoopExecutionCallback."""
+        # Arrange
+        mock_vars_handler, _ = self.get_mock_variable_handler_and_fns()
+        mock_variable_handler_cls.return_value = mock_vars_handler
+
+        # Mock executor for both init and plan - both succeed
+        mock_executor = Mock()
+        mock_executor.execute.return_value = 0
+        mock_create_executor.return_value = mock_executor
+
+        # Mock noop callback
+        mock_noop = Mock()
+        mock_noop_callback_cls.return_value = mock_noop
+
+        # Create handler WITHOUT terminal_handler
+        handler = TerraformConfigHandler(
+            Path("/fake/path"),
+            Mock(),
+            self.get_mock_command_history(),
+            terminal_handler=None,
+        )
+
+        # Act
+        result = handler.configure()
+
+        # Assert
+        self.assertTrue(result)
+
+        # Verify NoopExecutionCallback was created twice (init and plan)
+        self.assertEqual(mock_noop_callback_cls.call_count, 2)
+
+        # Verify executor was created with the noop callback
+        self.assertEqual(mock_create_executor.call_count, 2)
+        init_executor_call = mock_create_executor.call_args_list[0]
+        self.assertEqual(init_executor_call.kwargs["execution_callback"], mock_noop)
+
+        plan_executor_call = mock_create_executor.call_args_list[1]
+        self.assertEqual(plan_executor_call.kwargs["execution_callback"], mock_noop)

@@ -5,6 +5,7 @@ import subprocess
 import threading
 import time
 import unittest
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -201,16 +202,30 @@ class TestRunCmdAndCaptureOutput(unittest.TestCase):
 class TestRunCmdAndPipeToTerminal(unittest.TestCase):
     """Test cases for run_cmd_and_pipe_to_terminal function."""
 
-    @patch("subprocess.Popen")
-    def test_starts_subprocess_and_return_success_code(self, mock_popen: Mock) -> None:
-        """Test that the function correctly starts a subprocess and returns a success code."""
-        # Setup mock
+    def _create_mock_process(self, retcode: int = 0) -> Mock:
+        """Helper to create a mock process with stdout, stdin, stderr."""
         mock_process = Mock()
-        mock_process.poll.return_value = None
-        mock_process.wait.return_value = 0
-        mock_process.stdout.read.return_value = ""
-        mock_process.stderr.readline.return_value = ""
+        mock_process.stdout = Mock()
+        mock_process.stdin = Mock()
+        mock_process.stderr = Mock()
+        mock_process.wait = Mock(return_value=retcode)
+        return mock_process
+
+    def _create_mock_prompt_handler(self) -> Mock:
+        """Helper to create a mock PromptHandler."""
+        mock_handler = Mock()
+        mock_handler.start = Mock()
+        return mock_handler
+
+    @patch("subprocess.Popen")
+    @patch("jupyter_deploy.cmd_utils.PromptHandler")
+    def test_starts_subprocess_and_return_success_code(self, mock_prompt_handler_cls: Mock, mock_popen: Mock) -> None:
+        """Test that the function correctly starts a subprocess and returns a success code."""
+        mock_process = self._create_mock_process(retcode=0)
         mock_popen.return_value = mock_process
+
+        mock_handler = self._create_mock_prompt_handler()
+        mock_prompt_handler_cls.return_value = mock_handler
 
         # Call the function
         retcode, is_timedout = run_cmd_and_pipe_to_terminal(["echo", "hello"])
@@ -226,18 +241,21 @@ class TestRunCmdAndPipeToTerminal(unittest.TestCase):
             universal_newlines=True,
             bufsize=0,
         )
+        mock_handler.start.assert_called_once()
+        mock_process.wait.assert_called_once()
 
     @patch("subprocess.Popen")
+    @patch("jupyter_deploy.cmd_utils.PromptHandler")
     @patch("jupyter_deploy.cmd_utils.switch_dir")
-    def test_uses_switch_dir_with_exec_dir(self, mock_switch_dir: Mock, mock_popen: Mock) -> None:
+    def test_uses_switch_dir_with_exec_dir(
+        self, mock_switch_dir: Mock, mock_prompt_handler_cls: Mock, mock_popen: Mock
+    ) -> None:
         """Test that run_cmd_and_pipe_to_terminal uses switch_dir with the specified directory."""
-        # Setup mock
-        mock_process = Mock()
-        mock_process.poll.return_value = None
-        mock_process.wait.return_value = 0
-        mock_process.stdout.read.return_value = ""
-        mock_process.stderr.readline.return_value = ""
+        mock_process = self._create_mock_process(retcode=0)
         mock_popen.return_value = mock_process
+
+        mock_handler = self._create_mock_prompt_handler()
+        mock_prompt_handler_cls.return_value = mock_handler
 
         # Call the function with exec_dir
         mock_dir = Path("/test/directory")
@@ -252,15 +270,14 @@ class TestRunCmdAndPipeToTerminal(unittest.TestCase):
         mock_popen.assert_called_once()
 
     @patch("subprocess.Popen")
-    def test_starts_subprocess_and_return_failure(self, mock_popen: Mock) -> None:
+    @patch("jupyter_deploy.cmd_utils.PromptHandler")
+    def test_starts_subprocess_and_return_failure(self, mock_prompt_handler_cls: Mock, mock_popen: Mock) -> None:
         """Test that the function correctly returns a non-zero code when the command fails."""
-        # Setup mock
-        mock_process = Mock()
-        mock_process.poll.return_value = None
-        mock_process.wait.return_value = 1
-        mock_process.stdout.read.return_value = ""
-        mock_process.stderr.readline.return_value = ""
+        mock_process = self._create_mock_process(retcode=1)
         mock_popen.return_value = mock_process
+
+        mock_handler = self._create_mock_prompt_handler()
+        mock_prompt_handler_cls.return_value = mock_handler
 
         # Call the function
         retcode, is_timedout = run_cmd_and_pipe_to_terminal(["git", "push", "upstream", "main"])
@@ -269,240 +286,104 @@ class TestRunCmdAndPipeToTerminal(unittest.TestCase):
         self.assertEqual(retcode, 1)
         self.assertFalse(is_timedout)
         mock_popen.assert_called_once()
+        mock_handler.start.assert_called_once()
 
     @patch("subprocess.Popen")
+    @patch("jupyter_deploy.cmd_utils.PromptHandler")
     @patch("builtins.print")
-    def test_captures_stdout(self, mock_print: Mock, mock_popen: Mock) -> None:
-        """Test that the function captures and displays stdout from the subprocess."""
-        # Setup mock
-        mock_process = Mock()
-        mock_process.poll.return_value = None
-        mock_process.wait.return_value = 0
-
-        # Simulate stdout output
-        def read_side_effect(_size: int) -> str:
-            if hasattr(read_side_effect, "called"):
-                return ""
-            read_side_effect.called = True
-            return "hello world"
-
-        mock_process.stdout.read.side_effect = read_side_effect
-        mock_process.stderr.readline.return_value = ""
+    def test_on_char_callback_prints_characters(
+        self, mock_print: Mock, mock_prompt_handler_cls: Mock, mock_popen: Mock
+    ) -> None:
+        """Test that on_char callback prints characters to stdout."""
+        mock_process = self._create_mock_process(retcode=0)
         mock_popen.return_value = mock_process
+
+        mock_handler = self._create_mock_prompt_handler()
+        mock_prompt_handler_cls.return_value = mock_handler
 
         # Call the function
-        retcode, is_timedout = run_cmd_and_pipe_to_terminal(["echo", "hello world"])
+        run_cmd_and_pipe_to_terminal(["echo", "hello"])
 
-        # Assertions
-        self.assertEqual(retcode, 0)
-        self.assertFalse(is_timedout)
-        mock_print.assert_called_with("hello world", end="", flush=True)
+        # Extract the on_char callback
+        call_kwargs = mock_prompt_handler_cls.call_args.kwargs
+        on_char_callback: Callable[[str], None] = call_kwargs["on_char"]
+
+        # Simulate PromptHandler calling on_char
+        on_char_callback("h")
+        on_char_callback("e")
+        on_char_callback("l")
+
+        # Verify print was called for each character
+        self.assertEqual(mock_print.call_count, 3)
+        mock_print.assert_any_call("h", end="", flush=True)
+        mock_print.assert_any_call("e", end="", flush=True)
+        mock_print.assert_any_call("l", end="", flush=True)
 
     @patch("subprocess.Popen")
+    @patch("jupyter_deploy.cmd_utils.PromptHandler")
     @patch("builtins.print")
-    def test_captures_stderr(self, mock_print: Mock, mock_popen: Mock) -> None:
-        """Test that the function captures and displays stderr from the subprocess."""
-        # Setup mock
-        mock_process = Mock()
-        mock_process.poll.return_value = None
-        mock_process.wait.return_value = 1
-        mock_process.stdout.read.return_value = ""
-
-        def readline_side_effect() -> str:
-            if hasattr(readline_side_effect, "called"):
-                return ""
-            readline_side_effect.called = True
-            return "cannot just push to main!"
-
-        mock_process.stderr.readline.side_effect = readline_side_effect
+    def test_on_stderr_callback_prints_buffered_lines(
+        self, mock_print: Mock, mock_prompt_handler_cls: Mock, mock_popen: Mock
+    ) -> None:
+        """Test that on_stderr callback prints buffered stderr lines."""
+        mock_process = self._create_mock_process(retcode=1)
         mock_popen.return_value = mock_process
+
+        mock_handler = self._create_mock_prompt_handler()
+        mock_prompt_handler_cls.return_value = mock_handler
 
         # Call the function
-        retcode, is_timedout = run_cmd_and_pipe_to_terminal(["git", "push", "upstream", "main"])
+        run_cmd_and_pipe_to_terminal(["git", "push", "upstream", "main"])
 
-        # Assertions
-        self.assertEqual(retcode, 1)
-        self.assertFalse(is_timedout)
-        mock_print.assert_called_with("cannot just push to main!", end="", flush=True)
+        # Extract the on_stderr callback
+        call_kwargs = mock_prompt_handler_cls.call_args.kwargs
+        on_stderr_callback: Callable[[list[str]], None] = call_kwargs["on_stderr"]
+
+        # Simulate PromptHandler calling on_stderr with buffered lines
+        stderr_lines = ["Error line 1\n", "Error line 2\n", "cannot just push to main!\n"]
+        on_stderr_callback(stderr_lines)
+
+        # Verify print was called for each stderr line
+        self.assertEqual(mock_print.call_count, 3)
+        mock_print.assert_any_call("Error line 1\n", end="", flush=True)
+        mock_print.assert_any_call("Error line 2\n", end="", flush=True)
+        mock_print.assert_any_call("cannot just push to main!\n", end="", flush=True)
 
     @patch("subprocess.Popen")
-    @patch("builtins.print")
-    def test_stderr_printed_after_stdout(self, mock_print: Mock, mock_popen: Mock) -> None:
-        """Test that stderr is buffered and only printed after all stdout is complete."""
-        # Setup mock
-        mock_process = Mock()
-        mock_process.poll.return_value = None
-        mock_process.wait.return_value = 1
-
-        # Track print calls to verify order
-        print_calls = []
-        mock_print.side_effect = lambda *args, **kwargs: print_calls.append(args[0])
-
-        # Simulate stdout output with multiple characters
-        stdout_content = "First line of stdout\nSecond line of stdout\n"
-        stdout_pos = 0
-
-        def read_char_by_char(size: int) -> str:
-            nonlocal stdout_pos
-            if stdout_pos >= len(stdout_content):
-                return ""
-            char = stdout_content[stdout_pos : stdout_pos + size]
-            stdout_pos += size
-            return char
-
-        mock_process.stdout.read.side_effect = read_char_by_char
-
-        # Simulate stderr output with multiple lines
-        stderr_lines = ["Error line 1\n", "Error line 2\n", "Final error\n"]
-        stderr_pos = 0
-
-        def readline_side_effect() -> str:
-            nonlocal stderr_pos
-            if stderr_pos >= len(stderr_lines):
-                return ""
-            line = stderr_lines[stderr_pos]
-            stderr_pos += 1
-            return line
-
-        mock_process.stderr.readline.side_effect = readline_side_effect
+    @patch("jupyter_deploy.cmd_utils.PromptHandler")
+    def test_prompt_handler_initialization(self, mock_prompt_handler_cls: Mock, mock_popen: Mock) -> None:
+        """Test that PromptHandler is initialized with correct parameters."""
+        mock_process = self._create_mock_process(retcode=0)
         mock_popen.return_value = mock_process
+
+        mock_handler = self._create_mock_prompt_handler()
+        mock_prompt_handler_cls.return_value = mock_handler
 
         # Call the function
-        retcode, is_timedout = run_cmd_and_pipe_to_terminal(["command", "with", "output"])
+        run_cmd_and_pipe_to_terminal(["echo", "test"])
 
-        # Assertions
-        self.assertEqual(retcode, 1)
-        self.assertFalse(is_timedout)
+        # Verify PromptHandler was initialized correctly
+        mock_prompt_handler_cls.assert_called_once()
+        call_kwargs = mock_prompt_handler_cls.call_args.kwargs
 
-        # Verify that all stdout characters were printed before any stderr
-        stdout_chars = list(stdout_content)
-
-        # Check that stdout appears first in the print calls
-        for i, char in enumerate(stdout_chars):
-            self.assertEqual(print_calls[i], char)
-
-        # Check that stderr appears after all stdout
-        stderr_start_index = len(stdout_chars)
-        for line in stderr_lines:
-            line_found = False
-            for i in range(stderr_start_index, len(print_calls)):
-                if print_calls[i] == line:
-                    line_found = True
-                    break
-            self.assertTrue(line_found, f"Line '{line}' not found in print calls after stdout")
+        self.assertEqual(call_kwargs["process"], mock_process)
+        self.assertIsNotNone(call_kwargs["on_line"])
+        self.assertIsNotNone(call_kwargs["is_prompt"])
+        self.assertIsNotNone(call_kwargs["on_prompt"])
+        self.assertIsNotNone(call_kwargs["on_char"])
+        self.assertIsNotNone(call_kwargs["on_stderr"])
+        self.assertEqual(call_kwargs["buffer_size"], 100)
+        self.assertEqual(call_kwargs["prompt_check_chars"], ":?")
 
     @patch("subprocess.Popen")
-    @patch("sys.stdin")
-    def test_captures_stdin(self, mock_stdin: Mock, mock_popen: Mock) -> None:
-        """Test that the function captures stdin and passes it to the subprocess."""
-        # Setup mocks
-        mock_process = Mock()
-        mock_process.poll.side_effect = [None, None, None]
-        mock_process.wait.return_value = 0
-        mock_process.stdout.read.return_value = ""
-        mock_process.stderr.readline.return_value = ""
-        mock_popen.return_value = mock_process
-
-        # Simulate stdin input
-        mock_stdin.isatty.return_value = True
-        mock_stdin.readline.side_effect = ["user-input-1", "user-input-2", "user-input-3"]
-
-        # Setup select to simulate input available
-        with patch("select.select") as mock_select:
-            mock_select.return_value = ([mock_stdin], [], [])
-
-            # Call the function
-            retcode, is_timedout = run_cmd_and_pipe_to_terminal(["read_input_command"])
-
-            # Assertions
-            self.assertEqual(retcode, 0)
-            self.assertFalse(is_timedout)
-            mock_select.assert_called_with([mock_stdin], [], [], 0.1)
-
-            self.assertEqual(mock_process.stdin.write.call_count, 3)
-            mock_stdin_write_calls = mock_process.stdin.write.mock_calls
-            self.assertEqual(mock_stdin_write_calls[0][1], ("user-input-1",))
-            self.assertEqual(mock_stdin_write_calls[1][1], ("user-input-2",))
-            self.assertEqual(mock_stdin_write_calls[2][1], ("user-input-3",))
-
-            self.assertEqual(mock_process.stdin.flush.call_count, 3)
-
-    @patch("subprocess.Popen")
-    @patch("sys.stdin")
-    def test_wait_for_stdout_to_complete_before_prompting(self, mock_stdin: Mock, mock_popen: Mock) -> None:
-        """Test that the function waits for stdout to complete before prompting for input."""
-        # Setup mocks
-        mock_process = Mock()
-        mock_process.poll.return_value = None
-        mock_process.wait.return_value = 0
-
-        # Simulate stdout output
-
-        # stdout_value will be read char by char
-        stdout_value = "A whole bunch of text first\nThen we will ask you to\n\ninput a value:\n"
-
-        # we simulate the `stdout.read` by offsetting the pos of the `stdout_value`
-        def stdout_read_side_effect(size: int) -> str:
-            if not hasattr(stdout_read_side_effect, "pos") or type(stdout_read_side_effect.pos) != int:  # noqa: E721
-                stdout_read_side_effect.pos = 0
-            pos = stdout_read_side_effect.pos
-            stdout_read_side_effect.pos += size
-
-            if pos >= len(stdout_value):
-                stdout_read_side_effect.fully_called = True
-
-            return stdout_value[pos : pos + size]
-
-        stdout_read_side_effect.fully_called = False
-
-        mock_process.stdout.read.side_effect = stdout_read_side_effect
-        mock_process.stderr.readline.return_value = ""
-
-        # Simulate stdin input
-        mock_stdin.isatty.return_value = True
-
-        def stdin_readline_side_effect() -> str:
-            if hasattr(stdin_readline_side_effect, "called"):
-                return ""
-
-            # check the state of the std out read mock when stdin.readline is called;
-            # we expect stdout.read to have fully flushed.
-            stdin_readline_side_effect.called_last = getattr(stdout_read_side_effect, "fully_called", False)
-            return "some-value"
-
-        stdin_readline_side_effect.called_last = False  # mypy: disable-error-code=attr-defined
-        mock_stdin.readline.side_effect = stdin_readline_side_effect
-
-        mock_popen.return_value = mock_process
-
-        # Setup select to simulate input available
-        with patch("select.select") as mock_select:
-            mock_select.return_value = ([mock_stdin], [], [])
-            retcode, is_timedout = run_cmd_and_pipe_to_terminal(["command"])
-
-            # Assertions
-            self.assertEqual(retcode, 0)
-            self.assertFalse(is_timedout)
-
-            # stdout.read should fully flush before stdin.readline gets called.
-            self.assertTrue(getattr(stdout_read_side_effect, "fully_called", False))
-            self.assertTrue(getattr(stdin_readline_side_effect, "called_last", False))
-
-            mock_select.assert_called_with([mock_stdin], [], [], 0.1)
-            mock_process.stdin.write.assert_called_with("some-value")
-            mock_process.stdin.flush.assert_called()
-
-    @patch("subprocess.Popen")
-    def test_with_timer_no_timeout(self, mock_popen: Mock) -> None:
+    @patch("jupyter_deploy.cmd_utils.PromptHandler")
+    def test_with_timer_no_timeout(self, mock_prompt_handler_cls: Mock, mock_popen: Mock) -> None:
         """Test that the function works correctly with a timer but no timeout occurs."""
-        # Setup mock
-        mock_process = Mock()
-        mock_process.poll.return_value = None
-        mock_process.wait.return_value = 0
-        mock_process.stdout.read.return_value = ""
-        # For the buffered stderr implementation
-        mock_process.stderr.readline.return_value = ""
+        mock_process = self._create_mock_process(retcode=0)
         mock_popen.return_value = mock_process
+
+        mock_handler = self._create_mock_prompt_handler()
+        mock_prompt_handler_cls.return_value = mock_handler
 
         # Call the function with timeout
         retcode, is_timedout = run_cmd_and_pipe_to_terminal(["command"], timeout_seconds=2)
@@ -511,13 +392,15 @@ class TestRunCmdAndPipeToTerminal(unittest.TestCase):
         self.assertEqual(retcode, 0)
         self.assertFalse(is_timedout)
         mock_popen.assert_called_once()
-        mock_process.terminate.assert_not_called()  # Process should not be terminated
+        mock_process.terminate.assert_not_called()
 
     @patch("subprocess.Popen")
+    @patch("jupyter_deploy.cmd_utils.PromptHandler")
     @patch("builtins.print")
-    def test_with_timer_handles_timeout(self, mock_print: Mock, mock_popen: Mock) -> None:
+    def test_with_timer_handles_timeout(
+        self, mock_print: Mock, mock_prompt_handler_cls: Mock, mock_popen: Mock
+    ) -> None:
         """Test that the function correctly handles a timeout."""
-        # Setup mock
         mock_process = Mock()
         self.result = (0, False)
 
@@ -533,10 +416,10 @@ class TestRunCmdAndPipeToTerminal(unittest.TestCase):
                 time.sleep(0.1)
             return -15
 
-        mock_process.poll.return_value = None
-        mock_process.wait.side_effect = wait_until_terminated
-        mock_process.stdout.read.return_value = ""
-        mock_process.stderr.readline.return_value = ""
+        mock_process.stdout = Mock()
+        mock_process.stdin = Mock()
+        mock_process.stderr = Mock()
+        mock_process.wait = Mock(side_effect=wait_until_terminated)
 
         # Add a custom terminate method that sets a flag
         def custom_terminate() -> None:
@@ -546,6 +429,9 @@ class TestRunCmdAndPipeToTerminal(unittest.TestCase):
         mock_terminate.side_effect = custom_terminate
         mock_process.terminate = mock_terminate
         mock_popen.return_value = mock_process
+
+        mock_handler = self._create_mock_prompt_handler()
+        mock_prompt_handler_cls.return_value = mock_handler
 
         # Start the function in a separate thread so we can move time forward
         thread = threading.Thread(

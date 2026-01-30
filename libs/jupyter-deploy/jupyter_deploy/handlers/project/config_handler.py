@@ -84,14 +84,3 @@ class ConfigHandler(BaseProjectHandler):
     def record(self, record_vars: bool = False, record_secrets: bool = False) -> None:
         """Save the values of the variables to disk in the project dir."""
         self._handler.record(record_vars=record_vars, record_secrets=record_secrets)
-
-    def get_error_context(self, limit: int = 10) -> list[str]:
-        """Read last N lines from the most recent log file for config command.
-
-        Args:
-            limit: Number of lines to read from the end of the log
-
-        Returns:
-            List of log lines (may be empty if no log file exists)
-        """
-        return self.command_history_handler.get_error_context(command="config", limit=limit)

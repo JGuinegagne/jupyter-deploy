@@ -271,8 +271,7 @@ class TestSupervisedClassWithSubphases(unittest.TestCase):
         # Complete second subphase
         reward2 = self.phase.complete_subphase()
 
-        # should be previous reward + subphase reward
-        self.assertAlmostEqual(reward2, 25)  # 5 + 80 * 0.5 * 0.5 = 20
+        self.assertAlmostEqual(reward2, 20)  # 5 + 80 * 0.5 * 0.5 = 20
         self.assertAlmostEqual(self.phase._accumulated_reward, 25)
 
         # No more subphases

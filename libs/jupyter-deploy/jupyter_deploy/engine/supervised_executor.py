@@ -40,6 +40,7 @@ class SupervisedExecutor:
         phases: list[SupervisedPhase] | None = None,
         start_reward: float = 0.0,
         end_reward: float = 100.0,
+        prompt_check_chars: str = ":?",
     ):
         """Initialize the executor.
 
@@ -53,6 +54,8 @@ class SupervisedExecutor:
                 jupyter-deploy command. Corresponds to the sum of all preceding SupervisedExecutors
                 rewards.
             end_reward: Reward on successful completion of the SupervisedExecutor (0-100).
+            prompt_check_chars: Specific chars of stdout that trigger prompt regex evaluation.
+                (default: ":?")
         """
         if not phases:
             phases = []
@@ -62,6 +65,7 @@ class SupervisedExecutor:
         self._execution_callback = execution_callback
         self._should_parse_progress = execution_callback.should_parse_progress()
         self._log_handle: IO[str] | None = None
+        self.prompt_check_chars = prompt_check_chars
 
         # Reward calculation
         self.end_reward = end_reward
@@ -165,6 +169,7 @@ class SupervisedExecutor:
             on_char=None,  # No character echo (handled by callback)
             on_stderr=on_stderr,
             buffer_size=200,  # Match the callback buffer size
+            prompt_check_chars=self.prompt_check_chars,
         )
         handler.start()
 

@@ -49,32 +49,3 @@ class CommandHistoryHandler:
         log_file_path.touch(exist_ok=True)
 
         return log_file_path
-
-    def get_error_context(self, command: str, limit: int = 10) -> list[str]:
-        """Read last N lines from the most recent log file for a command.
-
-        Args:
-            command: The command name (e.g., "config", "up", "down")
-            limit: Number of lines to read from the end of the log
-
-        Returns:
-            List of log lines (may be empty if no log files exist)
-        """
-        command_dir = self.history_dir / command
-
-        # Find the most recent log file (sorted by name = sorted by timestamp)
-        if not command_dir.exists():
-            return []
-
-        log_files = sorted(command_dir.glob("*.log"), reverse=True)
-        if not log_files:
-            return []
-
-        most_recent_log = log_files[0]
-
-        try:
-            with open(most_recent_log) as f:
-                lines = f.readlines()
-                return [line.rstrip("\n") for line in lines[-limit:]]
-        except Exception:
-            return []

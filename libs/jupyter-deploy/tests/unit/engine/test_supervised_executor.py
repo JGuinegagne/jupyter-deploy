@@ -1,4 +1,6 @@
+import subprocess
 import unittest
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import Mock, mock_open, patch
 
@@ -141,6 +143,14 @@ class TestSupervisedExecutor(unittest.TestCase):
         mock_handle_interaction = Mock()
         mock_on_execution_error = Mock()
 
+        mock_execution_callback.should_parse_progress = mock_should_parse_progress
+        mock_execution_callback.is_waiting_for_interaction = mock_is_waiting_for_interaction
+        mock_execution_callback.on_progress = mock_on_progress
+        mock_execution_callback.on_log_line = mock_on_log_line
+        mock_execution_callback.is_requesting_user_input = mock_is_requesting_user_input
+        mock_execution_callback.handle_interaction = mock_handle_interaction
+        mock_execution_callback.on_execution_error = mock_on_execution_error
+
         return mock_execution_callback, {
             "should_parse_progress": mock_should_parse_progress,
             "is_waiting_for_interaction": mock_is_waiting_for_interaction,
@@ -160,7 +170,10 @@ class TestSupervisedExecutor(unittest.TestCase):
         dft_phase, _ = self._create_mocked_default_phase_and_mocks()
 
         executor = SupervisedExecutor(
-            exec_dir=exec_dir, log_file=log_file, execution_callback=cb, default_phase=dft_phase
+            exec_dir=exec_dir,
+            log_file=log_file,
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
         )
 
         self.assertEqual(executor.exec_dir, exec_dir)
@@ -168,9 +181,6 @@ class TestSupervisedExecutor(unittest.TestCase):
         self.assertEqual(executor._execution_callback, cb)
         self.assertEqual(executor._default_phase, dft_phase)
         self.assertEqual(executor._declared_phases, [])
-
-        cb_mocks["should_parse_progress"].assert_called_once()
-        self.assertTrue(executor._should_parse_progress)
 
     def test_init_stores_should_parse_progress_from_callback(self) -> None:
         """Test that initialization stores should_parse_progress from callback."""
@@ -180,8 +190,8 @@ class TestSupervisedExecutor(unittest.TestCase):
         executor = SupervisedExecutor(
             exec_dir=Path("/mock/dir"),
             log_file=Path("/mock/log.txt"),
-            execution_callback=cb,
-            default_phase=dft_phase,
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
         )
 
         cb_mocks["should_parse_progress"].assert_called_once()
@@ -193,46 +203,89 @@ class TestSupervisedExecutor(unittest.TestCase):
         # Create a log path in a non-existent directory
         log_file = Path("/mock/logs/nested/test.log")
 
-        cb, cb_mocks = self._create_execution_callback_and_mocks()
+        cb, _ = self._create_execution_callback_and_mocks()
         dft_phase, _ = self._create_mocked_default_phase_and_mocks()
 
         executor = SupervisedExecutor(
             exec_dir=Path("/mock/dir"),
             log_file=log_file,
-            execution_callback=cb,
-            default_phase=dft_phase,
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
         )
 
-        # mock inner method _handle_execute_command
+        mock_process, _ = self._create_mock_process_with_output(retcode=0)
+        mock_process.stdout = None
+        mock_process.stdin = None
 
         with (
             patch("pathlib.Path.mkdir") as mock_mkdir,
             patch("builtins.open", new_callable=mock_open) as mock_file,
             patch("subprocess.Popen") as mock_popen,
         ):
-            mock_process = self._create_mock_process_with_output(retcode=0)
             mock_popen.return_value = mock_process
-
-            # verify mkdir called w/ right parameter
-            # verify file opens in append mode
 
             executor.execute(["echo", "test"])
 
+            # Verify mkdir was called with correct parameters
+            mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
+
+            # Verify file was opened in append mode
+            mock_file.assert_called_once_with(log_file, "a")
+
     def test_execute_calls_handle_execute_command(self) -> None:
         """Test that execute calls the underlying method."""
+        cb, _ = self._create_execution_callback_and_mocks()
+        dft_phase, _ = self._create_mocked_default_phase_and_mocks()
 
-        # mock inner method _handle_execute_command
+        executor = SupervisedExecutor(
+            exec_dir=Path("/mock/dir"),
+            log_file=Path("/mock/log.txt"),
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
+        )
+
+        with (
+            patch("pathlib.Path.mkdir"),
+            patch("builtins.open", new_callable=mock_open),
+            patch.object(executor, "_handle_execute_command", return_value=0) as mock_handle,
+        ):
+            executor.execute(["echo", "test"])
+            mock_handle.assert_called_once_with(["echo", "test"])
 
     def test_execute_returns_handle_execute_retcode(self) -> None:
         """Test that execute surfaces the retcode."""
+        cb, _ = self._create_execution_callback_and_mocks()
+        dft_phase, _ = self._create_mocked_default_phase_and_mocks()
 
-        # mock inner method _handle_execute_command
+        executor = SupervisedExecutor(
+            exec_dir=Path("/mock/dir"),
+            log_file=Path("/mock/log.txt"),
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
+        )
+
+        with (
+            patch("pathlib.Path.mkdir"),
+            patch("builtins.open", new_callable=mock_open),
+            patch.object(executor, "_handle_execute_command", return_value=42),
+        ):
+            retcode = executor.execute(["echo", "test"])
+            self.assertEqual(retcode, 42)
 
     # STATE MACHINE tests for _parse_output_line
     def test_parse_output_line_declared_phase_evaluates_exit(self) -> None:
         """Test that _parse_output_line completes phase when exit is detected."""
         mock_phase, phase_mocks = self._create_mocked_phase_and_mocks()
-        executor, mocks = self._create_executor_and_mocks(phases=[mock_phase])
+        cb, cb_mocks = self._create_execution_callback_and_mocks()
+        dft_phase, _ = self._create_mocked_default_phase_and_mocks()
+
+        executor = SupervisedExecutor(
+            exec_dir=Path("/mock/dir"),
+            log_file=Path("/mock/log.txt"),
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
+            phases=[mock_phase],  # type: ignore[arg-type]
+        )
 
         # Set phase as active
         executor._active_declared_phase = mock_phase
@@ -259,12 +312,21 @@ class TestSupervisedExecutor(unittest.TestCase):
         self.assertEqual(executor._accumulated_reward, 100)
 
         # Verify progress callback was called
-        mocks["execution_callback"].on_progress.assert_called()
+        cb_mocks["on_progress"].assert_called()
 
     def test_parse_output_line_declared_phase_evaluates_next_subphase(self) -> None:
         """Test that _parse_output_line completes subphase when transition is detected."""
         mock_phase, phase_mocks = self._create_mocked_phase_and_mocks()
-        executor, mocks = self._create_executor_and_mocks(phases=[mock_phase])
+        cb, cb_mocks = self._create_execution_callback_and_mocks()
+        dft_phase, _ = self._create_mocked_default_phase_and_mocks()
+
+        executor = SupervisedExecutor(
+            exec_dir=Path("/mock/dir"),
+            log_file=Path("/mock/log.txt"),
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
+            phases=[mock_phase],  # type: ignore[arg-type]
+        )
 
         # Set phase as active
         executor._active_declared_phase = mock_phase
@@ -287,16 +349,25 @@ class TestSupervisedExecutor(unittest.TestCase):
         # Verify phase is still active
         self.assertEqual(executor._active_declared_phase, mock_phase)
 
-        # Verify accumulated percentage updated
-        self.assertEqual(executor._accumulated_percentage, 25)
+        # Verify accumulated reward updated
+        self.assertEqual(executor._accumulated_reward, 25)
 
         # Verify progress callback was called
-        mocks["execution_callback"].on_progress.assert_called()
+        cb_mocks["on_progress"].assert_called()
 
     def test_parse_output_line_declared_phase_evaluates_progress(self) -> None:
         """Test that _parse_output_line increments progress when event is detected."""
         mock_phase, phase_mocks = self._create_mocked_phase_and_mocks()
-        executor, mocks = self._create_executor_and_mocks(phases=[mock_phase])
+        cb, cb_mocks = self._create_execution_callback_and_mocks()
+        dft_phase, _ = self._create_mocked_default_phase_and_mocks()
+
+        executor = SupervisedExecutor(
+            exec_dir=Path("/mock/dir"),
+            log_file=Path("/mock/log.txt"),
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
+            phases=[mock_phase],  # type: ignore[arg-type]
+        )
 
         # Set phase as active
         executor._active_declared_phase = mock_phase
@@ -320,16 +391,25 @@ class TestSupervisedExecutor(unittest.TestCase):
         # Verify phase is still active
         self.assertEqual(executor._active_declared_phase, mock_phase)
 
-        # Verify accumulated percentage updated
-        self.assertEqual(executor._accumulated_percentage, 5)
+        # Verify accumulated reward updated
+        self.assertEqual(executor._accumulated_reward, 5)
 
         # Verify progress callback was called
-        mocks["execution_callback"].on_progress.assert_called()
+        cb_mocks["on_progress"].assert_called()
 
     def test_parse_output_line_no_active_phase_enters_declared_phase(self) -> None:
         """Test that _parse_output_line enters declared phase when signal is detected."""
         mock_phase, phase_mocks = self._create_mocked_phase_and_mocks()
-        executor, mocks = self._create_executor_and_mocks(phases=[mock_phase])
+        cb, cb_mocks = self._create_execution_callback_and_mocks()
+        dft_phase, _ = self._create_mocked_default_phase_and_mocks()
+
+        executor = SupervisedExecutor(
+            exec_dir=Path("/mock/dir"),
+            log_file=Path("/mock/log.txt"),
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
+            phases=[mock_phase],  # type: ignore[arg-type]
+        )
 
         # Ensure no phase is active (default phase active)
         executor._active_declared_phase = None
@@ -349,12 +429,21 @@ class TestSupervisedExecutor(unittest.TestCase):
         self.assertEqual(executor._active_declared_phase, mock_phase)
 
         # Verify progress callback was called
-        mocks["execution_callback"].on_progress.assert_called()
+        cb_mocks["on_progress"].assert_called()
 
     def test_parse_output_line_no_active_phase_evaluates_default_phase_progress(self) -> None:
         """Test that _parse_output_line tracks default phase progress."""
         mock_phase, phase_mocks = self._create_mocked_phase_and_mocks()
-        executor, mocks = self._create_executor_and_mocks(phases=[mock_phase])
+        cb, cb_mocks = self._create_execution_callback_and_mocks()
+        dft_phase, dft_phase_mocks = self._create_mocked_default_phase_and_mocks()
+
+        executor = SupervisedExecutor(
+            exec_dir=Path("/mock/dir"),
+            log_file=Path("/mock/log.txt"),
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
+            phases=[mock_phase],  # type: ignore[arg-type]
+        )
 
         # Ensure no phase is active (default phase active)
         executor._active_declared_phase = None
@@ -362,31 +451,40 @@ class TestSupervisedExecutor(unittest.TestCase):
 
         # Configure default phase progress to be detected
         phase_mocks["evaluate_enter"].return_value = False
-        mocks["default_phase"]["evaluate_progress"].return_value = True
-        mocks["default_phase"]["complete_progress_event"].return_value = 10
+        dft_phase_mocks["evaluate_progress"].return_value = True
+        dft_phase_mocks["complete_progress_event"].return_value = 10
 
         # Parse a line
         executor._parse_output_line("default progress signal")
 
         # Verify default phase progress was evaluated
-        mocks["default_phase"]["evaluate_progress"].assert_called_once_with("default progress signal")
+        dft_phase_mocks["evaluate_progress"].assert_called_once_with("default progress signal")
 
         # Verify progress event was completed
-        mocks["default_phase"]["complete_progress_event"].assert_called_once()
+        dft_phase_mocks["complete_progress_event"].assert_called_once()
 
         # Verify no declared phase is active
         self.assertIsNone(executor._active_declared_phase)
 
-        # Verify accumulated percentage updated
-        self.assertEqual(executor._accumulated_percentage, 10)
+        # Verify accumulated reward updated
+        self.assertEqual(executor._accumulated_reward, 10)
 
         # Verify progress callback was called
-        mocks["execution_callback"].on_progress.assert_called()
+        cb_mocks["on_progress"].assert_called()
 
     def test_parse_output_line_no_match_does_not_emit_progress(self) -> None:
         """Test that _parse_output_line does not emit progress when no patterns match."""
         mock_phase, phase_mocks = self._create_mocked_phase_and_mocks()
-        executor, mocks = self._create_executor_and_mocks(phases=[mock_phase])
+        cb, cb_mocks = self._create_execution_callback_and_mocks()
+        dft_phase, dft_phase_mocks = self._create_mocked_default_phase_and_mocks()
+
+        executor = SupervisedExecutor(
+            exec_dir=Path("/mock/dir"),
+            log_file=Path("/mock/log.txt"),
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
+            phases=[mock_phase],  # type: ignore[arg-type]
+        )
 
         # Ensure no phase is active
         executor._active_declared_phase = None
@@ -394,22 +492,31 @@ class TestSupervisedExecutor(unittest.TestCase):
 
         # Configure all evaluations to return False
         phase_mocks["evaluate_enter"].return_value = False
-        mocks["default_phase"]["evaluate_progress"].return_value = False
+        dft_phase_mocks["evaluate_progress"].return_value = False
 
         # Parse a line
         executor._parse_output_line("no match")
 
         # Verify no progress callback was called
-        mocks["execution_callback"].on_progress.assert_not_called()
+        cb_mocks["on_progress"].assert_not_called()
 
-        # Verify accumulated percentage unchanged
-        self.assertEqual(executor._accumulated_percentage, 0)
+        # Verify accumulated reward unchanged
+        self.assertEqual(executor._accumulated_reward, 0)
 
     def test_parse_output_line_phase_exit_moves_to_next_phase(self) -> None:
         """Test that phase exit correctly updates next phase index."""
         mock_phase1, phase1_mocks = self._create_mocked_phase_and_mocks()
         mock_phase2, _ = self._create_mocked_phase_and_mocks()
-        executor, _ = self._create_executor_and_mocks(phases=[mock_phase1, mock_phase2])
+        cb, _ = self._create_execution_callback_and_mocks()
+        dft_phase, _ = self._create_mocked_default_phase_and_mocks()
+
+        executor = SupervisedExecutor(
+            exec_dir=Path("/mock/dir"),
+            log_file=Path("/mock/log.txt"),
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
+            phases=[mock_phase1, mock_phase2],  # type: ignore[arg-type]
+        )
 
         # Set first phase as active
         executor._active_declared_phase = mock_phase1
@@ -436,46 +543,214 @@ class TestSupervisedExecutor(unittest.TestCase):
         self.assertEqual(executor._next_declared_phase, mock_phase2)
 
     # HANDLE EXECUTION tests
-    @patch("jupyter_deploy.prompt_handler.PromptHandler")
-    def test_handle_execute_command_starts_process_and_prompt_handler(self, mock_prompt_handler_cls: Mock) -> None:
-        mock_prompt_handler, prompt_handler_mocks = self._create_mocked_prompt_handler_with_mocks()
-        mock_prompt_handler_cls.return_value = mock_prompt_handler
-
-        # assert on process:
-        # - cmd is correct
-        # - process working dir
-        # - pipe for all stdin, stdout, stderr
-        # - call wait
-
-        # assert on prompt handler
-        # - process is passed
-        # - callback methods are set
-        # - buffer size is > 50
-        # - prompt check chars is set
-        pass
-
-    @patch("jupyter_deploy.prompt_handler.PromptHandler")
-    def test_handle_execute_command_calls_on_execution_error_on_failure(self, mock_prompt_handler_cls: Mock) -> None:
-        mock_prompt_handler, prompt_handler_mocks = self._create_mocked_prompt_handler_with_mocks()
-        mock_prompt_handler_cls.return_value = mock_prompt_handler
-        pass
-
-    @patch("jupyter_deploy.prompt_handler.PromptHandler")
-    def test_handle_execute_command_does_not_call_on_execution_error_on_success(
-        self, mock_prompt_handler_cls: Mock
+    @patch("subprocess.Popen")
+    @patch("jupyter_deploy.engine.supervised_executor.PromptHandler")
+    def test_handle_execute_command_starts_process_and_prompt_handler(
+        self, mock_prompt_handler_cls: Mock, mock_popen: Mock
     ) -> None:
+        cb, _ = self._create_execution_callback_and_mocks()
+        dft_phase, _ = self._create_mocked_default_phase_and_mocks()
+
+        executor = SupervisedExecutor(
+            exec_dir=Path("/mock/dir"),
+            log_file=Path("/mock/log.txt"),
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
+            prompt_check_chars=":",
+        )
+
         mock_prompt_handler, prompt_handler_mocks = self._create_mocked_prompt_handler_with_mocks()
         mock_prompt_handler_cls.return_value = mock_prompt_handler
-        pass
 
-    def test_handle_execute_calls_callback_on_log_line_when_prompt_handler_on_line_fires(self) -> None:
-        # call via the PromptHandler.on_line()
-        pass
+        mock_process, _ = self._create_mock_process_with_output(retcode=0)
+        mock_popen.return_value = mock_process
 
-    def test_handle_execute_calls_parse_output_line_when_prompt_handler_on_line_fires(self) -> None:
-        # call via the PromptHandler.on_line()
-        pass
+        executor._handle_execute_command(["echo", "test"])
 
-    def test_handle_execute_calls_handle_interaction_when_prompt_handler_on_prompt_fires(self) -> None:
-        # call via the PromptHandler.on_line()
-        pass
+        # Verify process was created correctly
+        mock_popen.assert_called_once()
+        call_kwargs = mock_popen.call_args.kwargs
+        self.assertEqual(call_kwargs["cwd"], Path("/mock/dir"))
+        self.assertEqual(call_kwargs["stdin"], subprocess.PIPE)
+        self.assertEqual(call_kwargs["stdout"], subprocess.PIPE)
+        self.assertEqual(call_kwargs["stderr"], subprocess.PIPE)
+        self.assertTrue(call_kwargs["text"])
+        self.assertEqual(call_kwargs["bufsize"], 0)
+
+        # Verify prompt handler was created
+        mock_prompt_handler_cls.assert_called_once()
+        ph_kwargs = mock_prompt_handler_cls.call_args.kwargs
+        self.assertEqual(ph_kwargs["process"], mock_process)
+        self.assertIsNotNone(ph_kwargs["on_line"])
+        self.assertIsNotNone(ph_kwargs["is_prompt"])
+        self.assertIsNotNone(ph_kwargs["on_prompt"])
+        self.assertIsNone(ph_kwargs["on_char"])
+        self.assertIsNotNone(ph_kwargs["on_stderr"])
+        self.assertEqual(ph_kwargs["buffer_size"], 200)
+        self.assertEqual(ph_kwargs["prompt_check_chars"], ":")
+
+        # Verify prompt handler was started
+        prompt_handler_mocks["start"].assert_called_once()
+
+        # Verify process.wait() was called
+        mock_process.wait.assert_called_once()
+
+    @patch("subprocess.Popen")
+    @patch("jupyter_deploy.engine.supervised_executor.PromptHandler")
+    def test_handle_execute_command_calls_on_execution_error_on_failure(
+        self, mock_prompt_handler_cls: Mock, mock_popen: Mock
+    ) -> None:
+        cb, cb_mocks = self._create_execution_callback_and_mocks()
+        dft_phase, _ = self._create_mocked_default_phase_and_mocks()
+
+        executor = SupervisedExecutor(
+            exec_dir=Path("/mock/dir"),
+            log_file=Path("/mock/log.txt"),
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
+        )
+
+        mock_prompt_handler, _ = self._create_mocked_prompt_handler_with_mocks()
+        mock_prompt_handler_cls.return_value = mock_prompt_handler
+
+        mock_process, _ = self._create_mock_process_with_output(retcode=1)
+        mock_popen.return_value = mock_process
+
+        retcode = executor._handle_execute_command(["false"])
+
+        # Verify on_execution_error was called with retcode
+        cb_mocks["on_execution_error"].assert_called_once_with(1)
+        self.assertEqual(retcode, 1)
+
+    @patch("subprocess.Popen")
+    @patch("jupyter_deploy.engine.supervised_executor.PromptHandler")
+    def test_handle_execute_command_does_not_call_on_execution_error_on_success(
+        self, mock_prompt_handler_cls: Mock, mock_popen: Mock
+    ) -> None:
+        cb, cb_mocks = self._create_execution_callback_and_mocks()
+        dft_phase, _ = self._create_mocked_default_phase_and_mocks()
+
+        executor = SupervisedExecutor(
+            exec_dir=Path("/mock/dir"),
+            log_file=Path("/mock/log.txt"),
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
+        )
+
+        mock_prompt_handler, _ = self._create_mocked_prompt_handler_with_mocks()
+        mock_prompt_handler_cls.return_value = mock_prompt_handler
+
+        mock_process, _ = self._create_mock_process_with_output(retcode=0)
+        mock_popen.return_value = mock_process
+
+        retcode = executor._handle_execute_command(["true"])
+
+        # Verify on_execution_error was NOT called
+        cb_mocks["on_execution_error"].assert_not_called()
+        self.assertEqual(retcode, 0)
+
+    @patch("subprocess.Popen")
+    @patch("jupyter_deploy.engine.supervised_executor.PromptHandler")
+    def test_handle_execute_calls_callback_on_log_line_when_prompt_handler_on_line_fires(
+        self, mock_prompt_handler_cls: Mock, mock_popen: Mock
+    ) -> None:
+        cb, cb_mocks = self._create_execution_callback_and_mocks()
+        dft_phase, _ = self._create_mocked_default_phase_and_mocks()
+
+        executor = SupervisedExecutor(
+            exec_dir=Path("/mock/dir"),
+            log_file=Path("/mock/log.txt"),
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
+        )
+
+        mock_prompt_handler, _ = self._create_mocked_prompt_handler_with_mocks()
+        mock_prompt_handler_cls.return_value = mock_prompt_handler
+
+        mock_process, _ = self._create_mock_process_with_output(retcode=0)
+        mock_popen.return_value = mock_process
+
+        with patch("builtins.open", new_callable=mock_open):
+            executor._handle_execute_command(["echo", "test"])
+
+        # Extract the on_line callback from constructor call
+        call_kwargs = mock_prompt_handler_cls.call_args.kwargs
+        on_line_callback: Callable[[str], None] = call_kwargs["on_line"]
+
+        # Simulate PromptHandler calling on_line
+        on_line_callback("test output\n")
+
+        # Verify callback was called
+        cb_mocks["on_log_line"].assert_called_with("test output")
+
+    @patch("subprocess.Popen")
+    @patch("jupyter_deploy.engine.supervised_executor.PromptHandler")
+    def test_handle_execute_calls_parse_output_line_when_prompt_handler_on_line_fires(
+        self, mock_prompt_handler_cls: Mock, mock_popen: Mock
+    ) -> None:
+        cb, _ = self._create_execution_callback_and_mocks()
+        dft_phase, _ = self._create_mocked_default_phase_and_mocks()
+
+        executor = SupervisedExecutor(
+            exec_dir=Path("/mock/dir"),
+            log_file=Path("/mock/log.txt"),
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
+        )
+
+        mock_prompt_handler, _ = self._create_mocked_prompt_handler_with_mocks()
+        mock_prompt_handler_cls.return_value = mock_prompt_handler
+
+        mock_process, _ = self._create_mock_process_with_output(retcode=0)
+        mock_popen.return_value = mock_process
+
+        with (
+            patch("builtins.open", new_callable=mock_open),
+            patch.object(executor, "_parse_output_line") as mock_parse,
+        ):
+            executor._handle_execute_command(["echo", "test"])
+
+            # Extract the on_line callback from constructor call
+            call_kwargs = mock_prompt_handler_cls.call_args.kwargs
+            on_line_callback: Callable[[str], None] = call_kwargs["on_line"]
+
+            # Simulate PromptHandler calling on_line
+            on_line_callback("test output\n")
+
+            # Verify _parse_output_line was called
+            mock_parse.assert_called_with("test output")
+
+    @patch("subprocess.Popen")
+    @patch("jupyter_deploy.engine.supervised_executor.PromptHandler")
+    def test_handle_execute_calls_handle_interaction_when_prompt_handler_on_prompt_fires(
+        self, mock_prompt_handler_cls: Mock, mock_popen: Mock
+    ) -> None:
+        cb, cb_mocks = self._create_execution_callback_and_mocks()
+        cb_mocks["is_requesting_user_input"].return_value = True
+        dft_phase, _ = self._create_mocked_default_phase_and_mocks()
+
+        executor = SupervisedExecutor(
+            exec_dir=Path("/mock/dir"),
+            log_file=Path("/mock/log.txt"),
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
+        )
+
+        mock_prompt_handler, _ = self._create_mocked_prompt_handler_with_mocks()
+        mock_prompt_handler_cls.return_value = mock_prompt_handler
+
+        mock_process, _ = self._create_mock_process_with_output(retcode=0)
+        mock_popen.return_value = mock_process
+
+        with patch("builtins.open", new_callable=mock_open):
+            executor._handle_execute_command(["echo", "test"])
+
+        # Extract the on_prompt callback from constructor call
+        call_kwargs = mock_prompt_handler_cls.call_args.kwargs
+        on_prompt_callback: Callable[[str], None] = call_kwargs["on_prompt"]
+
+        # Simulate PromptHandler calling on_prompt
+        on_prompt_callback("Enter value:")
+
+        # Verify handle_interaction was called
+        cb_mocks["handle_interaction"].assert_called_with("Enter value:")

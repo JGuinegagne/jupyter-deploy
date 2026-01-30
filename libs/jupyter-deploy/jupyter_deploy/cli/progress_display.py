@@ -180,9 +180,13 @@ class ProgressDisplayManager:
 
         # Print error context
         if lines:
-            self.console.print("[red]Error context:[/red]")
+            self.console.rule("[red]Error context[/red]")
+            # Print context lines raw (so terminal interprets ANSI codes from terraform)
+            print()  # Blank line for spacing
             for line in lines:
-                self.console.print(f"  {line}")
+                print(line)
+
+            self.console.rule()
 
     def _get_display_panel(self) -> Panel:
         """Create Rich Panel with progress bar and log box.

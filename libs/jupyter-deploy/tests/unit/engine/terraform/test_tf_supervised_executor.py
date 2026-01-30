@@ -46,6 +46,21 @@ class TestCreateTerraformExecutorNoManifestNorPlan(unittest.TestCase):
 
         self.assertIs(executor._execution_callback, execution_cb)
 
+    def test_overrides_prompt_chars_in_executor(self) -> None:
+        """Test that callbacks are passed correctly to executor."""
+        exec_dir = Path("/mock/exec")
+        log_file = Path("/mock/log.txt")
+        execution_cb = Mock()
+
+        executor = create_terraform_executor(
+            sequence_id=TerraformSequenceId.config_init,
+            exec_dir=exec_dir,
+            log_file=log_file,
+            execution_callback=execution_cb,
+        )
+
+        self.assertEqual(executor.prompt_check_chars, ":")
+
     def test_return_a_supervisor_executor_for_all_terraform_sequence_id(self) -> None:
         """Test that SupervisedExecutor is returned for all sequence IDs."""
         exec_dir = Path("/mock/exec")
