@@ -5,6 +5,7 @@ from unittest.mock import Mock
 from jupyter_deploy.engine.terraform.tf_enums import TerraformSequenceId
 from jupyter_deploy.engine.terraform.tf_supervised_execution_callback import (
     ANSI_ESCAPE,
+    TerraformNoopExecutionCallback,
     TerraformSupervisedExecutionCallback,
 )
 
@@ -425,3 +426,82 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
         cleaned = ANSI_ESCAPE.sub("", text_with_ansi)
 
         self.assertEqual(cleaned, "Orange text")
+
+
+class TestTerraformNoopExecutionCallback(unittest.TestCase):
+    """Test cases for TerraformNoopExecutionCallback."""
+
+    def test_is_requesting_user_input_detects_terraform_prompts(self) -> None:
+        """Test that is_requesting_user_input detects terraform prompts."""
+        callback = TerraformNoopExecutionCallback()
+
+        # Should detect terraform prompts
+        self.assertTrue(callback.is_requesting_user_input("Enter a value:"))
+        self.assertTrue(callback.is_requesting_user_input("  Enter a value:"))
+        self.assertTrue(callback.is_requesting_user_input("  Enter a value:  "))
+
+    def test_is_requesting_user_input_handles_ansi_codes(self) -> None:
+        """Test that is_requesting_user_input handles ANSI codes in prompts."""
+        callback = TerraformNoopExecutionCallback()
+
+        # Terraform wraps prompts with ANSI codes
+        ansi_prompt = "\x1b[1m  Enter a value:\x1b[0m"
+        self.assertTrue(callback.is_requesting_user_input(ansi_prompt))
+
+    def test_is_requesting_user_input_rejects_non_prompts(self) -> None:
+        """Test that is_requesting_user_input rejects non-prompt patterns."""
+        callback = TerraformNoopExecutionCallback()
+
+        # Should not detect other patterns
+        self.assertFalse(callback.is_requesting_user_input("PROMPT:"))
+        self.assertFalse(callback.is_requesting_user_input("Some random text"))
+        self.assertFalse(callback.is_requesting_user_input("Enter a value"))  # Missing colon
+        self.assertFalse(callback.is_requesting_user_input("Please enter the value:"))
+        self.assertFalse(callback.is_requesting_user_input("Enter a value: should not match"))  # Not at end
+
+    def test_is_requesting_user_input_handles_empty_input(self) -> None:
+        """Test that is_requesting_user_input handles empty/whitespace input."""
+        callback = TerraformNoopExecutionCallback()
+
+        self.assertFalse(callback.is_requesting_user_input(""))
+        self.assertFalse(callback.is_requesting_user_input("   "))
+
+    def test_handle_interaction_prints_to_stdout(self) -> None:
+        """Test that handle_interaction prints prompt lines to stdout without newline."""
+        import io
+        import sys
+
+        callback = TerraformNoopExecutionCallback()
+
+        # Capture stdout
+        captured_output = io.StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured_output
+
+        try:
+            callback.handle_interaction("  Enter a value:")
+            output = captured_output.getvalue()
+            # Should print with trailing space but no newline
+            self.assertEqual(output, "  Enter a value: ")
+        finally:
+            sys.stdout = old_stdout
+
+    def test_handle_interaction_adds_trailing_space(self) -> None:
+        """Test that handle_interaction adds trailing space if not present."""
+        import io
+        import sys
+
+        callback = TerraformNoopExecutionCallback()
+
+        # Capture stdout
+        captured_output = io.StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured_output
+
+        try:
+            # Prompt already has trailing space
+            callback.handle_interaction("Enter a value: ")
+            output = captured_output.getvalue()
+            self.assertEqual(output, "Enter a value: ")
+        finally:
+            sys.stdout = old_stdout

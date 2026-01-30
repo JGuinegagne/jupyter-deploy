@@ -21,6 +21,14 @@ class ConcreteEngineCallback(EngineExecutionCallback):
         return True
 
 
+class ConcreteNoopCallback(NoopExecutionCallback):
+    """Concrete implementation of NoopExecutionCallback for testing."""
+
+    def is_requesting_user_input(self, line: str) -> bool:
+        """Test implementation that never detects prompts."""
+        return False
+
+
 class TestEngineExecutionCallback(unittest.TestCase):
     """Test cases for EngineExecutionCallback."""
 
@@ -161,27 +169,29 @@ class TestEngineExecutionCallback(unittest.TestCase):
 
 
 class TestNoopExecutionCallback(unittest.TestCase):
-    """Test cases for NoopExecutionCallback."""
+    """Test cases for NoopExecutionCallback base class."""
 
     def test_should_parse_progress_returns_false(self) -> None:
         """Test that should_parse_progress returns False for NoopExecutionCallback."""
-        callback = NoopExecutionCallback()
+        callback = ConcreteNoopCallback()
         self.assertFalse(callback.should_parse_progress())
 
     def test_is_waiting_for_interaction_returns_false(self) -> None:
         """Test that is_waiting_for_interaction always returns False for NoopExecutionCallback."""
-        callback = NoopExecutionCallback()
+        callback = ConcreteNoopCallback()
         self.assertFalse(callback.is_waiting_for_interaction())
 
-    def test_is_requesting_user_input_always_false(self) -> None:
-        """Test that is_requesting_user_input always returns False."""
-        callback = NoopExecutionCallback()
+    def test_is_requesting_user_input_is_abstract(self) -> None:
+        """Test that is_requesting_user_input must be implemented by subclasses."""
+        # ConcreteNoopCallback provides a test implementation that returns False
+        callback = ConcreteNoopCallback()
         self.assertFalse(callback.is_requesting_user_input("PROMPT:"))
         self.assertFalse(callback.is_requesting_user_input("Enter a value:"))
+        self.assertFalse(callback.is_requesting_user_input("Some random text"))
 
     def test_handle_interaction_is_noop(self) -> None:
         """Test that handle_interaction does nothing."""
-        callback = NoopExecutionCallback()
+        callback = ConcreteNoopCallback()
         # Should not raise any errors
         callback.handle_interaction("Test line")
 
@@ -190,7 +200,7 @@ class TestNoopExecutionCallback(unittest.TestCase):
         import io
         import sys
 
-        callback = NoopExecutionCallback()
+        callback = ConcreteNoopCallback()
 
         # Capture stdout
         captured_output = io.StringIO()
@@ -206,13 +216,13 @@ class TestNoopExecutionCallback(unittest.TestCase):
 
     def test_on_progress_is_noop(self) -> None:
         """Test that on_progress does nothing."""
-        callback = NoopExecutionCallback()
+        callback = ConcreteNoopCallback()
         progress = ExecutionProgress(label="Test", reward=50)
         # Should not raise any errors
         callback.on_progress(progress)
 
     def test_on_execution_error_is_noop(self) -> None:
         """Test that on_execution_error does nothing."""
-        callback = NoopExecutionCallback()
+        callback = ConcreteNoopCallback()
         # Should not raise any errors
         callback.on_execution_error(retcode=1)

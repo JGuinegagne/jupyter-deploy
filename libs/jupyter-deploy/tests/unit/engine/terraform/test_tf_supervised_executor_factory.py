@@ -8,7 +8,7 @@ import yaml
 from jupyter_deploy.engine.supervised_executor import SupervisedExecutor
 from jupyter_deploy.engine.terraform.tf_constants import TerraformSequenceId
 from jupyter_deploy.engine.terraform.tf_plan_metadata import TerraformPlanMetadata
-from jupyter_deploy.engine.terraform.tf_supervised_executor import create_terraform_executor
+from jupyter_deploy.engine.terraform.tf_supervised_executor_factory import create_terraform_executor
 from jupyter_deploy.manifest import JupyterDeployManifestV1
 
 
@@ -93,7 +93,7 @@ class TestCreateTerraformExecutorNoManifestNorPlan(unittest.TestCase):
         self.assertEqual(len(executor._declared_phases), 0)
 
     def test_return_executor_with_default_phase_for_config_plan(self) -> None:
-        """Test config_plan creates executor with correct default phase."""
+        """Test config_plan creates executor with correct default phase and declared phase."""
         exec_dir = Path("/mock/exec")
         log_file = Path("/mock/log.txt")
         execution_cb = Mock()
@@ -106,7 +106,8 @@ class TestCreateTerraformExecutorNoManifestNorPlan(unittest.TestCase):
         )
 
         self.assertGreaterEqual(len(executor._default_phase.label), 1)
-        self.assertEqual(len(executor._declared_phases), 0)
+        self.assertEqual(len(executor._declared_phases), 1)
+        self.assertGreaterEqual(len(executor._declared_phases[0].label), 1)
 
     def test_config_sequence_executors_have_consistent_weights(self) -> None:
         """Test that config_init and config_plan have consistent weight distribution."""
@@ -217,7 +218,7 @@ class TestCreateTerraformExecutorWithManifest(unittest.TestCase):
         self.assertEqual(executor._default_phase.label, "Configuring terraform dependencies")
 
     def test_return_manifest_based_executor_for_config_plan(self) -> None:
-        """Test config_plan uses manifest configuration."""
+        """Test config_plan uses manifest configuration (no declared phases)."""
         exec_dir = Path("/mock/exec")
         log_file = Path("/mock/log.txt")
         execution_cb = Mock()
@@ -232,6 +233,8 @@ class TestCreateTerraformExecutorWithManifest(unittest.TestCase):
 
         # Manifest specifies label "Generating plan" for config.terraform-plan
         self.assertEqual(executor._default_phase.label, "Generating plan")
+        # Manifest doesn't define phases, so no declared phases
+        self.assertEqual(len(executor._declared_phases), 0)
 
     def test_return_manifest_based_executor_for_up_apply(self) -> None:
         """Test up_apply uses manifest configuration with phases."""

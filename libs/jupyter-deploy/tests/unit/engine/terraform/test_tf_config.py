@@ -246,7 +246,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         # Assert
         mock_vars_fns["reset_recorded_secrets"].assert_called_once()
 
-    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor_factory.create_terraform_executor")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
     def test_configure_calls_tf_init(self, mock_variable_handler_cls: Mock, mock_create_executor: Mock) -> None:
         # Arrange
@@ -271,7 +271,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         # Verify execute was called on the executor
         self.assertEqual(mock_executor.execute.call_count, 2)
 
-    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor_factory.create_terraform_executor")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
     def test_configure_calls_tf_plan_with_a_named_plan(
         self, mock_variable_handler_cls: Mock, mock_create_executor: Mock
@@ -296,7 +296,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         self.assertEqual(mock_executor.execute.call_count, 2)
         mock_vars_fns["sync_engine_varfiles_with_project_variables_config"].assert_called_once()
 
-    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor_factory.create_terraform_executor")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
     def test_configure_calls_tf_plan_passes_preset(
         self, mock_variable_handler_cls: Mock, mock_create_executor: Mock
@@ -325,7 +325,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_vars_fns["sync_engine_varfiles_with_project_variables_config"].assert_called_once()
         mock_vars_fns["create_filtered_preset_file"].assert_called_once_with(expect_called_path)
 
-    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor_factory.create_terraform_executor")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
     def test_configure_calls_tf_plan_with_variable_override(
         self, mock_variable_handler_cls: Mock, mock_create_executor: Mock
@@ -389,7 +389,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         self.assertEqual("-var", plan_cmds[plan_cmds_len - 2])
         self.assertEqual('var5={"Key1": "Val1", "Key2": "Val2"}', plan_cmds[plan_cmds_len - 1])
 
-    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor_factory.create_terraform_executor")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
     def test_configure_does_not_call_plan_if_tf_init_fails(
         self, mock_variable_handler_cls: Mock, mock_create_executor: Mock
@@ -415,7 +415,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         self.assertEqual(mock_executor.execute.call_count, 1)
         mock_vars_fns["sync_engine_varfiles_with_project_variables_config"].assert_not_called()
 
-    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor_factory.create_terraform_executor")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
     def test_configure_does_not_call_plan_if_tf_init_timesout(
         self, mock_variable_handler_cls: Mock, mock_create_executor: Mock
@@ -439,7 +439,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         self.assertEqual(mock_executor.execute.call_count, 1)
         mock_vars_fns["sync_engine_varfiles_with_project_variables_config"].assert_not_called()
 
-    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor_factory.create_terraform_executor")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
     def test_configure_print_to_console_if_plan_fails(
         self, mock_variable_handler_cls: Mock, mock_create_executor: Mock
@@ -465,7 +465,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         self.assertEqual(mock_executor.execute.call_count, 2)
         mock_vars_fns["sync_engine_varfiles_with_project_variables_config"].assert_called_once()
 
-    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor_factory.create_terraform_executor")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
     def test_configure_print_to_console_if_plan_timesout(
         self, mock_variable_handler_cls: Mock, mock_create_executor: Mock
@@ -818,7 +818,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_vars_fns["sync_project_variables_config"].assert_not_called()
 
     @patch("jupyter_deploy.engine.terraform.tf_config.TerraformSupervisedExecutionCallback")
-    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor_factory.create_terraform_executor")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
     def test_configure_with_terminal_handler_uses_supervised_callback(
         self,
@@ -876,8 +876,8 @@ class TestTerraformConfigHandler(unittest.TestCase):
         plan_executor_call = mock_create_executor.call_args_list[1]
         self.assertEqual(plan_executor_call.kwargs["execution_callback"], mock_callback)
 
-    @patch("jupyter_deploy.engine.terraform.tf_config.NoopExecutionCallback")
-    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_config.TerraformNoopExecutionCallback")
+    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor_factory.create_terraform_executor")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
     def test_configure_without_terminal_handler_uses_noop_callback(
         self,
@@ -885,7 +885,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_create_executor: Mock,
         mock_noop_callback_cls: Mock,
     ) -> None:
-        """Test that configure without terminal_handler uses NoopExecutionCallback."""
+        """Test that configure without terminal_handler uses TerraformNoopExecutionCallback."""
         # Arrange
         mock_vars_handler, _ = self.get_mock_variable_handler_and_fns()
         mock_variable_handler_cls.return_value = mock_vars_handler
@@ -913,7 +913,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         # Assert
         self.assertTrue(result)
 
-        # Verify NoopExecutionCallback was created twice (init and plan)
+        # Verify TerraformNoopExecutionCallback was created twice (init and plan)
         self.assertEqual(mock_noop_callback_cls.call_count, 2)
 
         # Verify executor was created with the noop callback

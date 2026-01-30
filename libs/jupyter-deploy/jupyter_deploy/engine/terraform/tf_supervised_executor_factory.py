@@ -55,7 +55,7 @@ def create_terraform_executor(
     if sequence_id == TerraformSequenceId.config_init:
         # Init: count initialization events (backend, modules, plugins) and provider installations
         fallback_default_phase_config = JupyterDeploySupervisedExecutionDefaultPhaseV1(
-            label="Configuring terraform",
+            label="Configuring",
             **{
                 "progress-pattern": r"(Initializing|Installed|Terraform has been successfully initialized)",
                 "progress-events-estimate": 8,
@@ -64,14 +64,25 @@ def create_terraform_executor(
         end_reward = 20
 
     elif sequence_id == TerraformSequenceId.config_plan:
-        # Plan: count read/refresh events using estimates
+        # Plan: count read/refresh events, then plan generation
         fallback_default_phase_config = JupyterDeploySupervisedExecutionDefaultPhaseV1(
-            label="Planning changes",
+            label="Reading data sources",
             **{
                 "progress-pattern": r"(Read complete after|Refreshing state\.\.\. \[id=)",
-                "progress-events-estimate": 10,
+                "progress-events-estimate": 50,
             },
         )
+        fallback_phase_configs = [
+            JupyterDeploySupervisedExecutionPhaseV1(
+                label="Generating plan",
+                weight=50,  # 50% of the total progress range
+                **{
+                    "enter-pattern": r"Terraform will perform the following actions:",
+                    "progress-pattern": (r"(will be created|will be read during apply|will be destroyed)"),
+                    "progress-events-estimate": 70,
+                },
+            ),
+        ]
         start_reward = 20
         end_reward = 100
 
@@ -79,7 +90,7 @@ def create_terraform_executor(
         # Apply: count resource creation/modification events
         # Use plan.to_update dynamically if plan_metadata is available
         fallback_default_phase_config = JupyterDeploySupervisedExecutionDefaultPhaseV1(
-            label="Mutating resources",
+            label="Mutating",
             **{
                 "progress-pattern": (
                     r"(Creation complete after|Modifications complete after|Refreshing state\.\.\. \[id=)"
@@ -91,7 +102,7 @@ def create_terraform_executor(
     elif sequence_id == TerraformSequenceId.down_destroy:
         # Destroy: count resource destruction events
         fallback_default_phase_config = JupyterDeploySupervisedExecutionDefaultPhaseV1(
-            label="Evaluating resources to destroy",
+            label="Planning",
             **{
                 "progress-pattern": r"(Read complete after|Refreshing state\.\.\. \[id=)",
                 "progress-events-estimate": 50,
@@ -99,11 +110,13 @@ def create_terraform_executor(
         )
         fallback_phase_configs = [
             JupyterDeploySupervisedExecutionPhaseV1(
-                label="Destroying resources",
+                label="Destroying",
                 weight=80,
-                enter_pattern=r"Plan: \d+ to add, \d+ to change, (\d+) to destroy\.",
-                progress_events_estimate_capture_group=1,  # Extract destroy count from capture group
-                progress_pattern="Destruction complete after",
+                **{
+                    "enter-pattern": r"Plan: \d+ to add, \d+ to change, (\d+) to destroy\.",
+                    "progress-events-estimate-capture-group": 1,  # Extract destroy count from capture group
+                    "progress-pattern": "Destruction complete after",
+                },
             ),
         ]
     else:
@@ -113,7 +126,9 @@ def create_terraform_executor(
     scale_factor: float = (end_reward - start_reward) / 100
 
     # Create actual phases
-    phase_configs = manifest_phases_configs or fallback_phase_configs
+    # Use manifest phases if manifest defines command config, otherwise use fallback
+    phase_configs = manifest_phases_configs or [] if command_config is not None else fallback_phase_configs
+
     phases: list[SupervisedPhase] = []
     for phase_config in phase_configs:
         phases.append(SupervisedPhase(config=phase_config, sequence_scale_factor=scale_factor))

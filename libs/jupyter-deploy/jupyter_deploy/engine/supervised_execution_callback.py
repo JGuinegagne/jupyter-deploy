@@ -269,11 +269,12 @@ class EngineExecutionCallback(ExecutionCallbackInterface):
         ...
 
 
-class NoopExecutionCallback(ExecutionCallbackInterface):
-    """No-op execution callback for verbose mode.
+class NoopExecutionCallback(ExecutionCallbackInterface, ABC):
+    """Abstract base class for no-op execution callbacks in verbose mode.
 
-    This callback does nothing - no buffering, no progress tracking, no interaction handling.
-    Used when terminal_handler is None (verbose mode for LLMs or debugging).
+    This callback provides default no-op implementations for most methods, but requires
+    subclasses to implement engine-specific prompt detection for stdin coordination.
+    Used when terminal_handler is None (verbose mode).
     SupervisedExecutor will still print to stdout and write to log file.
     """
 
@@ -285,9 +286,20 @@ class NoopExecutionCallback(ExecutionCallbackInterface):
         """No interaction handling in verbose mode."""
         return False
 
+    @abstractmethod
     def is_requesting_user_input(self, line: str) -> bool:
-        """Always return False - no interaction handling in verbose mode."""
-        return False
+        """Detect engine-specific prompts for stdin coordination.
+
+        Subclasses must implement this to detect prompts (e.g., terraform's "Enter a value:").
+        This allows PromptHandler to coordinate stdin/stdout properly even in verbose mode.
+
+        Args:
+            line: The current output line to check
+
+        Returns:
+            True if this line is a prompt, False otherwise
+        """
+        ...
 
     def handle_interaction(self, line: str) -> None:
         """No-op - no interaction handling in verbose mode."""

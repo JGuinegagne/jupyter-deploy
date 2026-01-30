@@ -3,7 +3,7 @@
 import re
 
 from jupyter_deploy.engine.supervised_execution import InteractionContext, TerminalHandler
-from jupyter_deploy.engine.supervised_execution_callback import EngineExecutionCallback
+from jupyter_deploy.engine.supervised_execution_callback import EngineExecutionCallback, NoopExecutionCallback
 from jupyter_deploy.engine.terraform.tf_enums import TerraformSequenceId
 
 # Regex to strip ANSI escape codes from terraform output
@@ -144,3 +144,44 @@ class TerraformSupervisedExecutionCallback(EngineExecutionCallback):
         """
         # Any new line after a prompt means user has responded
         return True
+
+
+class TerraformNoopExecutionCallback(NoopExecutionCallback):
+    """No-op execution callback with terraform-specific prompt detection for verbose mode.
+
+    Extends NoopExecutionCallback to add terraform prompt detection for stdin coordination.
+    Used when terminal_handler is None (verbose mode) but we still need prompts to work.
+    """
+
+    def is_requesting_user_input(self, line: str) -> bool:
+        """Detect terraform prompts for stdin coordination.
+
+        Returns True if line ends with terraform's "Enter a value:" prompt,
+        allowing PromptHandler to coordinate stdin/stdout properly.
+
+        Args:
+            line: The current output line to check
+
+        Returns:
+            True if this line is a terraform prompt, False otherwise
+        """
+        # Cheap check first: does the line contain the prompt text?
+        if "Enter a value:" not in line:
+            return False
+
+        # Line contains prompt text - strip ANSI codes and confirm it ends with prompt
+        clean_line = ANSI_ESCAPE.sub("", line).strip()
+        return clean_line.endswith("Enter a value:")
+
+    def handle_interaction(self, line: str) -> None:
+        """Print prompt lines to stdout for verbose mode.
+
+        When prompts are detected, they skip on_log_line() and go directly to
+        handle_interaction(). We need to print them so they're visible.
+
+        Args:
+            line: The prompt line to display
+        """
+        if not line.endswith(" "):
+            line = line + " "
+        print(line, end="", flush=True)

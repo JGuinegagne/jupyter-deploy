@@ -11,8 +11,14 @@ from jupyter_deploy import cmd_utils, fs_utils, verify_utils
 from jupyter_deploy.engine.engine_config import EngineConfigHandler
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.engine.supervised_execution import ExecutionError, TerminalHandler
-from jupyter_deploy.engine.supervised_execution_callback import ExecutionCallbackInterface, NoopExecutionCallback
-from jupyter_deploy.engine.terraform import tf_plan, tf_plan_metadata, tf_supervised_executor, tf_vardefs, tf_variables
+from jupyter_deploy.engine.supervised_execution_callback import ExecutionCallbackInterface
+from jupyter_deploy.engine.terraform import (
+    tf_plan,
+    tf_plan_metadata,
+    tf_supervised_executor_factory,
+    tf_vardefs,
+    tf_variables,
+)
 from jupyter_deploy.engine.terraform.tf_constants import (
     TF_DEFAULT_PLAN_FILENAME,
     TF_ENGINE_DIR,
@@ -24,7 +30,10 @@ from jupyter_deploy.engine.terraform.tf_constants import (
     get_preset_filename,
 )
 from jupyter_deploy.engine.terraform.tf_enums import TerraformSequenceId
-from jupyter_deploy.engine.terraform.tf_supervised_execution_callback import TerraformSupervisedExecutionCallback
+from jupyter_deploy.engine.terraform.tf_supervised_execution_callback import (
+    TerraformNoopExecutionCallback,
+    TerraformSupervisedExecutionCallback,
+)
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
 from jupyter_deploy.handlers.command_history_handler import CommandHistoryHandler
 from jupyter_deploy.manifest import JupyterDeployManifest
@@ -112,8 +121,8 @@ class TerraformConfigHandler(EngineConfigHandler):
                 sequence_id=TerraformSequenceId.config_init,
             )
         else:
-            init_callback = NoopExecutionCallback()
-        init_executor = tf_supervised_executor.create_terraform_executor(
+            init_callback = TerraformNoopExecutionCallback()
+        init_executor = tf_supervised_executor_factory.create_terraform_executor(
             sequence_id=TerraformSequenceId.config_init,
             exec_dir=self.engine_dir_path,
             log_file=self._log_file,
@@ -164,9 +173,9 @@ class TerraformConfigHandler(EngineConfigHandler):
                 sequence_id=TerraformSequenceId.config_plan,
             )
         else:
-            plan_callback = NoopExecutionCallback()
+            plan_callback = TerraformNoopExecutionCallback()
 
-        plan_executor = tf_supervised_executor.create_terraform_executor(
+        plan_executor = tf_supervised_executor_factory.create_terraform_executor(
             sequence_id=TerraformSequenceId.config_plan,
             exec_dir=self.engine_dir_path,
             log_file=self._log_file,
