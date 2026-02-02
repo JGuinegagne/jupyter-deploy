@@ -33,6 +33,7 @@ e2e-build:
 # Start E2E container in background (builds image if needed)
 e2e-up:
     @echo "Starting E2E container (will build image if needed)..."
+    @mkdir -p {{justfile_directory()}}/test-results
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} up -d e2e
     @echo "E2E container started. Syncing latest code..."
     @just e2e-sync
@@ -142,17 +143,18 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="":
     # Always mount project directory dynamically
     echo "Mounting project directory: {{project_dir}}"
 
-    # Create test-results directory if it doesn't exist (for screenshots)
+    # Ensure test-results directory exists and clean old artifacts
     mkdir -p "{{justfile_directory()}}/test-results"
+    echo "Cleaning old test artifacts..."
+    rm -rf "{{justfile_directory()}}/test-results"/*
 
-    # Create temporary override file to mount the project directory and test-results
+    # Create temporary override file to mount the project directory
     OVERRIDE_FILE="{{justfile_directory()}}/docker-compose.e2e-override.yml"
     cat > "$OVERRIDE_FILE" <<EOF
     services:
       e2e:
         volumes:
           - ./{{project_dir}}:/workspace/{{project_dir}}
-          - ./test-results:/workspace/test-results
     EOF
 
     # Restart container with new mount
@@ -169,6 +171,18 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="":
         [ -n "$OVERRIDE_FILE" ] && rm -f "$OVERRIDE_FILE"
         exit 1
     fi
+
+    # Verify test-results directory is writable (detect stale mount)
+    echo "Verifying test-results directory is writable..."
+    if ! {{container-tool}} exec jupyter-deploy-e2e-aws-ec2-base bash -c "touch /workspace/test-results/.mount-check && rm /workspace/test-results/.mount-check" 2>/dev/null; then
+        echo "Error: test-results directory is not writable (stale mount detected)"
+        echo ""
+        echo "This happens when test-results was deleted while the container was running."
+        echo "To fix: just e2e-down && just e2e-up"
+        [ -n "$OVERRIDE_FILE" ] && rm -f "$OVERRIDE_FILE"
+        exit 1
+    fi
+    echo "✓ test-results directory is writable"
 
     # Build the pytest command based on deployment mode
     if [ "$IS_DEPLOYMENT_FROM_SCRATCH" = "true" ]; then
@@ -286,17 +300,18 @@ auth-setup project_dir display="${DISPLAY:-}":
     # Always mount project directory dynamically
     echo "Mounting project directory: {{project_dir}}"
 
-    # Create test-results directory if it doesn't exist (for screenshots)
+    # Ensure test-results directory exists and clean old artifacts
     mkdir -p "{{justfile_directory()}}/test-results"
+    echo "Cleaning old test artifacts..."
+    rm -rf "{{justfile_directory()}}/test-results"/*
 
-    # Create temporary override file to mount the project directory and test-results
+    # Create temporary override file to mount the project directory
     OVERRIDE_FILE="{{justfile_directory()}}/docker-compose.e2e-override.yml"
     cat > "$OVERRIDE_FILE" <<EOF
     services:
       e2e:
         volumes:
           - ./{{project_dir}}:/workspace/{{project_dir}}
-          - ./test-results:/workspace/test-results
     EOF
 
     # Restart container with new mount
@@ -306,6 +321,18 @@ auth-setup project_dir display="${DISPLAY:-}":
     # Re-sync files after restart (container loses synced files when restarted)
     echo "Re-syncing project files after mount..."
     just e2e-sync
+
+    # Verify test-results directory is writable (detect stale mount)
+    echo "Verifying test-results directory is writable..."
+    if ! {{container-tool}} exec jupyter-deploy-e2e-aws-ec2-base bash -c "touch /workspace/test-results/.mount-check && rm /workspace/test-results/.mount-check" 2>/dev/null; then
+        echo "Error: test-results directory is not writable (stale mount detected)"
+        echo ""
+        echo "This happens when test-results was deleted while the container was running."
+        echo "To fix: just e2e-down && just e2e-up"
+        [ -n "$OVERRIDE_FILE" ] && rm -f "$OVERRIDE_FILE"
+        exit 1
+    fi
+    echo "✓ test-results directory is writable"
 
     # Check if DISPLAY is set
     if [ -z "{{display}}" ]; then
@@ -384,8 +411,8 @@ auth-setup project_dir display="${DISPLAY:-}":
 
 # Clean up test artifacts and remove image
 clean-e2e:
-    rm -rf test-results .pytest_cache
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} down -v
+    rm -rf test-results .pytest_cache
     {{container-tool}} rmi {{e2e-image-name}}:{{e2e-image-tag}} || true
 
 # Full workflow: start container (builds if needed) and run tests

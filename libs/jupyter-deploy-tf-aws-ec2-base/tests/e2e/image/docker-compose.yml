@@ -18,6 +18,8 @@ services:
       - ~/.aws:/home/testuser/.aws:ro
       # Mount X11 socket for GUI applications
       - /tmp/.X11-unix:/tmp/.X11-unix
+      # Mount test-results directory for test artifacts (screenshots, logs)
+      - ./test-results:/workspace/test-results
       # Project directory will be mounted dynamically via override file in justfile
     environment:
       - DISPLAY=${DISPLAY}
