@@ -34,6 +34,9 @@ e2e-build:
 e2e-up:
     @echo "Starting E2E container (will build image if needed)..."
     @mkdir -p {{justfile_directory()}}/test-results
+    @chmod 777 {{justfile_directory()}}/test-results
+    @echo "Setting AWS credentials permissions for container access..."
+    @chmod 644 ~/.aws/credentials ~/.aws/config 2>/dev/null || true
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} up -d e2e
     @echo "E2E container started. Syncing latest code..."
     @just e2e-sync
@@ -44,8 +47,8 @@ e2e-down:
     @echo "Stopping E2E container..."
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} down
 
-# Sync project files to E2E container (for iterating without rebuilding image)
-# NOTE: If you're not seeing your changes, use 'just e2e-rebuild' instead
+# Sync project files to E2E container (for iterating without building image)
+# NOTE: If you're not seeing your changes, use 'just e2e-build' instead
 e2e-sync:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -140,25 +143,32 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="":
         echo "Mode: Test existing project ({{project_dir}})"
     fi
 
+    # Ensure AWS creds are accessible
+    echo "Setting AWS credentials permissions for container access..."
+    chmod 644 ~/.aws/credentials ~/.aws/config 2>/dev/null || true
+
     # Always mount project directory dynamically
     echo "Mounting project directory: {{project_dir}}"
 
-    # Ensure test-results directory exists and clean old artifacts
+    # Create test-results directory if it doesn't exist (for screenshots)
     mkdir -p "{{justfile_directory()}}/test-results"
+    chmod 777 "{{justfile_directory()}}/test-results"
     echo "Cleaning old test artifacts..."
     rm -rf "{{justfile_directory()}}/test-results"/*
 
-    # Create temporary override file to mount the project directory
+    # Create temporary override file to mount the project directory and test-results
     OVERRIDE_FILE="{{justfile_directory()}}/docker-compose.e2e-override.yml"
     cat > "$OVERRIDE_FILE" <<EOF
     services:
       e2e:
         volumes:
           - ./{{project_dir}}:/workspace/{{project_dir}}
+          - ./test-results:/workspace/test-results
     EOF
 
-    # Restart container with new mount
+    # Stop and restart container with new mounts (ensures clean mount state)
     echo "Restarting E2E container with project mount..."
+    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} down
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} -f "$OVERRIDE_FILE" up -d
 
     # Re-sync files after restart (container loses synced files when restarted)
@@ -297,25 +307,32 @@ auth-setup project_dir display="${DISPLAY:-}":
         exit 1
     fi
 
+    # Ensure AWS creds are accessible
+    echo "Setting AWS credentials permissions for container access..."
+    chmod 644 ~/.aws/credentials ~/.aws/config 2>/dev/null || true
+
     # Always mount project directory dynamically
     echo "Mounting project directory: {{project_dir}}"
 
-    # Ensure test-results directory exists and clean old artifacts
+    # Create test-results directory if it doesn't exist (for screenshots)
     mkdir -p "{{justfile_directory()}}/test-results"
+    chmod 777 "{{justfile_directory()}}/test-results"
     echo "Cleaning old test artifacts..."
     rm -rf "{{justfile_directory()}}/test-results"/*
 
-    # Create temporary override file to mount the project directory
+    # Create temporary override file to mount the project directory and test-results
     OVERRIDE_FILE="{{justfile_directory()}}/docker-compose.e2e-override.yml"
     cat > "$OVERRIDE_FILE" <<EOF
     services:
       e2e:
         volumes:
           - ./{{project_dir}}:/workspace/{{project_dir}}
+          - ./test-results:/workspace/test-results
     EOF
 
-    # Restart container with new mount
+    # Stop and restart container with new mounts (ensures clean mount state)
     echo "Restarting E2E container with project mount..."
+    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} down
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} -f "$OVERRIDE_FILE" up -d
 
     # Re-sync files after restart (container loses synced files when restarted)
@@ -411,8 +428,8 @@ auth-setup project_dir display="${DISPLAY:-}":
 
 # Clean up test artifacts and remove image
 clean-e2e:
-    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} down -v
     rm -rf test-results .pytest_cache
+    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} down -v
     {{container-tool}} rmi {{e2e-image-name}}:{{e2e-image-tag}} || true
 
 # Full workflow: start container (builds if needed) and run tests
