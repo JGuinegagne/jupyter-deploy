@@ -18,36 +18,54 @@ setup_ebs() {
 
     mkdir -p "$FULL_MOUNT_POINT"
 
-    # Check if device exists and is a block device
-    if [ -b "$device_name" ]; then
-        if ! blkid "$device_name" > /dev/null; then
-            echo "Formatting $device_name with ext4..."
-            mkfs -t ext4 "$device_name"
-        else
-            echo "Device $device_name already formatted"
-        fi
+    # Wait for device to become available with retry
+    MAX_RETRIES=2
+    RETRY_COUNT=0
+    RETRY_DELAY=2
 
-        if ! grep -q "$FULL_MOUNT_POINT" /etc/fstab; then
-            echo "Adding to fstab: $device_name $FULL_MOUNT_POINT ext4 defaults 0 2"
-            echo "$device_name $FULL_MOUNT_POINT ext4 defaults,nofail 0 2" | tee -a /etc/fstab
+    while [ $RETRY_COUNT -le $MAX_RETRIES ]; do
+        if [ -b "$device_name" ]; then
+            echo "Device $device_name is available"
+            break
         else
-            echo "fstab entry for $FULL_MOUNT_POINT already exists"
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -le $MAX_RETRIES ]; then
+                echo "Device $device_name not yet available (attempt $RETRY_COUNT/$((MAX_RETRIES + 1))), waiting $${RETRY_DELAY}s..."
+                sleep $RETRY_DELAY
+                RETRY_DELAY=$((RETRY_DELAY * 2))
+            else
+                echo "Error: Device $device_name not found after $((MAX_RETRIES + 1)) attempts"
+                exit 1
+            fi
         fi
+    done
 
-        if ! mountpoint -q "$FULL_MOUNT_POINT"; then
-            echo "Mounting $device_name to $FULL_MOUNT_POINT"
-            mount "$FULL_MOUNT_POINT"
-        else
-            echo "$FULL_MOUNT_POINT is already mounted"
-        fi
-
-        echo "Setting permissions on $FULL_MOUNT_POINT"
-        chown -R service-user:service-user "$FULL_MOUNT_POINT"
-        chmod 750 "$FULL_MOUNT_POINT"
-        echo "EBS volume for $mount_point initialization complete"
+    # Device is available, proceed with setup
+    if ! blkid "$device_name" > /dev/null; then
+        echo "Formatting $device_name with ext4..."
+        mkfs -t ext4 "$device_name"
     else
-        echo "Error: Device $device_name not found for mounting to $FULL_MOUNT_POINT"
+        echo "Device $device_name already formatted"
     fi
+
+    if ! grep -q "$FULL_MOUNT_POINT" /etc/fstab; then
+        echo "Adding to fstab: $device_name $FULL_MOUNT_POINT ext4 defaults 0 2"
+        echo "$device_name $FULL_MOUNT_POINT ext4 defaults,nofail 0 2" | tee -a /etc/fstab
+    else
+        echo "fstab entry for $FULL_MOUNT_POINT already exists"
+    fi
+
+    if ! mountpoint -q "$FULL_MOUNT_POINT"; then
+        echo "Mounting $device_name to $FULL_MOUNT_POINT"
+        mount "$FULL_MOUNT_POINT"
+    else
+        echo "$FULL_MOUNT_POINT is already mounted"
+    fi
+
+    echo "Setting permissions on $FULL_MOUNT_POINT"
+    chown -R service-user:service-user "$FULL_MOUNT_POINT"
+    chmod 750 "$FULL_MOUNT_POINT"
+    echo "EBS volume for $mount_point initialization complete"
 }
 %{ for ebs in ebs_volumes ~}
 setup_ebs "${ebs.mount_point}" "${ebs.device_name}"

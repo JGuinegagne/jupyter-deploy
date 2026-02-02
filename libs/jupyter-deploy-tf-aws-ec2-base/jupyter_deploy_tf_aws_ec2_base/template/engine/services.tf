@@ -518,6 +518,7 @@ resource "aws_ssm_association" "instance_startup_with_secret" {
 
   depends_on = [
     module.secret,
-    module.ec2_instance
+    module.ec2_instance,
+    module.volumes
   ]
 }
