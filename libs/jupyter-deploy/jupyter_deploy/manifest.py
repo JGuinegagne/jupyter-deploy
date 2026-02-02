@@ -182,7 +182,7 @@ class JupyterDeploySupervisedCommandExecutionV1(BaseModel):
 class JupyterDeploySupervisedExecutionV1(BaseModel):
     """Supervised execution configuration for commands.
 
-    Defines phase tracking for config, up, and down commands to enable
+    Defines phases tracking for config, up, and down commands to enable
     progress display with phase transitions and sub-phase tracking.
 
     Each field (config/up/down) is a mapping from command ID (e.g., "terraform.init", "terraform.plan")
@@ -201,6 +201,12 @@ class JupyterDeploySupervisedExecutionV1(BaseModel):
                 progress-pattern: "Read complete after|Refreshing state"
                 progress-events_estimate: 50
                 label: "Evaluating changes"
+              phases:
+                - enter-pattern: "Terraform will perform the following actions:"
+                  progress-pattern: "(will be created|will be read during apply|will be destroyed)"
+                  progress-events-estimates: 70
+                  label: "Generating plan"
+                  weight: 50
     """
 
     model_config = ConfigDict(extra="allow")

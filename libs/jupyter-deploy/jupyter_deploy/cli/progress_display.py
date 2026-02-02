@@ -20,11 +20,10 @@ class ProgressDisplayManager:
     Implements the TerminalHandler protocol to provide:
     - Progress bar with spinner and percentage
     - Live log box displaying lines provided by the engine callback
-    - Interactive prompt handling:
-      * Progress bar freezes (stays visible)
-      * Log box expands to show full context (e.g., variable description)
+    - Interactive prompt handling (whenever the underlying process prompts):
+      * Hide the live panel with the progress bar and log box
       * Prompt appears below the panel
-      * After user responds, log box shrinks back and progress resumes
+      * After user responds, press enter, live panel reappears
     """
 
     def __init__(self) -> None:
@@ -181,7 +180,8 @@ class ProgressDisplayManager:
         # Print error context
         if lines:
             self.console.rule("[red]Error context[/red]")
-            # Print context lines raw (so terminal interprets ANSI codes from terraform)
+            # Print context lines raw
+            # so terminal interprets ANSI codes from terraform
             print()  # Blank line for spacing
             for line in lines:
                 print(line)

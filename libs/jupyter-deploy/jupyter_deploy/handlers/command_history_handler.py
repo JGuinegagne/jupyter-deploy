@@ -35,7 +35,7 @@ class CommandHistoryHandler:
 
         Returns:
             Path to the created log file where command output should be written
-            (e.g., .jd-history/config/20260129-143022.log)
+            (e.g., .jd-history/config/20251224-120000.log)
         """
         # Create command-specific subdirectory
         command_dir = self.history_dir / command

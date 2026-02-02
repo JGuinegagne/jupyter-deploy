@@ -93,7 +93,7 @@ class EngineExecutionCallback(ExecutionCallbackInterface):
     """Abstract base for engine-specific execution callbacks.
 
     This class provides common functionality for handling supervised execution:
-    - Buffering output lines for context extraction
+    - Buffering output lines efficiently for context extraction
     - Delegating display events to terminal handler
     - Tracking interaction state
     - Deciding what lines to display in the log box

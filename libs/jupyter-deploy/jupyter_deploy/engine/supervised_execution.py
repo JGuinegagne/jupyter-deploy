@@ -9,45 +9,12 @@ class ExecutionProgress:
     """Progress update emitted during execution.
 
     Attributes:
-        label: Display label for the current execution state (e.g., "Generating plan", "Creating infrastructure")
+        label: Display label for the current execution state (e.g., "Planning", "Mutating")
         reward: Percentage (0-100) for the level of the progress bar.
     """
 
     label: str
     reward: float
-
-
-class ProgressCallback(Protocol):
-    """Protocol for receiving progress updates during execution.
-
-    This protocol allows the CLI layer to implement display logic
-    without creating a dependency from the engine layer.
-    """
-
-    def on_progress(self, progress: ExecutionProgress) -> None:
-        """Called when progress is made.
-
-        Args:
-            progress: The current execution progress state
-        """
-        ...
-
-
-class LogCallback(Protocol):
-    """Protocol for receiving live log lines during execution.
-
-    This protocol allows the CLI layer to display live command output
-    (e.g., in a log box below a progress bar) without creating a
-    dependency from the engine layer.
-    """
-
-    def on_log_line(self, line: str) -> None:
-        """Called when a new log line is emitted.
-
-        Args:
-            line: A single line of output from the command (without trailing newline)
-        """
-        ...
 
 
 @runtime_checkable

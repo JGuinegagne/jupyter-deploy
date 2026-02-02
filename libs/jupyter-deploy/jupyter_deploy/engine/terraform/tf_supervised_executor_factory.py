@@ -26,6 +26,10 @@ def create_terraform_executor(
 ) -> SupervisedExecutor:
     """Return a SupervisedExecutor configured for the specified sequence.
 
+    Applies the configuration defined in the project manifest, or
+    its own fallbacks if the manifest does not declare a configuration for
+    this specific sequence_id.
+
     Args:
         sequence_id: Command sequence ID
         exec_dir: Working directory for terraform execution
@@ -122,7 +126,7 @@ def create_terraform_executor(
     else:
         raise NotImplementedError(f"Unknown sequence_id: {sequence_id}")
 
-    # Scale factor calculation
+    # Scale factor for reward caclulation
     scale_factor: float = (end_reward - start_reward) / 100
 
     # Create actual phases

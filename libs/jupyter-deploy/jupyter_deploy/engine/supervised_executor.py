@@ -84,7 +84,10 @@ class SupervisedExecutor:
         self._last_log_line = ""
 
     def execute(self, command: list[str]) -> int:
-        """Execute a command and track progress, return command retcode"""
+        """Execute a command and track progress, return command retcode.
+
+        Manages the file handle where it will write logs.
+        """
         self._current_command = command
 
         # Ensure log directory exists
@@ -219,8 +222,7 @@ class SupervisedExecutor:
     def _parse_output_line(self, line: str) -> None:
         """Parse an output line and emit progress updates.
 
-        Implements the state machine for phase transitions. Subclasses can override
-        to add additional parsing logic before or after calling super().
+        Implements the state machine for phase transitions.
 
         Args:
             line: A single line of output (without trailing newline)

@@ -10,9 +10,9 @@ from jupyter_deploy.manifest import (
 
 
 class SupervisedSubPhase:
-    """Manages a single sub-phase within an execution phase.
+    """A single sub-phase within an ExecutionPhase.
 
-    Tracks entry and completion of a sub-phase, calculating weight contribution.
+    Encapsulate the completion regex and reward.
     """
 
     def __init__(self, config: JupyterDeploySupervisedExecutionSubPhaseV1, phase_scale_factor: float):
@@ -40,15 +40,17 @@ class SupervisedSubPhase:
 
 
 class SupervisedPhase:
-    """Manages a single execution phase.
+    """A single execution phase as declared by the manifest or specified in factory method.
 
     A SupervisedPhase tracks either a list of SupervisedSubPhase events matching different regex,
     a set of countable events all matching the same regex, or both.
 
+    It keeps track of its own accumulated reward, and grants full reward on complete.
+
     The life-cycle of a SupervisedPhase follows a set pattern:
     1) enter event: when a log line matches the config.enter-pattern
     2) progress events: either when a log line matches the config.progress-pattern regex
-        or matches the regex of the next subphase. Grants the accumulated reward.
+        or matches the regex of the next subphase. Grants the event's reward.
     3) exit event: the phase completes, grants the full reward.
     """
 
@@ -57,7 +59,7 @@ class SupervisedPhase:
 
         Args:
             config: Phase configuration from manifest
-            sequence_scale_factor: The ratio of how the weight of the parent phase sequence,
+            sequence_scale_factor: The ratio of the weight of the parent phase sequence,
                 represented by a SupervisedExecutor, over the sum of the weights
                 of all the phase sequences in the jupyter-deploy command.
         """
@@ -102,8 +104,9 @@ class SupervisedPhase:
     def evaluate_enter(self, line: str) -> bool:
         """Return True if the line signals the phase is now active, False otherwise.
 
-        Calculate the estimate of countable events for this phase from the line based on one
-        of its regex group if the phase.config.progress_events_estimate_capture_group is set.
+        Optionally calculate the estimate of countable events for this phase from the line
+        based on one of its regex group if progress_events_estimate_capture_group is set
+        in the SupervisedPhase config.
 
         Note: if both a phase.config.progress_events_estimate_capture_group and a
         config.progress_events_estimate are set, config.progress_events_estimate takes precedence.
@@ -163,12 +166,12 @@ class SupervisedPhase:
         return False
 
     def complete_progress_event(self) -> float:
-        """Mark countable event complete, add its reward, return the accumulated reward."""
+        """Mark countable event complete, accumulate its reward, return the reward."""
         self._accumulated_reward += self._reward_per_event
         return self._reward_per_event
 
     def complete_subphase(self) -> float:
-        """Mark current subphase complete, add its reward, return the accumulated reward."""
+        """Mark current subphase complete, accumulate its reward, return the reward."""
         if self._current_sub_phase_index < 0:
             # no subphase active, this is essentially a no-op
             self._current_sub_phase_index += 1
@@ -192,6 +195,8 @@ class SupervisedDefaultPhase:
 
     Calculate its reward based on countable, equally weighted events
     that it detects by matching a log line to its pattern.
+
+    It grants its full reward on completion.
     """
 
     def __init__(
@@ -202,7 +207,7 @@ class SupervisedDefaultPhase:
     ):
         """Initialize the default phase.
 
-        A default phase accumulats its reward based on completion of equally-weights
+        A default phase accumulates its reward based on completion of equally-weights
         progress event that it matches to a log line using its config.progress-pattern.
 
         Args:

@@ -1,12 +1,9 @@
 import unittest
 from dataclasses import is_dataclass
-from typing import get_type_hints
 
 from jupyter_deploy.engine.supervised_execution import (
     ExecutionError,
     ExecutionProgress,
-    LogCallback,
-    ProgressCallback,
 )
 
 
@@ -37,65 +34,6 @@ class TestExecutionProgress(unittest.TestCase):
         """Test that ExecutionProgress is a dataclass."""
 
         self.assertTrue(is_dataclass(ExecutionProgress))
-
-
-class TestProgressCallback(unittest.TestCase):
-    """Test cases for ProgressCallback protocol."""
-
-    def test_protocol_implementation(self) -> None:
-        """Test that a class implementing the protocol works correctly."""
-
-        class MockCallback:
-            def __init__(self) -> None:
-                self.progress_calls: list[ExecutionProgress] = []
-
-            def on_progress(self, progress: ExecutionProgress) -> None:
-                self.progress_calls.append(progress)
-
-        # Verify the mock callback works as a ProgressCallback
-        callback = MockCallback()
-
-        # Test on_progress
-        progress = ExecutionProgress("Test", 50)
-        callback.on_progress(progress)
-        self.assertEqual(len(callback.progress_calls), 1)
-        self.assertEqual(callback.progress_calls[0], progress)
-
-    def test_protocol_type_checking(self) -> None:
-        """Test that the protocol is recognized for type checking."""
-        # Get the protocol's methods
-        hints = get_type_hints(ProgressCallback.on_progress)
-        self.assertIn("progress", hints)
-
-
-class TestLogCallback(unittest.TestCase):
-    """Test cases for LogCallback protocol."""
-
-    def test_protocol_implementation(self) -> None:
-        """Test that a class implementing the protocol works correctly."""
-
-        class MockCallback:
-            def __init__(self) -> None:
-                self.log_lines: list[str] = []
-
-            def on_log_line(self, line: str) -> None:
-                self.log_lines.append(line)
-
-        # Verify the mock callback works as a LogCallback
-        callback = MockCallback()
-
-        # Test on_log_line
-        callback.on_log_line("Creating resource...")
-        callback.on_log_line("Resource created successfully")
-        self.assertEqual(len(callback.log_lines), 2)
-        self.assertEqual(callback.log_lines[0], "Creating resource...")
-        self.assertEqual(callback.log_lines[1], "Resource created successfully")
-
-    def test_protocol_type_checking(self) -> None:
-        """Test that the protocol is recognized for type checking."""
-        # Get the protocol's methods
-        hints = get_type_hints(LogCallback.on_log_line)
-        self.assertIn("line", hints)
 
 
 class TestExecutionError(unittest.TestCase):
