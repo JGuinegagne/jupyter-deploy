@@ -6,7 +6,7 @@ from subprocess import CalledProcessError
 from rich import console as rich_console
 
 from jupyter_deploy import cmd_utils, fs_utils
-from jupyter_deploy.engine.engine_down import EngineDownHandler
+from jupyter_deploy.engine.engine_down import DownAutoApproveRequiredError, EngineDownHandler
 from jupyter_deploy.engine.supervised_execution import ExecutionError, TerminalHandler
 from jupyter_deploy.engine.supervised_execution_callback import ExecutionCallbackInterface
 from jupyter_deploy.engine.terraform import tf_outputs, tf_supervised_executor_factory
@@ -68,8 +68,6 @@ class TerraformDownHandler(EngineDownHandler):
         if persisting_resources:
             # Abort if the user has not set the `-y` flag in `jd down`
             if not auto_approve:
-                from jupyter_deploy.handlers.project.down_handler import DownAutoApproveRequiredError
-
                 raise DownAutoApproveRequiredError(persisting_resources)
 
             if verbose:

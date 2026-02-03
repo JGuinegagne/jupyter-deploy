@@ -1,6 +1,6 @@
-import sys
-import subprocess
 import json
+import subprocess
+import sys
 
 # Update this for any new packages/libs we want checked
 LIB_PATHS = [

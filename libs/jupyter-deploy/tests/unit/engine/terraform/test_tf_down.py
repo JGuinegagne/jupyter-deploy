@@ -5,6 +5,7 @@ from pathlib import Path
 from subprocess import CalledProcessError
 from unittest.mock import Mock, patch
 
+from jupyter_deploy.engine.engine_down import DownAutoApproveRequiredError
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.engine.outdefs import ListStrTemplateOutputDefinition
 from jupyter_deploy.engine.supervised_execution import ExecutionError
@@ -170,8 +171,6 @@ class TestTerraformDownHandler(unittest.TestCase):
         mock_console.Console.return_value = mock_console_instance
 
         # Act & Assert
-        from jupyter_deploy.handlers.project.down_handler import DownAutoApproveRequiredError
-
         with self.assertRaises(DownAutoApproveRequiredError) as context:
             handler.destroy(auto_approve=False)
 

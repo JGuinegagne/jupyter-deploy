@@ -17,13 +17,14 @@ from jupyter_deploy.cli.teams_app import teams_app
 from jupyter_deploy.cli.users_app import users_app
 from jupyter_deploy.cli.variables_decorator import with_project_variables
 from jupyter_deploy.engine.engine_config import ReadConfigurationError, WriteConfigurationError
+from jupyter_deploy.engine.engine_down import DownAutoApproveRequiredError
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.engine.supervised_execution import ExecutionError
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
 from jupyter_deploy.handlers.init_handler import InitHandler
 from jupyter_deploy.handlers.project import config_handler
 from jupyter_deploy.handlers.project.config_handler import InvalidPreset
-from jupyter_deploy.handlers.project.down_handler import DownAutoApproveRequiredError, DownHandler
+from jupyter_deploy.handlers.project.down_handler import DownHandler
 from jupyter_deploy.handlers.project.open_handler import OpenHandler
 from jupyter_deploy.handlers.project.show_handler import ShowHandler
 from jupyter_deploy.handlers.project.up_handler import UpHandler

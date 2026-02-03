@@ -5,16 +5,6 @@ from jupyter_deploy.engine.terraform import tf_down
 from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
 
 
-class DownAutoApproveRequiredError(ValueError):
-    """Raised when auto-approve is required but not provided."""
-
-    def __init__(self, persisting_resources: list[str]) -> None:
-        self.persisting_resources = persisting_resources
-        super().__init__(
-            "Auto-approve is required when there are persisting resources. Pass --answer-yes or -y to proceed."
-        )
-
-
 class DownHandler(BaseProjectHandler):
     _handler: EngineDownHandler
 
