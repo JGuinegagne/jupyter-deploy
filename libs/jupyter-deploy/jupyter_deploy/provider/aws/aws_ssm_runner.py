@@ -229,16 +229,23 @@ class AwsSsmRunner(InstructionRunner):
 
         # verify installation
         console.rule()
-        installation_valid = verify_utils.verify_tools_installation(
-            [
-                JupyterDeployRequirementV1(name=JupyterDeployTool.AWS_CLI.value),
-                JupyterDeployRequirementV1(name=JupyterDeployTool.AWS_SSM_PLUGIN),
-            ]
-        )
+        try:
+            verify_utils.verify_tools_installation(
+                [
+                    JupyterDeployRequirementV1(name=JupyterDeployTool.AWS_CLI.value),
+                    JupyterDeployRequirementV1(name=JupyterDeployTool.AWS_SSM_PLUGIN),
+                ]
+            )
+        except verify_utils.ToolRequiredError as e:
+            console.print(f":x: {e}", style="red")
+            console.line()
+            if e.error_msg:
+                console.print(f"Error: {e.error_msg}", style="red")
+                console.line()
+            if e.installation_url:
+                console.print(f"Refer to the installation guide: {e.installation_url}")
+            raise InterruptInstructionError from None
         console.rule()
-        if not installation_valid:
-            # the verify_utils prints the error and remediation steps
-            raise InterruptInstructionError
 
         # verify that the SSM agent status on the instance
         ssm_agent_connected = self._verify_ec2_instance_accessible(

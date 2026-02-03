@@ -11,6 +11,7 @@ from jupyter_deploy.provider.resolved_argdefs import (
     ResolvedInstructionArgument,
     StrResolvedInstructionArgument,
 )
+from jupyter_deploy.verify_utils import ToolRequiredError
 
 
 class TestAwsSsmRunner(unittest.TestCase):
@@ -749,7 +750,7 @@ class TestStartSession(unittest.TestCase):
         target_id = "i-1234567890abcdef0"
 
         # Mock failed tool verification
-        mock_verify_tools.return_value = False
+        mock_verify_tools.side_effect = ToolRequiredError("aws-cli", "https://example.com", "not found")
 
         resolved_arguments: dict[str, ResolvedInstructionArgument] = {
             "target_id": StrResolvedInstructionArgument(argument_name="target_id", value=target_id),

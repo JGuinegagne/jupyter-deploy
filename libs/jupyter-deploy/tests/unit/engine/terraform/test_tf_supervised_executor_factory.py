@@ -275,10 +275,11 @@ class TestCreateTerraformExecutorWithManifest(unittest.TestCase):
         # Manifest specifies label "Evaluating resources to destroy" for down.terraform-destroy
         self.assertEqual(executor._default_phase.label, "Evaluating resources to destroy")
 
-        # Manifest specifies 1 phase with full reward = 100 for down.terraform-destroy
+        # Manifest specifies 1 phase with full reward = 95 for down.terraform-destroy
+        # (95 because start_reward=5, end_reward=100, scale_factor=0.95, weight=100 → 95)
         self.assertEqual(len(executor._declared_phases), 1)
         self.assertGreaterEqual(len(executor._declared_phases[0].label), 1)
-        self.assertAlmostEqual(executor._declared_phases[0].full_reward, 100)
+        self.assertAlmostEqual(executor._declared_phases[0].full_reward, 95)
 
     def test_return_manifest_based_executor_with_overriden_estimate_for_up_apply(self) -> None:
         """Test up_apply with plan metadata overrides estimate dynamically."""

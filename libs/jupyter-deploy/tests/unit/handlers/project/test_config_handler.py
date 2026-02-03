@@ -13,7 +13,6 @@ class TestConfigHandler(unittest.TestCase):
         mock_has_recorded_variables = Mock()
         mock_verify_preset = Mock()
         mock_list_presets = Mock()
-        mock_verify = Mock()
         mock_reset_recorded_variables = Mock()
         mock_reset_recorded_secrets = Mock()
         mock_configure = Mock()
@@ -22,14 +21,12 @@ class TestConfigHandler(unittest.TestCase):
         mock_handler.has_recorded_variables = mock_has_recorded_variables
         mock_handler.verify_preset_exists = mock_verify_preset
         mock_handler.list_presets = mock_list_presets
-        mock_handler.verify_requirements = mock_verify
         mock_handler.reset_recorded_variables = mock_reset_recorded_variables
         mock_handler.reset_recorded_secrets = mock_reset_recorded_secrets
         mock_handler.configure = mock_configure
         mock_handler.record = mock_record
 
         mock_has_recorded_variables.return_value = False
-        mock_verify.return_value = True
         mock_verify_preset.return_value = True
         mock_configure.return_value = True
         mock_list_presets.return_value = ["all", "base", "none"]
@@ -38,7 +35,6 @@ class TestConfigHandler(unittest.TestCase):
             mock_handler,
             {
                 "has_recorded_variables": mock_has_recorded_variables,
-                "verify_requirements": mock_verify,
                 "verify_preset_exists": mock_verify_preset,
                 "list_presets": mock_list_presets,
                 "reset_recorded_variables": mock_reset_recorded_variables,
@@ -83,7 +79,6 @@ class TestConfigHandler(unittest.TestCase):
         handler = ConfigHandler()
 
         tf_mock_handler_instance, tf_fns = self.get_mock_handler_and_fns()
-        tf_mock_verify = tf_fns["verify_requirements"]
         tf_mock_configure = tf_fns["configure"]
         mock_tf_handler.return_value = tf_mock_handler_instance
 
@@ -95,143 +90,149 @@ class TestConfigHandler(unittest.TestCase):
             output_filename=None,
             terminal_handler=None,
         )
-        tf_mock_verify.assert_not_called()
         tf_mock_configure.assert_not_called()
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("jupyter_deploy.engine.terraform.tf_config.TerraformConfigHandler")
-    def test_validate_method_calls_underlying_verify_preset_method(
+    def test_has_recorded_variables_delegates_to_handler(
         self, mock_tf_handler: Mock, mock_retrieve_manifest: Mock
     ) -> None:
         mock_retrieve_manifest.return_value = self.mock_manifest
         tf_mock_handler_instance, tf_fns = self.get_mock_handler_and_fns()
         tf_mock_has_recorded = tf_fns["has_recorded_variables"]
-        tf_mock_verify_preset = tf_fns["verify_preset_exists"]
-        tf_mock_list_presets = tf_fns["list_presets"]
+        tf_mock_has_recorded.return_value = True
         mock_tf_handler.return_value = tf_mock_handler_instance
 
         handler = ConfigHandler()
-        result = handler.validate_and_set_preset(preset_name="all")
+        result = handler.has_recorded_variables()
 
         self.assertTrue(result)
-        self.assertEqual(handler.preset_name, "all")
         tf_mock_has_recorded.assert_called_once()
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("jupyter_deploy.engine.terraform.tf_config.TerraformConfigHandler")
+    def test_verify_preset_exists_delegates_to_handler(
+        self, mock_tf_handler: Mock, mock_retrieve_manifest: Mock
+    ) -> None:
+        mock_retrieve_manifest.return_value = self.mock_manifest
+        tf_mock_handler_instance, tf_fns = self.get_mock_handler_and_fns()
+        tf_mock_verify_preset = tf_fns["verify_preset_exists"]
+        tf_mock_verify_preset.return_value = True
+        mock_tf_handler.return_value = tf_mock_handler_instance
+
+        handler = ConfigHandler()
+        result = handler.verify_preset_exists("all")
+
+        self.assertTrue(result)
         tf_mock_verify_preset.assert_called_once_with("all")
-        tf_mock_list_presets.assert_not_called()
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("jupyter_deploy.engine.terraform.tf_config.TerraformConfigHandler")
-    def test_validate_method_does_not_verify_preset_when_passed_none(
+    def test_list_presets_delegates_to_handler(self, mock_tf_handler: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.mock_manifest
+        tf_mock_handler_instance, tf_fns = self.get_mock_handler_and_fns()
+        tf_mock_list_presets = tf_fns["list_presets"]
+        tf_mock_list_presets.return_value = ["all", "base", "none"]
+        mock_tf_handler.return_value = tf_mock_handler_instance
+
+        handler = ConfigHandler()
+        result = handler.list_presets()
+
+        self.assertEqual(result, ["all", "base", "none"])
+        tf_mock_list_presets.assert_called_once()
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("jupyter_deploy.engine.terraform.tf_config.TerraformConfigHandler")
+    def test_set_preset_sets_instance_variable(self, mock_tf_handler: Mock, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.mock_manifest
+        tf_mock_handler_instance, _ = self.get_mock_handler_and_fns()
+        mock_tf_handler.return_value = tf_mock_handler_instance
+
+        handler = ConfigHandler()
+        self.assertIsNone(handler.preset_name)
+
+        handler.set_preset("all")
+        self.assertEqual(handler.preset_name, "all")
+
+        handler.set_preset(None)
+        self.assertIsNone(handler.preset_name)
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("jupyter_deploy.engine.terraform.tf_config.TerraformConfigHandler")
+    def test_validate_preset_succeeds_for_valid_preset(
         self, mock_tf_handler: Mock, mock_retrieve_manifest: Mock
     ) -> None:
         mock_retrieve_manifest.return_value = self.mock_manifest
         tf_mock_handler_instance, tf_fns = self.get_mock_handler_and_fns()
-        tf_mock_has_recorded = tf_fns["has_recorded_variables"]
         tf_mock_verify_preset = tf_fns["verify_preset_exists"]
-        tf_mock_list_presets = tf_fns["list_presets"]
+        tf_mock_verify_preset.return_value = True
         mock_tf_handler.return_value = tf_mock_handler_instance
 
         handler = ConfigHandler()
-        result = handler.validate_and_set_preset(preset_name=None)
-
-        self.assertTrue(result)
-        self.assertIsNone(handler.preset_name)
-        tf_mock_has_recorded.assert_called_once()
-        tf_mock_verify_preset.assert_not_called()
-        tf_mock_list_presets.assert_not_called()
+        # Should not raise
+        handler.validate_preset("all")
+        tf_mock_verify_preset.assert_called_once_with("all")
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("jupyter_deploy.engine.terraform.tf_config.TerraformConfigHandler")
-    def test_validate_method_calls_list_presets_and_print_when_preset_is_not_found(
+    def test_validate_preset_raises_for_invalid_preset(
         self, mock_tf_handler: Mock, mock_retrieve_manifest: Mock
     ) -> None:
+        from jupyter_deploy.handlers.project.config_handler import InvalidPreset
+
         mock_retrieve_manifest.return_value = self.mock_manifest
         tf_mock_handler_instance, tf_fns = self.get_mock_handler_and_fns()
         tf_mock_verify_preset = tf_fns["verify_preset_exists"]
         tf_mock_list_presets = tf_fns["list_presets"]
         tf_mock_verify_preset.return_value = False
+        tf_mock_list_presets.return_value = ["all", "base", "none"]
         mock_tf_handler.return_value = tf_mock_handler_instance
 
         handler = ConfigHandler()
-        result = handler.validate_and_set_preset(preset_name="i-do-not-exist")
+        with self.assertRaises(InvalidPreset) as context:
+            handler.validate_preset("invalid")
 
-        self.assertFalse(result)
-        tf_mock_verify_preset.assert_called_once_with("i-do-not-exist")
+        self.assertEqual(context.exception.preset_name, "invalid")
+        self.assertEqual(context.exception.valid_presets, ["all", "base", "none"])
+        tf_mock_verify_preset.assert_called_once_with("invalid")
         tf_mock_list_presets.assert_called_once()
 
+    @patch("jupyter_deploy.verify_utils.verify_tools_installation")
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("jupyter_deploy.engine.terraform.tf_config.TerraformConfigHandler")
-    def test_validate_method_calls_ignores_preset_when_detects_recorded_values(
-        self, mock_tf_handler: Mock, mock_retrieve_manifest: Mock
+    def test_verify_calls_verify_utils(
+        self, mock_tf_handler: Mock, mock_retrieve_manifest: Mock, mock_verify: Mock
     ) -> None:
-        mock_retrieve_manifest.return_value = self.mock_manifest
-        tf_mock_handler_instance, tf_fns = self.get_mock_handler_and_fns()
-        tf_mock_has_recorded = tf_fns["has_recorded_variables"]
-        tf_mock_verify_preset = tf_fns["verify_preset_exists"]
-        tf_mock_list_presets = tf_fns["list_presets"]
-        tf_mock_has_recorded.return_value = True
-        mock_tf_handler.return_value = tf_mock_handler_instance
+        mock_req1 = Mock()
+        mock_req2 = Mock()
 
-        handler = ConfigHandler()
-        result = handler.validate_and_set_preset(preset_name="all")
+        with patch.object(self.mock_manifest, "get_requirements", return_value=[mock_req1, mock_req2]):
+            mock_retrieve_manifest.return_value = self.mock_manifest
+            tf_mock_handler_instance, tf_fns = self.get_mock_handler_and_fns()
+            tf_mock_configure = tf_fns["configure"]
+            mock_tf_handler.return_value = tf_mock_handler_instance
 
-        self.assertTrue(result)
-        self.assertIsNone(handler.preset_name)
-        tf_mock_has_recorded.assert_called_once()
-        tf_mock_verify_preset.assert_not_called()
-        tf_mock_list_presets.assert_not_called()
+            handler = ConfigHandler()
+            handler.verify_requirements()
 
+            mock_verify.assert_called_once_with([mock_req1, mock_req2])
+            tf_mock_configure.assert_not_called()
+
+    @patch("jupyter_deploy.verify_utils.verify_tools_installation")
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("jupyter_deploy.engine.terraform.tf_config.TerraformConfigHandler")
-    def test_validate_method_calls_ignores_recorded_values_with_reset(
-        self, mock_tf_handler: Mock, mock_retrieve_manifest: Mock
+    def test_verify_surfaces_verify_utils_exception(
+        self, mock_tf_handler: Mock, mock_retrieve_manifest: Mock, mock_verify: Mock
     ) -> None:
+        from jupyter_deploy.verify_utils import ToolRequiredError
+
         mock_retrieve_manifest.return_value = self.mock_manifest
-        tf_mock_handler_instance, tf_fns = self.get_mock_handler_and_fns()
-        tf_mock_has_recorded = tf_fns["has_recorded_variables"]
-        tf_mock_verify_preset = tf_fns["verify_preset_exists"]
-        tf_mock_list_presets = tf_fns["list_presets"]
-        tf_mock_has_recorded.return_value = True
+        tf_mock_handler_instance, _ = self.get_mock_handler_and_fns()
         mock_tf_handler.return_value = tf_mock_handler_instance
+        mock_verify.side_effect = ToolRequiredError("terraform", None, None)
 
         handler = ConfigHandler()
-        result = handler.validate_and_set_preset(preset_name="all", will_reset_variables=True)
-
-        self.assertTrue(result)
-        self.assertEqual(handler.preset_name, "all")
-        tf_mock_has_recorded.assert_not_called()
-        tf_mock_verify_preset.assert_called_once()
-        tf_mock_list_presets.assert_not_called()
-
-    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
-    @patch("jupyter_deploy.engine.terraform.tf_config.TerraformConfigHandler")
-    def test_verify_calls_underlying_handler_method(self, mock_tf_handler: Mock, mock_retrieve_manifest: Mock) -> None:
-        mock_retrieve_manifest.return_value = self.mock_manifest
-        tf_mock_handler_instance, tf_fns = self.get_mock_handler_and_fns()
-        tf_mock_verify = tf_fns["verify_requirements"]
-        tf_mock_configure = tf_fns["configure"]
-        mock_tf_handler.return_value = tf_mock_handler_instance
-
-        handler = ConfigHandler()
-        result = handler.verify_requirements()
-
-        self.assertTrue(result)
-        tf_mock_verify.assert_called_once()
-        tf_mock_configure.assert_not_called()
-
-    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
-    @patch("jupyter_deploy.engine.terraform.tf_config.TerraformConfigHandler")
-    def test_verify_surfaces_underlying_method_exception(
-        self, mock_tf_handler: Mock, mock_retrieve_manifest: Mock
-    ) -> None:
-        mock_retrieve_manifest.return_value = self.mock_manifest
-        tf_mock_handler_instance, tf_fns = self.get_mock_handler_and_fns()
-        tf_mock_verify = tf_fns["verify_requirements"]
-        mock_tf_handler.return_value = tf_mock_handler_instance
-        tf_mock_verify.side_effect = RuntimeError("some-error")
-
-        handler = ConfigHandler()
-        with self.assertRaisesRegex(RuntimeError, "some-error"):
+        with self.assertRaises(ToolRequiredError):
             handler.verify_requirements()
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
@@ -277,7 +278,6 @@ class TestConfigHandler(unittest.TestCase):
     ) -> None:
         mock_retrieve_manifest.return_value = self.mock_manifest
         tf_mock_handler_instance, tf_fns = self.get_mock_handler_and_fns()
-        tf_mock_verify = tf_fns["verify_requirements"]
         tf_mock_configure = tf_fns["configure"]
         mock_tf_handler.return_value = tf_mock_handler_instance
 
@@ -285,7 +285,6 @@ class TestConfigHandler(unittest.TestCase):
         result = handler.configure()
 
         self.assertTrue(result)
-        tf_mock_verify.assert_not_called()
         tf_mock_configure.assert_called_once_with(preset_name=None, variable_overrides=None)
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
@@ -297,7 +296,7 @@ class TestConfigHandler(unittest.TestCase):
         mock_tf_handler.return_value = tf_mock_handler_instance
 
         handler = ConfigHandler()
-        handler.validate_and_set_preset(preset_name="all")
+        handler.set_preset("all")
         result = handler.configure()
 
         self.assertTrue(result)
@@ -312,7 +311,7 @@ class TestConfigHandler(unittest.TestCase):
         mock_tf_handler.return_value = tf_mock_handler_instance
 
         handler = ConfigHandler()
-        handler.validate_and_set_preset(preset_name="all")
+        handler.set_preset("all")
 
         overrides = {"var1": Mock()}
         result = handler.configure(variable_overrides=overrides)  # type: ignore

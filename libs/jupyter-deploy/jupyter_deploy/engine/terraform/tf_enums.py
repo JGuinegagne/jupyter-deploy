@@ -16,6 +16,7 @@ class TerraformSequenceId(Enum):
     config_init = "config.terraform-init"
     config_plan = "config.terraform-plan"
     up_apply = "up.terraform-apply"
+    down_rm_state = "down.terraform-state-rm"
     down_destroy = "down.terraform-destroy"
 
     def get_command_config(self, manifest: JupyterDeployManifest) -> JupyterDeploySupervisedCommandExecutionV1 | None:
@@ -28,7 +29,7 @@ class TerraformSequenceId(Enum):
             section = manifest.supervised_execution.config
         elif self == TerraformSequenceId.up_apply:
             section = manifest.supervised_execution.up
-        elif self == TerraformSequenceId.down_destroy:
+        elif self == TerraformSequenceId.down_rm_state or self == TerraformSequenceId.down_destroy:
             section = manifest.supervised_execution.down
         else:
             return None

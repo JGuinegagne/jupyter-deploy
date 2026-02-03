@@ -287,7 +287,7 @@ class TestInitCommand(unittest.TestCase):
 
 
 class TestUpCommand(unittest.TestCase):
-    def get_mock_up_handler(self) -> tuple[Mock, dict[str, Mock]]:
+    def get_mock_up_handler(self, config_file_exists: bool = False) -> tuple[Mock, dict[str, Mock]]:
         mock_up_handler = Mock()
         mock_get_config_file_path = Mock()
         mock_apply = Mock()
@@ -298,7 +298,12 @@ class TestUpCommand(unittest.TestCase):
         mock_up_handler.get_default_config_filename = mock_get_default_filename
 
         mock_get_default_filename.return_value = "jdout-tfplan"
-        mock_get_config_file_path.return_value = ""
+
+        # If config file doesn't exist, raise FileNotFoundError
+        if not config_file_exists:
+            mock_get_config_file_path.side_effect = FileNotFoundError("Config file not found")
+        else:
+            mock_get_config_file_path.return_value = "/path/to/config"
 
         return mock_up_handler, {
             "get_config_file_path": mock_get_config_file_path,
@@ -323,7 +328,8 @@ class TestUpCommand(unittest.TestCase):
         runner = CliRunner()
         result = runner.invoke(app_runner.app, ["up"])
 
-        self.assertEqual(result.exit_code, 0)
+        # Should exit with code 1 when config file doesn't exist
+        self.assertEqual(result.exit_code, 1)
         mock_project_ctx_manager.assert_called_once_with(None)
         mock_up_fns["get_config_file_path"].assert_called_once_with(None)
 
@@ -338,7 +344,8 @@ class TestUpCommand(unittest.TestCase):
         runner = CliRunner()
         result = runner.invoke(app_runner.app, ["up", "--path", "/custom/path"])
 
-        self.assertEqual(result.exit_code, 0)
+        # Should exit with code 1 when config file doesn't exist
+        self.assertEqual(result.exit_code, 1)
         mock_project_ctx_manager.assert_called_once_with("/custom/path")
 
     @patch("jupyter_deploy.cli.app.UpHandler")
@@ -354,7 +361,8 @@ class TestUpCommand(unittest.TestCase):
         runner = CliRunner()
         result = runner.invoke(app_runner.app, ["up", "--config-filename", "custom-plan"])
 
-        self.assertEqual(result.exit_code, 0)
+        # Should exit with code 1 when config file doesn't exist
+        self.assertEqual(result.exit_code, 1)
         mock_project_ctx_manager.assert_called_once_with(None)
         mock_up_fns["get_config_file_path"].assert_called_once_with("custom-plan")
 
@@ -365,8 +373,7 @@ class TestUpCommand(unittest.TestCase):
     ) -> None:
         mock_project_ctx_manager.side_effect = TestUpCommand.mock_project_dir
 
-        mock_up_handler_instance, mock_up_fns = self.get_mock_up_handler()
-        mock_up_fns["get_config_file_path"].return_value = "/path/to/config"
+        mock_up_handler_instance, mock_up_fns = self.get_mock_up_handler(config_file_exists=True)
         mock_up_handler_cls.return_value = mock_up_handler_instance
 
         runner = CliRunner()
@@ -382,8 +389,7 @@ class TestUpCommand(unittest.TestCase):
     def test_up_command_with_answer_yes_option(self, mock_project_ctx_manager: Mock, mock_up_handler_cls: Mock) -> None:
         mock_project_ctx_manager.side_effect = TestUpCommand.mock_project_dir
 
-        mock_up_handler_instance, mock_up_fns = self.get_mock_up_handler()
-        mock_up_fns["get_config_file_path"].return_value = "/path/to/config"
+        mock_up_handler_instance, mock_up_fns = self.get_mock_up_handler(config_file_exists=True)
         mock_up_handler_cls.return_value = mock_up_handler_instance
 
         runner = CliRunner()
@@ -397,8 +403,7 @@ class TestUpCommand(unittest.TestCase):
     def test_up_command_with_all_args(self, mock_project_ctx_manager: Mock, mock_up_handler_cls: Mock) -> None:
         mock_project_ctx_manager.side_effect = TestUpCommand.mock_project_dir
 
-        mock_up_handler_instance, mock_up_fns = self.get_mock_up_handler()
-        mock_up_fns["get_config_file_path"].return_value = "/path/to/config"
+        mock_up_handler_instance, mock_up_fns = self.get_mock_up_handler(config_file_exists=True)
         mock_up_handler_cls.return_value = mock_up_handler_instance
 
         runner = CliRunner()
@@ -409,13 +414,34 @@ class TestUpCommand(unittest.TestCase):
         mock_up_fns["get_config_file_path"].assert_called_once_with(None)
         mock_up_fns["apply"].assert_called_once_with("/path/to/config", True)
 
+    @patch("jupyter_deploy.cli.app.UpHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_up_command_with_verbose_uses_no_terminal_handler(
+        self, mock_project_ctx_manager: Mock, mock_up_handler_cls: Mock
+    ) -> None:
+        """Test that up with --verbose passes None as terminal_handler."""
+        mock_project_ctx_manager.side_effect = TestUpCommand.mock_project_dir
+
+        mock_up_handler_instance, mock_up_fns = self.get_mock_up_handler(config_file_exists=True)
+        mock_up_handler_cls.return_value = mock_up_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["up", "--verbose"])
+
+        self.assertEqual(result.exit_code, 0)
+        # terminal_handler should be None when verbose is True
+        call_kwargs = mock_up_handler_cls.call_args.kwargs
+        self.assertIsNone(call_kwargs["terminal_handler"])
+
 
 class TestDownCommand(unittest.TestCase):
     def get_mock_down_handler(self) -> tuple[Mock, dict[str, Mock]]:
         mock_down_handler = Mock()
         mock_destroy = Mock()
+        mock_get_persisting_resources = Mock(return_value=[])
 
         mock_down_handler.destroy = mock_destroy
+        mock_down_handler.get_persisting_resources = mock_get_persisting_resources
 
         return mock_down_handler, {"destroy": mock_destroy}
 
@@ -469,6 +495,25 @@ class TestDownCommand(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_project_ctx_manager.assert_called_once_with(None)
         mock_down_fns["destroy"].assert_called_once_with(True)
+
+    @patch("jupyter_deploy.cli.app.DownHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_down_command_with_verbose_uses_no_terminal_handler(
+        self, mock_project_ctx_manager: Mock, mock_down_handler_cls: Mock
+    ) -> None:
+        """Test that down with --verbose passes None as terminal_handler."""
+        mock_project_ctx_manager.side_effect = TestDownCommand.mock_project_dir
+
+        mock_down_handler_instance, _ = self.get_mock_down_handler()
+        mock_down_handler_cls.return_value = mock_down_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["down", "--verbose"])
+
+        self.assertEqual(result.exit_code, 0)
+        # terminal_handler should be None when verbose is True
+        call_kwargs = mock_down_handler_cls.call_args.kwargs
+        self.assertIsNone(call_kwargs["terminal_handler"])
 
 
 class TestOpenCommand(unittest.TestCase):
