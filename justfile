@@ -25,26 +25,39 @@ e2e-compose-file := "libs/jupyter-deploy-tf-aws-ec2-base/tests/e2e/image/docker-
 e2e-image-name := "jupyter-deploy-e2e-aws-ec2-base"
 e2e-image-tag := "latest"
 
-# Build E2E test image (optional - docker compose will build automatically on first up)
-e2e-build:
-    @echo "Building E2E test image with {{container-tool}}..."
-    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} build --no-cache
+# Start E2E container in background (always builds to ensure correct UID/GID)
+# Usage: just e2e-up [no-cache=true]
+e2e-up no_cache="false":
+    #!/usr/bin/env bash
+    set -euo pipefail
 
-# Start E2E container in background (builds image if needed)
-e2e-up:
-    @echo "Starting E2E container (will build image if needed)..."
+    echo "Building and starting E2E container with correct UID/GID (HOST_UID={{HOST_UID}}, HOST_GID={{HOST_GID}})..."
+    mkdir -p {{justfile_directory()}}/test-results
+    mkdir -p {{justfile_directory()}}/.auth
+
+    # Update HOST_UID and HOST_GID in existing .env file
+    sed -i 's/^HOST_UID=.*/HOST_UID={{HOST_UID}}/' {{justfile_directory()}}/.env
+    sed -i 's/^HOST_GID=.*/HOST_GID={{HOST_GID}}/' {{justfile_directory()}}/.env
+
+    if [ "{{no_cache}}" = "true" ]; then
+        echo "Building with --no-cache..."
+        {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} build --no-cache
+    else
+        {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} build
+    fi
+
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} up -d e2e
-    @echo "E2E container started. Syncing latest code..."
-    @just e2e-sync
-    @echo "✓ E2E container ready"
+    echo "E2E container started. Syncing latest code..."
+    just e2e-sync
+    echo "✓ E2E container ready"
 
 # Stop E2E container
 e2e-down:
     @echo "Stopping E2E container..."
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} down
 
-# Sync project files to E2E container (for iterating without rebuilding image)
-# NOTE: If you're not seeing your changes, use 'just e2e-rebuild' instead
+# Sync project files to E2E container (for iterating without building image)
+# NOTE: If you're not seeing your changes, use 'just e2e-build' instead
 e2e-sync:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -104,6 +117,7 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="":
     #!/usr/bin/env bash
     set -euo pipefail
 
+
     # Track override file for cleanup
     OVERRIDE_FILE=""
 
@@ -142,8 +156,15 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="":
     # Always mount project directory dynamically
     echo "Mounting project directory: {{project_dir}}"
 
-    # Create test-results directory if it doesn't exist (for screenshots)
+    # Create test-results and .auth directories
     mkdir -p "{{justfile_directory()}}/test-results"
+    mkdir -p "{{justfile_directory()}}/.auth"
+    echo "Cleaning old test artifacts..."
+    rm -rf "{{justfile_directory()}}/test-results"/*
+
+    # Update HOST_UID and HOST_GID in existing .env file
+    sed -i 's/^HOST_UID=.*/HOST_UID={{HOST_UID}}/' {{justfile_directory()}}/.env
+    sed -i 's/^HOST_GID=.*/HOST_GID={{HOST_GID}}/' {{justfile_directory()}}/.env
 
     # Create temporary override file to mount the project directory and test-results
     OVERRIDE_FILE="{{justfile_directory()}}/docker-compose.e2e-override.yml"
@@ -155,8 +176,9 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="":
           - ./test-results:/workspace/test-results
     EOF
 
-    # Restart container with new mount
+    # Stop and restart container with new mounts (ensures clean mount state)
     echo "Restarting E2E container with project mount..."
+    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} down
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} -f "$OVERRIDE_FILE" up -d
 
     # Re-sync files after restart (container loses synced files when restarted)
@@ -164,11 +186,23 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="":
     just e2e-sync
 
     # Check if container is running
-    if ! ({{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} ps e2e) | grep -qE "(Up|running)"; then
+    if ! {{container-tool}} ps --filter "name=jupyter-deploy-e2e-aws-ec2-base" --format "{{{{.Status}}}}" | grep -q "Up"; then
         echo "Error: E2E container is not running. Start it with: just e2e-up"
         [ -n "$OVERRIDE_FILE" ] && rm -f "$OVERRIDE_FILE"
         exit 1
     fi
+
+    # Verify test-results directory is writable (detect stale mount)
+    echo "Verifying test-results directory is writable..."
+    if ! {{container-tool}} exec jupyter-deploy-e2e-aws-ec2-base bash -c "touch /workspace/test-results/.mount-check && rm /workspace/test-results/.mount-check" 2>/dev/null; then
+        echo "Error: test-results directory is not writable (stale mount detected)"
+        echo ""
+        echo "This happens when test-results was deleted while the container was running."
+        echo "To fix: just e2e-down && just e2e-up"
+        [ -n "$OVERRIDE_FILE" ] && rm -f "$OVERRIDE_FILE"
+        exit 1
+    fi
+    echo "✓ test-results directory is writable"
 
     # Build the pytest command based on deployment mode
     if [ "$IS_DEPLOYMENT_FROM_SCRATCH" = "true" ]; then
@@ -261,6 +295,7 @@ auth-setup project_dir display="${DISPLAY:-}":
     #!/usr/bin/env bash
     set -euo pipefail
 
+
     # Track override file for cleanup
     OVERRIDE_FILE=""
 
@@ -286,8 +321,15 @@ auth-setup project_dir display="${DISPLAY:-}":
     # Always mount project directory dynamically
     echo "Mounting project directory: {{project_dir}}"
 
-    # Create test-results directory if it doesn't exist (for screenshots)
+    # Create test-results and .auth directories
     mkdir -p "{{justfile_directory()}}/test-results"
+    mkdir -p "{{justfile_directory()}}/.auth"
+    echo "Cleaning old test artifacts..."
+    rm -rf "{{justfile_directory()}}/test-results"/*
+
+    # Update HOST_UID and HOST_GID in existing .env file
+    sed -i 's/^HOST_UID=.*/HOST_UID={{HOST_UID}}/' {{justfile_directory()}}/.env
+    sed -i 's/^HOST_GID=.*/HOST_GID={{HOST_GID}}/' {{justfile_directory()}}/.env
 
     # Create temporary override file to mount the project directory and test-results
     OVERRIDE_FILE="{{justfile_directory()}}/docker-compose.e2e-override.yml"
@@ -299,13 +341,26 @@ auth-setup project_dir display="${DISPLAY:-}":
           - ./test-results:/workspace/test-results
     EOF
 
-    # Restart container with new mount
+    # Stop and restart container with new mounts (ensures clean mount state)
     echo "Restarting E2E container with project mount..."
+    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} down
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} -f "$OVERRIDE_FILE" up -d
 
     # Re-sync files after restart (container loses synced files when restarted)
     echo "Re-syncing project files after mount..."
     just e2e-sync
+
+    # Verify test-results directory is writable (detect stale mount)
+    echo "Verifying test-results directory is writable..."
+    if ! {{container-tool}} exec jupyter-deploy-e2e-aws-ec2-base bash -c "touch /workspace/test-results/.mount-check && rm /workspace/test-results/.mount-check" 2>/dev/null; then
+        echo "Error: test-results directory is not writable (stale mount detected)"
+        echo ""
+        echo "This happens when test-results was deleted while the container was running."
+        echo "To fix: just e2e-down && just e2e-up"
+        [ -n "$OVERRIDE_FILE" ] && rm -f "$OVERRIDE_FILE"
+        exit 1
+    fi
+    echo "✓ test-results directory is writable"
 
     # Check if DISPLAY is set
     if [ -z "{{display}}" ]; then
@@ -389,9 +444,9 @@ clean-e2e:
     {{container-tool}} rmi {{e2e-image-name}}:{{e2e-image-tag}} || true
 
 # Full workflow: start container (builds if needed) and run tests
-# Usage: just e2e-all <project-dir> [test-filter] [options]
-e2e-all project_dir test_filter="" options="":
+# Usage: just e2e-all <project-dir> [test-filter] [options] [no-cache]
+e2e-all project_dir test_filter="" options="" no_cache="false":
     @echo "Starting E2E container (will build image if needed)..."
-    @just e2e-up
+    @just e2e-up {{no_cache}}
     @echo ""
     @just test-e2e {{project_dir}} {{test_filter}} {{options}}

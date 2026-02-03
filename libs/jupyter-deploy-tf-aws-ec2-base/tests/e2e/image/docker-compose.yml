@@ -8,7 +8,6 @@ services:
         USER_GID: ${HOST_GID:-1000}
     image: jupyter-deploy-e2e-aws-ec2-base:latest
     container_name: jupyter-deploy-e2e-aws-ec2-base
-    hostname: ${HOSTNAME:-localhost}
     working_dir: /workspace
     # User is set in Dockerfile based on build args
     volumes:

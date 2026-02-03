@@ -328,15 +328,18 @@ class EndToEndDeployment:
         status = self.cli.get_server_status()
         return status == "STOPPED"
 
-    def wait_for_ssm_ready(self, max_retries: int = 3) -> None:
+    def wait_for_ssm_ready(self, max_retries: int = 6) -> None:
         """Wait for SSM agent to be ready after host state change.
 
         SSM agent needs time to register with AWS Systems Manager after
         the EC2 instance starts or restarts. This method polls until SSM
         is ready or max retries is reached.
 
+        After instance replacements or restarts, SSM agent registration can take
+        30-90 seconds, especially when cloud-init volume mounting is in progress.
+
         Args:
-            max_retries: Maximum number of retry attempts (default: 3)
+            max_retries: Maximum number of retry attempts (default: 6)
 
         Raises:
             JDCliError: If SSM doesn't become ready within max_retries
@@ -350,8 +353,8 @@ class EndToEndDeployment:
                 error_str = str(e)
                 if "SSM:DescribeInstanceInformation returned an empty list" in error_str:
                     if attempt < max_retries - 1:
-                        # Wait with linear backoff: 1s, 2s, 3s (total: 6s)
-                        delay = 1 + attempt
+                        # Exponential backoff with cap: 2, 4, 8, 16, 30, 30... (max ~90s total)
+                        delay = min(2 ** (attempt + 1), 30)
                         time.sleep(delay)
                     else:
                         # Max retries exceeded
