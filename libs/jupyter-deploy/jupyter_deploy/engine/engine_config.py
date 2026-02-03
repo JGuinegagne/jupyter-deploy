@@ -3,6 +3,7 @@ from pathlib import Path
 
 from jupyter_deploy.engine.engine_variables import EngineVariablesHandler
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.engine.supervised_execution import CompletionContext
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
 from jupyter_deploy.handlers.command_history_handler import CommandHistoryHandler
 from jupyter_deploy.manifest import JupyterDeployManifest
@@ -58,8 +59,8 @@ class EngineConfigHandler(ABC):
     @abstractmethod
     def configure(
         self, preset_name: str | None = None, variable_overrides: dict[str, TemplateVariableDefinition] | None = None
-    ) -> bool:
-        """Execute commands to set the values of the variables, return True if succeeded."""
+    ) -> CompletionContext | None:
+        """Set the inputs, return a CompletionContext, or None if not available."""
         pass
 
     @abstractmethod

@@ -283,7 +283,7 @@ def config(
 
         with progress_display or nullcontext():
             try:
-                handler.configure(variable_overrides=variables)
+                completion_context = handler.configure(variable_overrides=variables)
             except ExecutionError as e:
                 # Error context already displayed by callback
                 console.print(f":x: {e.message}", style="red")
@@ -321,6 +321,15 @@ def config(
             console.rule()
 
         console.print("Your project is ready.", style="bold green")
+
+        # Display completion summary if available
+        # Verbose mode prints everything, so no need to add a summary
+        if completion_context and not verbose:
+            # Use raw print() instead of console.print() to avoid adding extra ANSI styling
+            # The lines already contain ANSI codes from terraform output that we want to preserve as-is
+            for line in completion_context.lines:
+                print(line)
+
         console.line()
         if output_filename:
             console.print(
@@ -328,7 +337,6 @@ def config(
             )
         else:
             console.print("You can now run `[bold cyan]jd up[/]` to create or update the resources.")
-        console.line()
 
 
 @runner.app.command()
@@ -377,10 +385,20 @@ def up(
             console.rule("[bold]jupyter-deploy:[/] applying infrastructure changes")
         with progress_display or nullcontext():
             try:
-                handler.apply(config_file_path, auto_approve)
+                completion_context = handler.apply(config_file_path, auto_approve)
             except ExecutionError as e:
                 console.print(f":x: {e.message}", style="red")
                 raise typer.Exit(code=e.retcode) from None
+
+        # Display completion summary if available
+        # Verbose mode prints everything, so no need to add a summary
+        if completion_context and not verbose:
+            console.line()
+            # Use raw print() instead of console.print() to avoid adding extra ANSI styling
+            # The lines already contain ANSI codes from terraform output that we want to preserve as-is
+            for line in completion_context.lines:
+                print(line)
+            console.line()
 
         console.print("Infrastructure changes applied successfully.", style="green")
 

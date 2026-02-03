@@ -13,7 +13,7 @@ from jupyter_deploy.engine.engine_config import (
     WriteConfigurationError,
 )
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.engine.supervised_execution import ExecutionError, TerminalHandler
+from jupyter_deploy.engine.supervised_execution import CompletionContext, ExecutionError, TerminalHandler
 from jupyter_deploy.engine.supervised_execution_callback import ExecutionCallbackInterface
 from jupyter_deploy.engine.terraform import (
     tf_plan,
@@ -101,7 +101,7 @@ class TerraformConfigHandler(EngineConfigHandler):
 
     def configure(
         self, preset_name: str | None = None, variable_overrides: dict[str, TemplateVariableDefinition] | None = None
-    ) -> bool:
+    ) -> CompletionContext | None:
         # Create log file using command history handler
         self._log_file = self.command_history_handler.create_log_file("config")
 
@@ -189,9 +189,8 @@ class TerraformConfigHandler(EngineConfigHandler):
                 message="Error generating Terraform plan.",
             )
 
-        # on successful plan generation, terraform prints out where the plan is saved,
-        # hence no need to print it again.
-        return True
+        # Return completion context from callback
+        return plan_callback.get_completion_context()
 
     def record(self, record_vars: bool = False, record_secrets: bool = False) -> None:
         """Record variables and secrets from the plan file.

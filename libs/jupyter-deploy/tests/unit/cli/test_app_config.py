@@ -40,7 +40,7 @@ class TestConfigCommand(unittest.TestCase):
         mock_verify_preset_exists.return_value = True
         mock_list_presets.return_value = ["all", "base", "none"]
         mock_verify.return_value = True
-        mock_configure.return_value = True
+        mock_configure.return_value = None
         mock_has_used_preset.return_value = False
 
         return mock_config_handler, {
@@ -286,9 +286,9 @@ class TestConfigCommand(unittest.TestCase):
 
         call_order: list[str] = []
 
-        def configure_mock(*a: list, **kw: dict) -> bool:
+        def configure_mock(*a: list, **kw: dict) -> None:
             call_order.append("configure")
-            return True
+            return None
 
         mock_config_fns["reset_recorded_variables"].side_effect = lambda *a, **kw: call_order.append("reset_vars")
         mock_config_fns["reset_recorded_secrets"].side_effect = lambda *a, **kw: call_order.append("reset_secrets")

@@ -2,7 +2,7 @@ from pathlib import Path
 
 from jupyter_deploy.engine.engine_up import EngineUpHandler
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.engine.supervised_execution import TerminalHandler
+from jupyter_deploy.engine.supervised_execution import CompletionContext, TerminalHandler
 from jupyter_deploy.engine.terraform import tf_up
 from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
 
@@ -48,11 +48,14 @@ class UpHandler(BaseProjectHandler):
 
         return config_file_path
 
-    def apply(self, config_file_path: Path, auto_approve: bool = False) -> None:
+    def apply(self, config_file_path: Path, auto_approve: bool = False) -> CompletionContext | None:
         """Apply the infrastructure changes defined in the config file.
 
         Args:
             config_file_path: The path to the config file.
             auto_approve: Whether to auto-approve the changes without prompting.
+
+        Returns:
+            CompletionContext with completion summary, or None if not available.
         """
         return self._handler.apply(config_file_path, auto_approve)

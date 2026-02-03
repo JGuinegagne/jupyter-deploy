@@ -8,7 +8,12 @@ extraction while delegating display to a TerminalHandler.
 from abc import ABC, abstractmethod
 from collections import deque
 
-from jupyter_deploy.engine.supervised_execution import ExecutionProgress, InteractionContext, TerminalHandler
+from jupyter_deploy.engine.supervised_execution import (
+    CompletionContext,
+    ExecutionProgress,
+    InteractionContext,
+    TerminalHandler,
+)
 
 
 class ExecutionCallbackInterface(ABC):
@@ -85,6 +90,14 @@ class ExecutionCallbackInterface(ABC):
 
         Args:
             retcode: The non-zero return code from the failed command
+        """
+        ...
+
+    @abstractmethod
+    def get_completion_context(self) -> CompletionContext | None:
+        """Return CompletionContext with lines to display, or None if no context captured.
+
+        Called after successful execution to retrieve summary lines for display.
         """
         ...
 
@@ -222,6 +235,14 @@ class EngineExecutionCallback(ExecutionCallbackInterface):
         error_context_lines = list(self._line_buffer)[-self._error_display_lines :]
         self._terminal_handler.display_error_context(error_context_lines)
 
+    def get_completion_context(self) -> CompletionContext | None:
+        """Return CompletionContext with lines to display, or None if no context captured.
+
+        Default implementation returns None. Subclasses can override to provide
+        engine-specific completion context (e.g., terraform plan summary, outputs).
+        """
+        return None
+
     @abstractmethod
     def _detect_interaction(self, line: str) -> bool:
         """Detect if a line triggers user interaction (cheap check).
@@ -316,3 +337,7 @@ class NoopExecutionCallback(ExecutionCallbackInterface, ABC):
     def on_execution_error(self, retcode: int) -> None:
         """No-op - error already displayed to stdout in verbose mode."""
         pass
+
+    def get_completion_context(self) -> CompletionContext | None:
+        """No completion context in verbose mode."""
+        return None

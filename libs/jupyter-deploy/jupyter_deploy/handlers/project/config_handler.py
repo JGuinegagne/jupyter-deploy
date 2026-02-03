@@ -1,7 +1,7 @@
 from jupyter_deploy import verify_utils
 from jupyter_deploy.engine.engine_config import EngineConfigHandler
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.engine.supervised_execution import TerminalHandler
+from jupyter_deploy.engine.supervised_execution import CompletionContext, TerminalHandler
 from jupyter_deploy.engine.terraform import tf_config
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
 from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
@@ -87,8 +87,10 @@ class ConfigHandler(BaseProjectHandler):
         """Delete the file in the project dir where the secrets were recorded."""
         self._handler.reset_recorded_secrets()
 
-    def configure(self, variable_overrides: dict[str, TemplateVariableDefinition] | None = None) -> bool:
-        """Main method to set the inputs for the project, return True on success"""
+    def configure(
+        self, variable_overrides: dict[str, TemplateVariableDefinition] | None = None
+    ) -> CompletionContext | None:
+        """Set inputs of the project, calls the engine, return CompletionContext."""
         return self._handler.configure(preset_name=self.preset_name, variable_overrides=variable_overrides)
 
     def record(self, record_vars: bool = False, record_secrets: bool = False) -> None:

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from jupyter_deploy.engine.engine_up import EngineUpHandler
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.engine.supervised_execution import ExecutionError, TerminalHandler
+from jupyter_deploy.engine.supervised_execution import CompletionContext, ExecutionError, TerminalHandler
 from jupyter_deploy.engine.supervised_execution_callback import ExecutionCallbackInterface
 from jupyter_deploy.engine.terraform import tf_supervised_executor_factory
 from jupyter_deploy.engine.terraform.tf_constants import (
@@ -42,7 +42,7 @@ class TerraformUpHandler(EngineUpHandler):
     def get_default_config_filename(self) -> str:
         return TF_DEFAULT_PLAN_FILENAME
 
-    def apply(self, config_file_path: Path, auto_approve: bool = False) -> None:
+    def apply(self, config_file_path: Path, auto_approve: bool = False) -> CompletionContext | None:
         # Create log file using command history handler
         self._log_file = self.command_history_handler.create_log_file("up")
 
@@ -79,3 +79,6 @@ class TerraformUpHandler(EngineUpHandler):
                 retcode=apply_retcode,
                 message="Error applying Terraform plan.",
             )
+
+        # Return completion context from callback
+        return apply_callback.get_completion_context()

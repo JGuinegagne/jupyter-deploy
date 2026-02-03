@@ -298,6 +298,7 @@ class TestUpCommand(unittest.TestCase):
         mock_up_handler.get_default_config_filename = mock_get_default_filename
 
         mock_get_default_filename.return_value = "jdout-tfplan"
+        mock_apply.return_value = None
 
         # If config file doesn't exist, raise FileNotFoundError
         if not config_file_exists:

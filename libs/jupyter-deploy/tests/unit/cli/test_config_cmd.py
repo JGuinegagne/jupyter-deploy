@@ -39,6 +39,7 @@ class TestDeployCmdWithDecorator(unittest.TestCase):
         mock_verify_preset_exists.return_value = True
         mock_list_presets.return_value = ["all", "base", "none"]
         mock_verify.return_value = True
+        mock_configure.return_value = None
         mock_has_used_preset.return_value = True
 
         return mock_config_handler, {
