@@ -46,7 +46,8 @@ Always run from the root of the repository:
    - Runs `uv run pytest`
 
 ## General coding rules
-1. you MUST NOT use runtime import in python; only exception is `<cli>/provider/instrauction_runner_factory` module
+1. **IMPORTANT**: Always place imports at the TOP of Python files. DO NOT use lazy imports (imports inside functions) except  
+  in `<cli>/provider/instruction_runner_factory` which handles optional dependencies.
 2. you MUST NOT silence linters without the user's permission
 3. you MUST NOT write docstrings that merely repeat a method name
 

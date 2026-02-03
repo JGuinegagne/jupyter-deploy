@@ -9,7 +9,9 @@ from pydantic import ValidationError
 from jupyter_deploy.engine.terraform.tf_plan import (
     TerraformPlan,
     TerraformPlanVariableContent,
-    extract_variables_from_json_plan,
+    extract_plan,
+    extract_resource_counts_from_plan,
+    extract_variables_from_plan,
     format_plan_variables,
     format_terraform_value,
     format_values_for_dot_tfvars,
@@ -70,7 +72,8 @@ class TestExtractVariablesFromPlan(unittest.TestCase):
 
     def test_happy_case(self) -> None:
         cls = self.__class__
-        result = extract_variables_from_json_plan(cls.plan_content)
+        plan = extract_plan(cls.plan_content)
+        result = extract_variables_from_plan(plan)
 
         expect_vars = {k: v for k, v in cls.plan.variables.items() if "secret" not in k}
         expect_secrets = {k: v for k, v in cls.plan.variables.items() if "secret" in k}
@@ -81,11 +84,11 @@ class TestExtractVariablesFromPlan(unittest.TestCase):
         cls = self.__class__
 
         with self.assertRaises(ValueError):
-            extract_variables_from_json_plan(cls.plan_content[:-2])
+            extract_plan(cls.plan_content[:-2])
 
     def test_non_dict_json_raise_value_error(self) -> None:
         with self.assertRaises(ValueError):
-            extract_variables_from_json_plan(json.dumps(["I should be a dict"]))
+            extract_plan(json.dumps(["I should be a dict"]))
 
     def test_no_variables_key_raise_pydantic_validation_error(self) -> None:
         cls = self.__class__
@@ -93,7 +96,7 @@ class TestExtractVariablesFromPlan(unittest.TestCase):
         del no_variables_plan["variables"]
 
         with self.assertRaises(ValidationError):
-            extract_variables_from_json_plan(json.dumps(no_variables_plan))
+            extract_plan(json.dumps(no_variables_plan))
 
     def test_no_configuration_key_raise_pydantic_validation_error(self) -> None:
         cls = self.__class__
@@ -101,7 +104,7 @@ class TestExtractVariablesFromPlan(unittest.TestCase):
         del no_config_plan["configuration"]
 
         with self.assertRaises(ValidationError):
-            extract_variables_from_json_plan(json.dumps(no_config_plan))
+            extract_plan(json.dumps(no_config_plan))
 
     def test_no_config_root_variables_key_raise_pydantic_validation_error(self) -> None:
         cls = self.__class__
@@ -109,7 +112,7 @@ class TestExtractVariablesFromPlan(unittest.TestCase):
         del modified_plan["configuration"]["root_module"]["variables"]
 
         with self.assertRaises(ValidationError):
-            extract_variables_from_json_plan(json.dumps(modified_plan))
+            extract_plan(json.dumps(modified_plan))
 
 
 class TestFormatPlanVariables(unittest.TestCase):
@@ -176,3 +179,172 @@ class TestFormatValuesForDotTfvars(unittest.TestCase):
         vars: dict[str, TerraformPlanVariableContent] = {}
         result = format_values_for_dot_tfvars(vars)
         self.assertEqual(result, [])
+
+
+class TestExtractResourceCountsFromJsonPlan(unittest.TestCase):
+    """Test cases for extract_resource_counts_from_plan function."""
+
+    def _make_plan(self, resource_changes: list[dict]) -> str:
+        """Helper to create minimal valid terraform plan JSON."""
+        return json.dumps(
+            {
+                "variables": {},
+                "configuration": {"root_module": {"variables": {}}},
+                "resource_changes": resource_changes,
+            }
+        )
+
+    def test_extracts_create_actions(self) -> None:
+        """Test extraction of resources to be created."""
+        plan = extract_plan(
+            self._make_plan(
+                [
+                    {"change": {"actions": ["create"]}},
+                    {"change": {"actions": ["create"]}},
+                    {"change": {"actions": ["create"]}},
+                ]
+            )
+        )
+        to_add, to_change, to_destroy = extract_resource_counts_from_plan(plan)
+        self.assertEqual(to_add, 3)
+        self.assertEqual(to_change, 0)
+        self.assertEqual(to_destroy, 0)
+
+    def test_extracts_delete_actions(self) -> None:
+        """Test extraction of resources to be deleted."""
+        plan = extract_plan(
+            self._make_plan(
+                [
+                    {"change": {"actions": ["delete"]}},
+                    {"change": {"actions": ["delete"]}},
+                ]
+            )
+        )
+        to_add, to_change, to_destroy = extract_resource_counts_from_plan(plan)
+        self.assertEqual(to_add, 0)
+        self.assertEqual(to_change, 0)
+        self.assertEqual(to_destroy, 2)
+
+    def test_extracts_update_actions(self) -> None:
+        """Test extraction of resources to be updated."""
+        plan = extract_plan(
+            self._make_plan(
+                [
+                    {"change": {"actions": ["update"]}},
+                    {"change": {"actions": ["update"]}},
+                    {"change": {"actions": ["update"]}},
+                ]
+            )
+        )
+        to_add, to_change, to_destroy = extract_resource_counts_from_plan(plan)
+        self.assertEqual(to_add, 0)
+        self.assertEqual(to_change, 3)
+        self.assertEqual(to_destroy, 0)
+
+    def test_extracts_replace_actions(self) -> None:
+        """Test extraction of resources to be replaced (delete + create)."""
+        plan = extract_plan(
+            self._make_plan(
+                [
+                    {"change": {"actions": ["delete", "create"]}},
+                    {"change": {"actions": ["create", "delete"]}},
+                ]
+            )
+        )
+        to_add, to_change, to_destroy = extract_resource_counts_from_plan(plan)
+        self.assertEqual(to_add, 0)
+        self.assertEqual(to_change, 2)
+        self.assertEqual(to_destroy, 0)
+
+    def test_extracts_mixed_actions(self) -> None:
+        """Test extraction with mixed action types."""
+        plan = extract_plan(
+            self._make_plan(
+                [
+                    {"change": {"actions": ["create"]}},
+                    {"change": {"actions": ["create"]}},
+                    {"change": {"actions": ["update"]}},
+                    {"change": {"actions": ["delete"]}},
+                    {"change": {"actions": ["delete", "create"]}},
+                ]
+            )
+        )
+        to_add, to_change, to_destroy = extract_resource_counts_from_plan(plan)
+        self.assertEqual(to_add, 2)
+        self.assertEqual(to_change, 2)
+        self.assertEqual(to_destroy, 1)
+
+    def test_handles_empty_resource_changes(self) -> None:
+        """Test handling of plans with no resource changes."""
+        plan = extract_plan(self._make_plan([]))
+        to_add, to_change, to_destroy = extract_resource_counts_from_plan(plan)
+        self.assertEqual(to_add, 0)
+        self.assertEqual(to_change, 0)
+        self.assertEqual(to_destroy, 0)
+
+    def test_handles_no_op_actions(self) -> None:
+        """Test that no-op actions are ignored."""
+        plan = extract_plan(
+            self._make_plan(
+                [
+                    {"change": {"actions": ["no-op"]}},
+                    {"change": {"actions": ["no-op"]}},
+                    {"change": {"actions": ["create"]}},
+                ]
+            )
+        )
+        to_add, to_change, to_destroy = extract_resource_counts_from_plan(plan)
+        self.assertEqual(to_add, 1)
+        self.assertEqual(to_change, 0)
+        self.assertEqual(to_destroy, 0)
+
+    def test_skips_resources_with_no_change(self) -> None:
+        """Test that resources without change attribute are skipped."""
+        plan = extract_plan(
+            self._make_plan(
+                [
+                    {},  # No change attribute
+                    {"change": None},  # Null change
+                    {"change": {"actions": ["create"]}},
+                    {"change": {"actions": ["delete"]}},
+                ]
+            )
+        )
+        to_add, to_change, to_destroy = extract_resource_counts_from_plan(plan)
+        self.assertEqual(to_add, 1)
+        self.assertEqual(to_change, 0)
+        self.assertEqual(to_destroy, 1)
+
+    def test_raises_value_error_on_invalid_json(self) -> None:
+        """Test that invalid JSON raises ValueError."""
+        with self.assertRaises(ValueError) as context:
+            extract_plan("not valid json")
+        self.assertIn("cannot be parsed as JSON", str(context.exception))
+
+    def test_raises_value_error_on_non_dict(self) -> None:
+        """Test that non-dict JSON raises ValueError."""
+        with self.assertRaises(ValueError) as context:
+            extract_plan(json.dumps([1, 2, 3]))
+        self.assertIn("expected a dict", str(context.exception))
+
+    def test_handles_missing_resource_changes_key(self) -> None:
+        """Test handling of plans without resource_changes key."""
+        plan = extract_plan(json.dumps({"variables": {}, "configuration": {"root_module": {"variables": {}}}}))
+        to_add, to_change, to_destroy = extract_resource_counts_from_plan(plan)
+        self.assertEqual(to_add, 0)
+        self.assertEqual(to_change, 0)
+        self.assertEqual(to_destroy, 0)
+
+    def test_raises_validation_error_on_malformed_resource_changes(self) -> None:
+        """Test that malformed resource changes raise ValidationError during parsing."""
+        with self.assertRaises(ValidationError):
+            extract_plan(
+                self._make_plan(
+                    [
+                        "not a dict",  # type: ignore
+                        {"change": "not a dict"},
+                        {"change": {"actions": "not a list"}},  # type: ignore
+                        {"change": {"actions": ["create"]}},
+                    ]
+                )
+            )

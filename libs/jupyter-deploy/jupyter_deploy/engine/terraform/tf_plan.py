@@ -25,10 +25,21 @@ class TerraformPlanVariableContent(BaseModel):
     value: Any | None
 
 
+class TerraformPlanChange(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    actions: list[str] = []
+
+
+class TerraformPlanResourceChange(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    change: TerraformPlanChange | None = None
+
+
 class TerraformPlan(BaseModel):
     model_config = ConfigDict(extra="allow")
     variables: dict[str, TerraformPlanVariableContent]
     configuration: TerraformPlanConfiguration
+    resource_changes: list[TerraformPlanResourceChange] = []
 
 
 def format_terraform_value(value: Any) -> str:
@@ -59,26 +70,38 @@ def format_terraform_value(value: Any) -> str:
         return str(value)
 
 
-def extract_variables_from_json_plan(
-    plan_content: str,
-) -> tuple[dict[str, TerraformPlanVariableContent], dict[str, TerraformPlanVariableContent]]:
-    """Parse the content of a terraform plan as json, return tuple of variables, secrets.
+def extract_plan(plan_content: str) -> TerraformPlan:
+    """Parse terraform plan JSON string and return TerraformPlan model.
 
-    Raise:
-        ValueError if the plan_content is not a valid JSON
-        ValueError if the plan_content is not a dict
-        ValidationError if the plan_content.variables does not conform to the schema
+    Args:
+        plan_content: JSON string from `terraform show -json <plan-file>`
+
+    Raises:
+        ValueError: If plan_content is not valid JSON or not a dict
+        ValidationError: If plan_content doesn't conform to TerraformPlan schema
     """
     try:
         parsed_plan = json.loads(plan_content)
     except json.JSONDecodeError as e:
         raise ValueError("Terraform plan cannot be parsed as JSON.") from e
 
-    if type(parsed_plan) is not dict:
-        raise ValueError("Terraform plan is not valid: excepted a dict.")
+    if not isinstance(parsed_plan, dict):
+        raise ValueError("Terraform plan is not valid: expected a dict.")
 
-    plan = TerraformPlan(**parsed_plan)
+    return TerraformPlan(**parsed_plan)
 
+
+def extract_variables_from_plan(
+    plan: TerraformPlan,
+) -> tuple[dict[str, TerraformPlanVariableContent], dict[str, TerraformPlanVariableContent]]:
+    """Extract variables and secrets from a parsed terraform plan.
+
+    Args:
+        plan: Parsed TerraformPlan from extract_plan()
+
+    Returns:
+        Tuple of (variables, secrets) dictionaries
+    """
     sensitive_varnames = set(
         [var_name for var_name, var_config in plan.configuration.root_module.variables.items() if var_config.sensitive]
     )
@@ -115,3 +138,34 @@ def format_values_for_dot_tfvars(vars: dict[str, Any]) -> list[str]:
     ]
     out.extend([f"{name} = {format_terraform_value(value)}\n" for name, value in vars.items()])
     return out
+
+
+def extract_resource_counts_from_plan(plan: TerraformPlan) -> tuple[int, int, int]:
+    """Extract resource change counts from a parsed terraform plan.
+
+    Args:
+        plan: Parsed TerraformPlan from extract_plan()
+
+    Returns:
+        Tuple of (to_add, to_change, to_destroy)
+    """
+    to_add = 0
+    to_change = 0
+    to_destroy = 0
+
+    for resource_change in plan.resource_changes:
+        if not resource_change.change:
+            continue
+
+        actions = resource_change.change.actions
+
+        # Count based on action types
+        # Note: replace = delete + create, but we only count as "change"
+        if "create" in actions and "delete" not in actions:
+            to_add += 1
+        elif "delete" in actions and "create" not in actions:
+            to_destroy += 1
+        elif "update" in actions or ("create" in actions and "delete" in actions):
+            to_change += 1
+
+    return to_add, to_change, to_destroy

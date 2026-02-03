@@ -12,7 +12,7 @@ from jupyter_deploy.variables_config import (
 
 
 # Create a test version of the class without the validators for testing
-class TestVariablesConfigV1NoValidators(BaseModel):
+class VariablesConfigV1NoValidatorsForTest(BaseModel):
     model_config = ConfigDict(extra="allow")
     schema_version: int = 1  # Using Literal[1] would make sense here but int is fine for tests
     required: dict[str, Any] = Field(default_factory=dict)
@@ -45,7 +45,7 @@ class TestJupyterDeployVariablesConfigV1(unittest.TestCase):
         )
 
     def test_variables_v1_schema_version(self) -> None:
-        variables = TestVariablesConfigV1NoValidators(
+        variables = VariablesConfigV1NoValidatorsForTest(
             **self.variables_v1_parsed_content  # type: ignore
         )
         self.assertEqual(variables.schema_version, 1)
@@ -57,7 +57,7 @@ class TestJupyterDeployVariablesConfigV1(unittest.TestCase):
         )
 
     def test_variables_v1_required(self) -> None:
-        variables = TestVariablesConfigV1NoValidators(
+        variables = VariablesConfigV1NoValidatorsForTest(
             **self.variables_v1_parsed_content  # type: ignore
         )
         self.assertEqual(variables.required["region"], "us-west-2")
@@ -65,7 +65,7 @@ class TestJupyterDeployVariablesConfigV1(unittest.TestCase):
         self.assertIsNone(variables.required["storage_region"])
 
     def test_variables_v1_required_sensitive(self) -> None:
-        variables = TestVariablesConfigV1NoValidators(
+        variables = VariablesConfigV1NoValidatorsForTest(
             **self.variables_v1_parsed_content  # type: ignore
         )
         self.assertEqual(variables.required_sensitive["aws_access_key"], "dummy-access-key")
@@ -73,14 +73,14 @@ class TestJupyterDeployVariablesConfigV1(unittest.TestCase):
         self.assertIsNone(variables.required_sensitive["api_token"])
 
     def test_variables_v1_overrides(self) -> None:
-        variables = TestVariablesConfigV1NoValidators(
+        variables = VariablesConfigV1NoValidatorsForTest(
             **self.variables_v1_parsed_content  # type: ignore
         )
         self.assertEqual(variables.overrides["deployment_type"], "t3.large")
         self.assertEqual(variables.overrides["storage_size"], 100)
 
     def test_variables_v1_defaults(self) -> None:
-        variables = TestVariablesConfigV1NoValidators(
+        variables = VariablesConfigV1NoValidatorsForTest(
             **self.variables_v1_parsed_content  # type: ignore
         )
         self.assertEqual(variables.defaults["deployment_type"], "t3.medium")
@@ -91,7 +91,7 @@ class TestJupyterDeployVariablesConfigV1(unittest.TestCase):
     def test_check_overrides_exist_pass(self) -> None:
         # Should not raise an error with valid overrides
         # We use a test class with overridden validators to allow us to test the basic parsing
-        TestVariablesConfigV1NoValidators(
+        VariablesConfigV1NoValidatorsForTest(
             **self.variables_v1_parsed_content  # type: ignore
         )
 
@@ -109,7 +109,7 @@ class TestJupyterDeployVariablesConfigV1(unittest.TestCase):
     def test_check_no_var_name_repeat_pass(self) -> None:
         # Should not raise an error with no repeated variables
         # We use a test class with overridden validators to allow us to test the basic parsing
-        TestVariablesConfigV1NoValidators(
+        VariablesConfigV1NoValidatorsForTest(
             **self.variables_v1_parsed_content  # type: ignore
         )
 

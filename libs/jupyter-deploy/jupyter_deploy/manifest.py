@@ -93,6 +93,128 @@ class JupyterDeployCommandV1(BaseModel):
     updates: list[JupyterDeployCommandUpdateV1] | None = None
 
 
+class JupyterDeploySupervisedExecutionSubPhaseV1(BaseModel):
+    """Sub-phase within an execution phase.
+
+    Used for tracking progress within long-running operations like waiter scripts.
+
+    Attributes:
+        enter_pattern: Output pattern to enter this sub-phase (substring match)
+        label: Human-readable label for this sub-phase
+        weight: Relative weight within parent phase (0-100)
+    """
+
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    enter_pattern: str = Field(alias="enter-pattern")
+    label: str
+    weight: int
+
+
+class JupyterDeploySupervisedExecutionPhaseV1(BaseModel):
+    """Definition of an execution phase.
+
+    Attributes:
+        enter_pattern: Output pattern to enter this phase (substring match)
+        exit_pattern: Optional output pattern to exit this phase (substring match)
+        progress_pattern: Optional output pattern completion of countable events to report
+            as incremental progression
+        progress_events_estimate: Optional number of countable progress events expected
+        progress_events_estimate_capture_group: Optional capture group index to extract
+            progress_events_estimate from enter_pattern match. Defaults to 10 if extraction fails.
+        label: Human-readable phase name (e.g., "Waiting for deployment")
+        weight: Relative weight out of 100 (e.g., 40 means this phase accounts for 40% of progress)
+        phases: Optional nested sub-phases with their own patterns and weights
+    """
+
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    enter_pattern: str = Field(alias="enter-pattern")
+    exit_pattern: str | None = Field(alias="exit-pattern", default=None)
+    progress_pattern: str | None = Field(alias="progress-pattern", default=None)
+    progress_events_estimate: int | None = Field(alias="progress-events-estimate", default=None)
+    progress_events_estimate_capture_group: int | None = Field(
+        alias="progress-events-estimate-capture-group", default=None
+    )
+    label: str
+    weight: int
+    phases: list[JupyterDeploySupervisedExecutionSubPhaseV1] | None = Field(default=None)
+
+
+class JupyterDeploySupervisedExecutionDefaultPhaseV1(BaseModel):
+    """Definition of the default execution phase.
+
+    Attributes:
+        progress_pattern: Output pattern completion of countable events to report
+            as incremental progression
+        progress_events_estimate: Number of countable progress events expected
+        progress_events_estimate_dynamic_source: Optional dynamic source for extracting
+            progress_events_estimate (e.g., "plan.to_update", "plan.to_destroy").
+            Resolved at phase creation time from external data.
+        label: Human-readable phase name (e.g., "Waiting for deployment")
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+    progress_pattern: str = Field(alias="progress-pattern")
+    progress_events_estimate: int | None = Field(alias="progress-events-estimate", default=None)
+    progress_events_estimate_dynamic_source: str | None = Field(
+        alias="progress-events-estimate-dynamic-source", default=None
+    )
+    label: str
+
+
+class JupyterDeploySupervisedCommandExecutionV1(BaseModel):
+    """Command-level supervised execution configuration.
+
+    Defines either estimate-based progress tracking OR explicit phase transitions for a command.
+
+    Attributes:
+        default_phase:  Optional definition of the default phase that activates whenever
+                        No other phases are active.
+        phases: Optional list of explicit phase definitions with patterns and weights.
+                Used when command has distinct phases to track
+                (e.g., "Initializing backend" -> "Installing providers").
+    """
+
+    model_config = ConfigDict(extra="allow")
+    default_phase: JupyterDeploySupervisedExecutionDefaultPhaseV1 | None = Field(alias="default-phase", default=None)
+    phases: list[JupyterDeploySupervisedExecutionPhaseV1] | None = None
+
+
+class JupyterDeploySupervisedExecutionV1(BaseModel):
+    """Supervised execution configuration for commands.
+
+    Defines phases tracking for config, up, and down commands to enable
+    progress display with phase transitions and sub-phase tracking.
+
+    Each field (config/up/down) is a mapping from command ID (e.g., "terraform.init", "terraform.plan")
+    to command execution configuration (either estimates or explicit phases).
+
+    Example YAML:
+        supervised-execution:
+          config:
+            config.terraform-init:
+              default_phase:
+                progress-pattern: "Initializing"
+                progress-events_estimate: 3
+                label: "Configuring terraform dependencies"
+            config.terraform-plan:
+              default_phase:
+                progress-pattern: "Read complete after|Refreshing state"
+                progress-events_estimate: 50
+                label: "Evaluating changes"
+              phases:
+                - enter-pattern: "Terraform will perform the following actions:"
+                  progress-pattern: "(will be created|will be read during apply|will be destroyed)"
+                  progress-events-estimates: 70
+                  label: "Generating plan"
+                  weight: 50
+    """
+
+    model_config = ConfigDict(extra="allow")
+    config: dict[str, JupyterDeploySupervisedCommandExecutionV1] | None = None
+    up: dict[str, JupyterDeploySupervisedCommandExecutionV1] | None = None
+    down: dict[str, JupyterDeploySupervisedCommandExecutionV1] | None = None
+
+
 class JupyterDeployManifestV1(BaseModel):
     model_config = ConfigDict(extra="allow")
     schema_version: Literal[1]
@@ -101,6 +223,7 @@ class JupyterDeployManifestV1(BaseModel):
     values: list[JupyterDeployValueV1] | None = None
     services: list[str] | None = None
     commands: list[JupyterDeployCommandV1] | None = None
+    supervised_execution: JupyterDeploySupervisedExecutionV1 | None = Field(alias="supervised-execution", default=None)
 
     def get_engine(self) -> EngineType:
         """Return the engine type."""

@@ -462,3 +462,51 @@ commands:
       - result-name: "organization.get"
         source: "result"
         source-key: "[0].StandardOutputContent"
+supervised-execution:
+  config:
+    config.terraform-init:
+      default-phase:
+        label: "Configuring terraform dependencies"
+        progress-pattern: "Initializing"
+        progress-events-estimate: 5
+    config.terraform-plan:
+      default-phase:
+        label: "Generating plan"
+        progress-pattern: "(Read complete after|Refreshing state)"
+        progress-events-estimate: 15
+  up:
+    up.terraform-apply:
+      default-phase:
+        label: "Mutating resources"
+        progress-pattern: "(Creation complete after|Modifications complete after|Destruction complete after)"
+        progress-events-estimate-dynamic-source: "plan.to_update"     
+      phases:
+        - enter-pattern: "null_resource.wait_for_instance_ready: Creating"
+          exit-pattern: "null_resource.wait_for_instance_ready: Creation complete"
+          label: "Configuring EC2 instance"
+          weight: 40
+          phases:
+            - enter-pattern: "Waiting for SSM agent"
+              label: "Waiting for SSM agent"
+              weight: 10
+            - enter-pattern: "Cloudinit script is running"
+              label: "Configuring EC2 instance"
+              weight: 50
+            - enter-pattern: "Checking instance status"
+              label: "Checking instance status"
+              weight: 20
+            - enter-pattern: "fetching TLS certificates"
+              label: "Getting TLS certificates"
+              weight: 20
+  down:
+    down.terraform-destroy:
+      default-phase:
+        label: "Evaluating resources to destroy"
+        progress-pattern: "(Read complete after|Refreshing state\\.\\.\\.\\[id=)"
+        progress-events-estimate: 50
+      phases:
+        - enter-pattern: "Plan: \\d+ to add, \\d+ to change, (\\d+) to destroy\\."
+          progress-events-estimate-capture-group: 1
+          progress-pattern: "Destruction complete after"
+          label: "Destroying resources"
+          weight: 100
