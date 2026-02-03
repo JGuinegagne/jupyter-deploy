@@ -259,8 +259,6 @@ def config(
         handler.reset_recorded_secrets()
 
     if run_verify:
-        if verbose:
-            console.rule("[bold]jupyter-deploy:[/] verifying requirements")
         try:
             handler.verify_requirements()
             run_configure = True
