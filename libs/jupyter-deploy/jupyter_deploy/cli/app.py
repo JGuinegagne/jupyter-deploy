@@ -9,6 +9,7 @@ from jupyter_core.application import JupyterApp
 from rich.console import Console
 
 from jupyter_deploy import cmd_utils
+from jupyter_deploy.cli.history_app import history_app
 from jupyter_deploy.cli.host_app import host_app
 from jupyter_deploy.cli.organization_app import organization_app
 from jupyter_deploy.cli.progress_display import ProgressDisplayManager
@@ -21,6 +22,7 @@ from jupyter_deploy.engine.engine_down import DownAutoApproveRequiredError
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.engine.supervised_execution import ExecutionError
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
+from jupyter_deploy.handlers.command_history_handler import LogCleanupError
 from jupyter_deploy.handlers.init_handler import InitHandler
 from jupyter_deploy.handlers.project import config_handler
 from jupyter_deploy.handlers.project.config_handler import InvalidPreset
@@ -48,6 +50,7 @@ class JupyterDeployCliRunner:
         self.app.add_typer(teams_app, name="teams")
         self.app.add_typer(organization_app, name="organization")
         self.app.add_typer(host_app, name="host")
+        self.app.add_typer(history_app, name="history")
 
     def _setup_basic_commands(self) -> None:
         """Register the basic commands."""
@@ -280,12 +283,18 @@ def config(
         if verbose:
             console.rule("[bold]jupyter-deploy:[/] configuring the project")
 
+        completion_context = None
         with progress_display or nullcontext():
             try:
                 completion_context = handler.configure(variable_overrides=variables)
+            except LogCleanupError as e:
+                # Log cleanup failed, but main operation succeeded - warn and continue
+                console.print(f":warning: log clean up failed: {e}", style="yellow")
             except ExecutionError as e:
                 # Error context already displayed by callback
                 console.print(f":x: {e.message}", style="red")
+                console.line()
+                console.print(":bulb: To view the full logs, run [bold cyan]jd history show[/]")
                 raise typer.Exit(code=e.retcode) from None
 
         if verbose:
@@ -330,12 +339,12 @@ def config(
                 print(line)
 
         console.line()
+        console.print(":bulb: To view the full logs, run: [bold cyan]jd history show[/]")
+
         if output_filename:
-            console.print(
-                f"You can now run `[bold cyan]jd up --config-filename {output_filename}[/]` to create the resources."
-            )
+            console.print(f":bulb: To apply the changes, run: [bold cyan]jd up --config-filename {output_filename}[/]")
         else:
-            console.print("You can now run `[bold cyan]jd up[/]` to create or update the resources.")
+            console.print(":bulb: To apply the changes, run: [bold cyan]jd up[/]")
 
 
 @runner.app.command()
@@ -382,11 +391,17 @@ def up(
 
         if verbose:
             console.rule("[bold]jupyter-deploy:[/] applying infrastructure changes")
+        completion_context = None
         with progress_display or nullcontext():
             try:
                 completion_context = handler.apply(config_file_path, auto_approve)
+            except LogCleanupError as e:
+                # Log cleanup failed, but main operation succeeded - warn and continue
+                console.print(f":warning: log clean up failed: {e}", style="yellow")
             except ExecutionError as e:
                 console.print(f":x: {e.message}", style="red")
+                console.line()
+                console.print(":bulb: To view the full logs, run: [bold cyan]jd history show[/]")
                 raise typer.Exit(code=e.retcode) from None
 
         # Display completion summary if available
@@ -400,6 +415,8 @@ def up(
             console.line()
 
         console.print("Infrastructure changes applied successfully.", style="green")
+        console.line()
+        console.print(":bulb: To view the full logs, run: [bold cyan]jd history show[/]")
 
 
 @runner.app.command()
@@ -442,8 +459,13 @@ def down(
         with progress_display or nullcontext():
             try:
                 handler.destroy(auto_approve)
+            except LogCleanupError as e:
+                # Log cleanup failed, but main operation succeeded - warn and continue
+                console.print(f":warning: log clean up failed: {e}", style="yellow")
             except ExecutionError as e:
                 console.print(f":x: {e.message}", style="red")
+                console.line()
+                console.print(":bulb: To view the full logs, run: [bold cyan]jd history show[/]")
                 raise typer.Exit(code=e.retcode) from None
             except DownAutoApproveRequiredError:
                 console.print(
@@ -458,6 +480,8 @@ def down(
                 raise typer.Exit(code=1) from None
 
         console.print("Infrastructure resources destroyed successfully.", style="green")
+        console.line()
+        console.print(":bulb: To view the full logs, run: [bold cyan]jd history show[/]")
 
 
 @runner.app.command()

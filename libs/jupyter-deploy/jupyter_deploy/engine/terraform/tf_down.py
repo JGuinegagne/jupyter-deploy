@@ -162,3 +162,6 @@ class TerraformDownHandler(EngineDownHandler):
                 retcode=destroy_retcode,
                 message="Error destroying Terraform infrastructure.",
             )
+
+        # Success - cleanup old logs
+        self.command_history_handler.clear_logs("down")

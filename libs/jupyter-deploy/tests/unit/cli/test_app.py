@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 from jupyter_deploy.cli.app import JupyterDeployApp, JupyterDeployCliRunner, main
 from jupyter_deploy.cli.app import runner as app_runner
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.handlers.command_history_handler import LogCleanupError
 
 
 class TestJupyterDeployCliRunner(unittest.TestCase):
@@ -434,6 +435,26 @@ class TestUpCommand(unittest.TestCase):
         call_kwargs = mock_up_handler_cls.call_args.kwargs
         self.assertIsNone(call_kwargs["terminal_handler"])
 
+    @patch("jupyter_deploy.cli.app.UpHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_up_warns_but_succeeds_if_log_cleanup_fails(
+        self, mock_project_ctx_manager: Mock, mock_up_handler_cls: Mock
+    ) -> None:
+        """Test that up shows warning but succeeds when log cleanup fails."""
+        mock_project_ctx_manager.side_effect = TestUpCommand.mock_project_dir
+
+        mock_up_handler_instance, mock_up_fns = self.get_mock_up_handler(config_file_exists=True)
+        mock_up_handler_cls.return_value = mock_up_handler_instance
+        mock_up_fns["apply"].side_effect = LogCleanupError("Failed to delete 2 log file(s)")
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["up"])
+
+        # Verify - should succeed with warning
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Failed to delete 2 log file(s)", result.stdout)
+        mock_up_fns["apply"].assert_called_once()
+
 
 class TestDownCommand(unittest.TestCase):
     def get_mock_down_handler(self) -> tuple[Mock, dict[str, Mock]]:
@@ -515,6 +536,26 @@ class TestDownCommand(unittest.TestCase):
         # terminal_handler should be None when verbose is True
         call_kwargs = mock_down_handler_cls.call_args.kwargs
         self.assertIsNone(call_kwargs["terminal_handler"])
+
+    @patch("jupyter_deploy.cli.app.DownHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_down_warns_but_succeeds_if_log_cleanup_fails(
+        self, mock_project_ctx_manager: Mock, mock_down_handler_cls: Mock
+    ) -> None:
+        """Test that down shows warning but succeeds when log cleanup fails."""
+        mock_project_ctx_manager.side_effect = TestDownCommand.mock_project_dir
+
+        mock_down_handler_instance, mock_down_fns = self.get_mock_down_handler()
+        mock_down_handler_cls.return_value = mock_down_handler_instance
+        mock_down_fns["destroy"].side_effect = LogCleanupError("Failed to delete 2 log file(s)")
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["down"])
+
+        # Verify - should succeed with warning
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Failed to delete 2 log file(s)", result.stdout)
+        mock_down_fns["destroy"].assert_called_once()
 
 
 class TestOpenCommand(unittest.TestCase):

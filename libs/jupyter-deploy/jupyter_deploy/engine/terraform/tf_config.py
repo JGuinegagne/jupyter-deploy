@@ -189,6 +189,9 @@ class TerraformConfigHandler(EngineConfigHandler):
                 message="Error generating Terraform plan.",
             )
 
+        # Success - cleanup old logs
+        self.command_history_handler.clear_logs("config")
+
         # Return completion context from callback
         return plan_callback.get_completion_context()
 

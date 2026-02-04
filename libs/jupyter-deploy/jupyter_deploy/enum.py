@@ -1,6 +1,14 @@
 from enum import Enum
 
 
+class HistoryEnabledCommandType(str, Enum):
+    """Command types for history tracking."""
+
+    CONFIG = "config"
+    UP = "up"
+    DOWN = "down"
+
+
 class InstructionArgumentSource(str, Enum):
     """Enum to list the possible sources for an instruction argument."""
 

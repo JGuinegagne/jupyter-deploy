@@ -80,5 +80,8 @@ class TerraformUpHandler(EngineUpHandler):
                 message="Error applying Terraform plan.",
             )
 
+        # Success - cleanup old logs
+        self.command_history_handler.clear_logs("up")
+
         # Return completion context from callback
         return apply_callback.get_completion_context()

@@ -11,6 +11,7 @@ from jupyter_deploy.engine.outdefs import ListStrTemplateOutputDefinition
 from jupyter_deploy.engine.supervised_execution import ExecutionError
 from jupyter_deploy.engine.terraform.tf_down import TerraformDownHandler
 from jupyter_deploy.engine.terraform.tf_enums import TerraformSequenceId
+from jupyter_deploy.handlers.command_history_handler import LogCleanupError
 
 
 class TestTerraformDownHandler(unittest.TestCase):
@@ -488,3 +489,104 @@ class TestTerraformDownHandler(unittest.TestCase):
         # Verify executor was created and executed
         mock_create_executor.assert_called_once()
         mock_executor.execute.assert_called_once()
+
+    @patch("jupyter_deploy.engine.terraform.tf_down.tf_supervised_executor_factory.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_outputs.TerraformOutputsHandler")
+    def test_destroy_clears_old_logs_on_success(
+        self, mock_outputs_handler_cls: Mock, mock_create_executor: Mock
+    ) -> None:
+        """Test that destroy calls clear_logs on successful execution."""
+        project_path = Path("/mock/project")
+        mock_manifest, _ = self.get_mock_manifest_and_fns()
+        mock_history_handler = Mock()
+        mock_history_handler.create_log_file.return_value = Path("/mock/log.log")
+        mock_history_handler.clear_logs.return_value = Mock()
+
+        # Mock outputs handler
+        mock_outputs_handler, _ = self.get_mock_outputs_handler_and_fns()
+        mock_outputs_handler_cls.return_value = mock_outputs_handler
+
+        # Mock executor - success
+        mock_executor = Mock()
+        mock_executor.execute.return_value = 0
+        mock_create_executor.return_value = mock_executor
+
+        handler = TerraformDownHandler(
+            project_path=project_path,
+            project_manifest=mock_manifest,
+            command_history_handler=mock_history_handler,
+        )
+
+        # Act
+        handler.destroy()
+
+        # Assert - clear_logs should be called after successful execution
+        mock_history_handler.clear_logs.assert_called_once_with("down")
+
+    @patch("jupyter_deploy.engine.terraform.tf_down.tf_supervised_executor_factory.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_outputs.TerraformOutputsHandler")
+    def test_destroy_does_not_clear_logs_on_failure(
+        self, mock_outputs_handler_cls: Mock, mock_create_executor: Mock
+    ) -> None:
+        """Test that destroy does NOT call clear_logs when execution fails."""
+        project_path = Path("/mock/project")
+        mock_manifest, _ = self.get_mock_manifest_and_fns()
+        mock_history_handler = Mock()
+        mock_history_handler.create_log_file.return_value = Path("/mock/log.log")
+        mock_history_handler.clear_logs.return_value = Mock()
+
+        # Mock outputs handler
+        mock_outputs_handler, _ = self.get_mock_outputs_handler_and_fns()
+        mock_outputs_handler_cls.return_value = mock_outputs_handler
+
+        # Mock executor - failure
+        mock_executor = Mock()
+        mock_executor.execute.return_value = 1
+        mock_create_executor.return_value = mock_executor
+
+        handler = TerraformDownHandler(
+            project_path=project_path,
+            project_manifest=mock_manifest,
+            command_history_handler=mock_history_handler,
+        )
+
+        # Act & Assert - should raise ExecutionError
+        with self.assertRaises(ExecutionError):
+            handler.destroy()
+
+        # Assert - clear_logs should NOT be called on failure
+        mock_history_handler.clear_logs.assert_not_called()
+
+    @patch("jupyter_deploy.engine.terraform.tf_down.tf_supervised_executor_factory.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_outputs.TerraformOutputsHandler")
+    def test_destroy_bubbles_up_clear_logs_exception(
+        self, mock_outputs_handler_cls: Mock, mock_create_executor: Mock
+    ) -> None:
+        """Test that destroy bubbles up LogCleanupError from clear_logs."""
+        project_path = Path("/mock/project")
+        mock_manifest, _ = self.get_mock_manifest_and_fns()
+        mock_history_handler = Mock()
+        mock_history_handler.create_log_file.return_value = Path("/mock/log.log")
+        mock_history_handler.clear_logs.side_effect = LogCleanupError("Failed to delete 2 log file(s)")
+
+        # Mock outputs handler
+        mock_outputs_handler, _ = self.get_mock_outputs_handler_and_fns()
+        mock_outputs_handler_cls.return_value = mock_outputs_handler
+
+        # Mock executor - success
+        mock_executor = Mock()
+        mock_executor.execute.return_value = 0
+        mock_create_executor.return_value = mock_executor
+
+        handler = TerraformDownHandler(
+            project_path=project_path,
+            project_manifest=mock_manifest,
+            command_history_handler=mock_history_handler,
+        )
+
+        # Act & Assert - should raise LogCleanupError from clear_logs
+        with self.assertRaises(LogCleanupError) as context:
+            handler.destroy()
+
+        self.assertEqual(str(context.exception), "Failed to delete 2 log file(s)")
+        mock_history_handler.clear_logs.assert_called_once_with("down")
