@@ -66,9 +66,7 @@ def setup_github_auth(jupyterlab_url: str, storage_state_path: Path) -> None:
 
 def main() -> None:
     """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description="One-time GitHub OAuth authentication setup for E2E tests"
-    )
+    parser = argparse.ArgumentParser(description="One-time GitHub OAuth authentication setup for E2E tests")
     parser.add_argument(
         "--project-dir",
         type=Path,

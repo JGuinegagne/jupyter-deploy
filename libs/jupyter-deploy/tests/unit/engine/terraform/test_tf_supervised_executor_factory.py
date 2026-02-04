@@ -153,6 +153,35 @@ class TestCreateTerraformExecutorNoManifestNorPlan(unittest.TestCase):
         self.assertGreaterEqual(len(executor._default_phase.label), 1)
         self.assertEqual(len(executor._declared_phases), 0)
 
+    def test_up_apply_progress_pattern_matches_all_mutation_types(self) -> None:
+        """Test up_apply progress pattern matches creation, modification, and destruction events."""
+        exec_dir = Path("/mock/exec")
+        log_file = Path("/mock/log.txt")
+        execution_cb = Mock()
+
+        executor = create_terraform_executor(
+            sequence_id=TerraformSequenceId.up_apply,
+            exec_dir=exec_dir,
+            log_file=log_file,
+            execution_callback=execution_cb,
+        )
+
+        # Actual lines from terraform apply output
+        creation_line = (
+            "\x1b[1mnull_resource.wait_for_instance_ready: Creation complete after 3m5s [id=522803082968548203]\x1b[0m"
+        )
+        modification_line = (
+            "\x1b[1maws_ssm_document.instance_startup: Modifications complete after 0s "
+            "[id=instance-startup-4382dc8c]\x1b[0m"
+        )
+        destruction_line = "\x1b[1mnull_resource.wait_for_instance_ready: Destruction complete after 0s\x1b[0m"
+
+        # Test that default phase matches all mutation types
+        default_phase = executor._default_phase
+        self.assertTrue(default_phase.evaluate_progress(creation_line))
+        self.assertTrue(default_phase.evaluate_progress(modification_line))
+        self.assertTrue(default_phase.evaluate_progress(destruction_line))
+
     def test_return_executor_with_a_default_and_a_declared_phase_for_down_destroy(self) -> None:
         """Test down_destroy creates executor with default phase and one declared phase."""
         exec_dir = Path("/mock/exec")
@@ -184,6 +213,33 @@ class TestCreateTerraformExecutorNoManifestNorPlan(unittest.TestCase):
         )
 
         self.assertLess(executor._declared_phases[0].full_reward, 100)
+
+    def test_down_destroy_enter_pattern_matches_terraform_output_with_ansi_codes(self) -> None:
+        """Test down_destroy enter pattern matches actual terraform output with ANSI codes."""
+        exec_dir = Path("/mock/exec")
+        log_file = Path("/mock/log.txt")
+        execution_cb = Mock()
+
+        executor = create_terraform_executor(
+            sequence_id=TerraformSequenceId.down_destroy,
+            exec_dir=exec_dir,
+            log_file=log_file,
+            execution_callback=execution_cb,
+        )
+
+        # Actual line from terraform output logs (with ANSI escape sequences)
+        # \x1b[1m = bold, \x1b[0m = reset
+        actual_log_line = "\x1b[1mPlan:\x1b[0m 0 to add, 0 to change, 72 to destroy."
+
+        # Test that the phase can enter with this line
+        phase = executor._declared_phases[0]
+        self.assertTrue(phase.evaluate_enter(actual_log_line))
+
+        # Verify the capture group correctly extracts the destroy count
+        self.assertEqual(phase.config.progress_events_estimate_capture_group, 1)
+        # After evaluate_enter, the phase should have calculated reward per event based on 72
+        expected_reward_per_event = phase.scale_factor * (100 - phase._total_subphase_weight) / 72
+        self.assertAlmostEqual(phase._reward_per_event, expected_reward_per_event)
 
 
 class TestCreateTerraformExecutorWithManifest(unittest.TestCase):
@@ -275,10 +331,11 @@ class TestCreateTerraformExecutorWithManifest(unittest.TestCase):
         # Manifest specifies label "Evaluating resources to destroy" for down.terraform-destroy
         self.assertEqual(executor._default_phase.label, "Evaluating resources to destroy")
 
-        # Manifest specifies 1 phase with full reward = 100 for down.terraform-destroy
+        # Manifest specifies 1 phase with full reward = 95 for down.terraform-destroy
+        # (95 because start_reward=5, end_reward=100, scale_factor=0.95, weight=100 → 95)
         self.assertEqual(len(executor._declared_phases), 1)
         self.assertGreaterEqual(len(executor._declared_phases[0].label), 1)
-        self.assertAlmostEqual(executor._declared_phases[0].full_reward, 100)
+        self.assertAlmostEqual(executor._declared_phases[0].full_reward, 95)
 
     def test_return_manifest_based_executor_with_overriden_estimate_for_up_apply(self) -> None:
         """Test up_apply with plan metadata overrides estimate dynamically."""

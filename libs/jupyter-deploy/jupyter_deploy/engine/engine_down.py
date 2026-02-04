@@ -6,6 +6,16 @@ from jupyter_deploy.engine.engine_outputs import EngineOutputsHandler
 from jupyter_deploy.manifest import JupyterDeployManifest
 
 
+class DownAutoApproveRequiredError(ValueError):
+    """Raised when auto-approve is required but not provided."""
+
+    def __init__(self, persisting_resources: list[str]) -> None:
+        self.persisting_resources = persisting_resources
+        super().__init__(
+            "Auto-approve is required when there are persisting resources. Pass --answer-yes or -y to proceed."
+        )
+
+
 class EngineDownHandler(ABC):
     def __init__(
         self, project_path: Path, project_manifest: JupyterDeployManifest, output_handler: EngineOutputsHandler

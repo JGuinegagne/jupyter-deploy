@@ -5,7 +5,7 @@ default:
 # Run all linting and formatting tools
 lint:
     uv run ruff format
-    uv run ruff check --fix
+    uv run ruff check --preview --fix
     uv run mypy
     terraform fmt -recursive -write=true
 

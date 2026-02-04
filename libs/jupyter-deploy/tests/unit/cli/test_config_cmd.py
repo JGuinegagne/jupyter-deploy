@@ -11,7 +11,11 @@ from typer.testing import CliRunner
 class TestDeployCmdWithDecorator(unittest.TestCase):
     def get_mock_config_handler(self) -> tuple[Mock, dict[str, Mock]]:
         mock_config_handler = Mock()
-        mock_validate = Mock()
+        mock_has_recorded_variables = Mock()
+        mock_verify_preset_exists = Mock()
+        mock_validate_preset = Mock()
+        mock_list_presets = Mock()
+        mock_set_preset = Mock()
         mock_reset_variables = Mock()
         mock_reset_secrets = Mock()
         mock_verify = Mock()
@@ -19,7 +23,11 @@ class TestDeployCmdWithDecorator(unittest.TestCase):
         mock_record = Mock()
         mock_has_used_preset = Mock()
 
-        mock_config_handler.validate_and_set_preset = mock_validate
+        mock_config_handler.has_recorded_variables = mock_has_recorded_variables
+        mock_config_handler.verify_preset_exists = mock_verify_preset_exists
+        mock_config_handler.validate_preset = mock_validate_preset
+        mock_config_handler.list_presets = mock_list_presets
+        mock_config_handler.set_preset = mock_set_preset
         mock_config_handler.reset_recorded_variables = mock_reset_variables
         mock_config_handler.reset_recorded_secrets = mock_reset_secrets
         mock_config_handler.verify_requirements = mock_verify
@@ -27,12 +35,19 @@ class TestDeployCmdWithDecorator(unittest.TestCase):
         mock_config_handler.record = mock_record
         mock_config_handler.has_used_preset = mock_has_used_preset
 
-        mock_validate.return_value = True
+        mock_has_recorded_variables.return_value = False
+        mock_verify_preset_exists.return_value = True
+        mock_list_presets.return_value = ["all", "base", "none"]
         mock_verify.return_value = True
+        mock_configure.return_value = None
         mock_has_used_preset.return_value = True
 
         return mock_config_handler, {
-            "validate_and_set_preset": mock_validate,
+            "has_recorded_variables": mock_has_recorded_variables,
+            "verify_preset_exists": mock_verify_preset_exists,
+            "validate_preset": mock_validate_preset,
+            "list_presets": mock_list_presets,
+            "set_preset": mock_set_preset,
             "reset_recorded_variables": mock_reset_variables,
             "reset_recorded_secrets": mock_reset_secrets,
             "verify": mock_verify,
@@ -86,7 +101,9 @@ class TestDeployCmdWithDecorator(unittest.TestCase):
                 self.assertEqual(result.exit_code, 0)
                 mock_decorator_fn.assert_called_once()
                 mock_config_handler.assert_called_once()
-                mock_config_fns["validate_and_set_preset"].assert_called_once()
+                mock_config_fns["has_recorded_variables"].assert_called_once()
+                mock_config_fns["validate_preset"].assert_called_once()
+                mock_config_fns["set_preset"].assert_called_once()
                 mock_config_fns["verify"].assert_called_once()
                 mock_config_fns["configure"].assert_called_once_with(variable_overrides=mock_variables)
                 mock_config_fns["record"].assert_called_once_with(record_vars=True, record_secrets=False)

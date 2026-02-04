@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.engine.supervised_execution import CompletionContext
 
 
 class EngineUpHandler(ABC):
@@ -16,5 +17,10 @@ class EngineUpHandler(ABC):
         pass
 
     @abstractmethod
-    def apply(self, config_file_path: Path, auto_approve: bool = False) -> None:
+    def apply(self, config_file_path: Path, auto_approve: bool = False) -> CompletionContext | None:
+        """Apply the infrastructure changes.
+
+        Returns:
+            CompletionContext with completion summary, or None if not available
+        """
         pass

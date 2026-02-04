@@ -26,14 +26,10 @@ def main() -> int:
     directory = args.directory
 
     if not os.path.isdir(directory):
-        console.print(
-            f"Error: Directory '{directory}' does not exist", style="bold red"
-        )
+        console.print(f"Error: Directory '{directory}' does not exist", style="bold red")
         return 1
 
-    format_result = subprocess.run(
-        ["uv", "run", "ruff", "format", "--diff", directory], capture_output=True
-    )
+    format_result = subprocess.run(["uv", "run", "ruff", "format", "--diff", directory], capture_output=True)
 
     if format_result.stdout:
         console.print(

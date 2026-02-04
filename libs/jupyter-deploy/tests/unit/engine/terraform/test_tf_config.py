@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 
 from pydantic import ValidationError
 
+from jupyter_deploy.engine.engine_config import ReadConfigurationError
 from jupyter_deploy.engine.supervised_execution import ExecutionError
 from jupyter_deploy.engine.terraform.tf_config import TerraformConfigHandler
 from jupyter_deploy.engine.terraform.tf_constants import (
@@ -168,56 +169,6 @@ class TestTerraformConfigHandler(unittest.TestCase):
         # Assert
         self.assertEqual(["none"], presets)
 
-    @patch("jupyter_deploy.verify_utils.verify_tools_installation")
-    @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
-    def test_verify_requirements_pulls_manifest_and_call_verify(
-        self, mock_variable_handler_cls: Mock, mock_verify: Mock
-    ) -> None:
-        # Arrange
-        path = Path("/fake/path")
-        mock_manifest = Mock()
-        mock_get_requirements = Mock()
-        mock_manifest.get_requirements = mock_get_requirements
-
-        mock_req1 = Mock()
-        mock_req2 = Mock()
-        mock_get_requirements.return_value = [mock_req1, mock_req2]
-
-        mock_verify.return_value = True
-        mock_vars_handler, _ = self.get_mock_variable_handler_and_fns()
-        mock_variable_handler_cls.return_value = mock_vars_handler
-
-        handler = TerraformConfigHandler(path, mock_manifest, self.get_mock_command_history())
-
-        # Act
-        result = handler.verify_requirements()
-
-        # Assert
-        self.assertTrue(result)
-        mock_get_requirements.assert_called_once()
-        mock_verify.assert_called_once_with([mock_req1, mock_req2])
-
-    @patch("jupyter_deploy.verify_utils.verify_tools_installation")
-    @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
-    def test_verify_requirements_raises_when_checks_raise(
-        self, mock_variable_handler_cls: Mock, mock_verify: Mock
-    ) -> None:
-        # Arrange
-        mock_manifest = Mock()
-        mock_get_requirements = Mock()
-        mock_manifest.get_requirements = mock_get_requirements
-        mock_verify.side_effect = Exception("Terraform check failed")
-
-        mock_vars_handler, _ = self.get_mock_variable_handler_and_fns()
-        mock_variable_handler_cls.return_value = mock_vars_handler
-
-        handler = TerraformConfigHandler(Path("/fake/path"), mock_manifest, self.get_mock_command_history())
-
-        # Act & Assert
-        with self.assertRaises(Exception) as e:
-            handler.verify_requirements()
-        self.assertEqual(str(e.exception), "Terraform check failed")
-
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
     def test_reset_recorded_variables_calls_vars_handler(self, mock_variable_handler_cls: Mock) -> None:
         # Arrange
@@ -288,10 +239,9 @@ class TestTerraformConfigHandler(unittest.TestCase):
         handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history())
 
         # Act
-        result = handler.configure()
+        handler.configure()
 
-        # Assert
-        self.assertTrue(result)
+        # Assert - configure completed successfully (no exception raised)
         self.assertEqual(mock_create_executor.call_count, 2)  # Init and plan
         self.assertEqual(mock_executor.execute.call_count, 2)
         mock_vars_fns["sync_engine_varfiles_with_project_variables_config"].assert_called_once()
@@ -314,10 +264,9 @@ class TestTerraformConfigHandler(unittest.TestCase):
         handler = TerraformConfigHandler(path, Mock(), command_history_handler=self.get_mock_command_history())
 
         # Act
-        result = handler.configure(preset_name="all")
+        handler.configure(preset_name="all")
 
-        # Assert
-        self.assertTrue(result)
+        # Assert - configure completed successfully (no exception raised)
         self.assertEqual(mock_create_executor.call_count, 2)  # Init and plan
 
         # Verify preset file was created
@@ -360,10 +309,9 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_var5.assigned_value = {"Key1": "Val1", "Key2": "Val2"}
 
         # Act
-        result = handler.configure(preset_name="all", variable_overrides=mock_variables)
+        handler.configure(preset_name="all", variable_overrides=mock_variables)
 
-        # Assert
-        self.assertTrue(result)
+        # Assert - configure completed successfully (no exception raised)
         self.assertEqual(mock_create_executor.call_count, 2)  # Init and plan
         mock_vars_fns["sync_engine_varfiles_with_project_variables_config"].assert_called_once()
         mock_vars_fns["create_filtered_preset_file"].assert_called_once()
@@ -664,12 +612,10 @@ class TestTerraformConfigHandler(unittest.TestCase):
     @patch("jupyter_deploy.engine.terraform.tf_plan.extract_variables_from_plan")
     @patch("jupyter_deploy.engine.terraform.tf_plan.extract_plan")
     @patch("jupyter_deploy.cmd_utils.run_cmd_and_capture_output")
-    @patch("rich.console.Console")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
     def test_record_should_call_plan_only_once_when_both_flags_are_passed(
         self,
         mock_variable_handler_cls: Mock,
-        mock_console: Mock,
         mock_capture: Mock,
         mock_parse: Mock,
         mock_extract: Mock,
@@ -681,10 +627,8 @@ class TestTerraformConfigHandler(unittest.TestCase):
         # Arrange
         mock_vars_handler, mock_vars_fns = self.get_mock_variable_handler_and_fns()
         mock_variable_handler_cls.return_value = mock_vars_handler
-        mock_console_instance = Mock()
-        mock_console.return_value = mock_console_instance
-        mock_print = Mock()
-        mock_console_instance.print = mock_print
+
+        # Mock command capture and plan parsing
         mock_capture.return_value = "i-am-a-serialized-plan"
         mock_plan = Mock()
         mock_plan.resource_changes = []
@@ -744,10 +688,10 @@ class TestTerraformConfigHandler(unittest.TestCase):
         )
         handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history())
 
-        # Act
-        handler.record(record_vars=True)
+        # Act & Assert
+        with self.assertRaises(ReadConfigurationError):
+            handler.record(record_vars=True)
 
-        # Assert
         mock_write.assert_not_called()
         mock_vars_fns["sync_project_variables_config"].assert_not_called()
 
@@ -778,10 +722,10 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_extract.side_effect = ValidationError("some error", [])
         handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history())
 
-        # Act
-        handler.record(record_secrets=True)
+        # Act & Assert
+        with self.assertRaises(ReadConfigurationError):
+            handler.record(record_secrets=True)
 
-        # Assert
         mock_capture.assert_called_once()
         mock_parse.assert_called_once()
         mock_extract_counts.assert_called_once()
@@ -808,10 +752,10 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_parse.side_effect = ValueError("Invalid JSON")
         handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history())
 
-        # Act
-        handler.record(record_secrets=True)
+        # Act & Assert
+        with self.assertRaises(ReadConfigurationError):
+            handler.record(record_secrets=True)
 
-        # Assert
         mock_capture.assert_called_once()
         mock_parse.assert_called_once()
         mock_write.assert_not_called()
@@ -850,10 +794,9 @@ class TestTerraformConfigHandler(unittest.TestCase):
         )
 
         # Act
-        result = handler.configure()
+        handler.configure()
 
-        # Assert
-        self.assertTrue(result)
+        # Assert - configure completed successfully (no exception raised)
 
         # Verify TerraformSupervisedExecutionCallback was created twice (init and plan)
         self.assertEqual(mock_callback_cls.call_count, 2)
@@ -908,10 +851,9 @@ class TestTerraformConfigHandler(unittest.TestCase):
         )
 
         # Act
-        result = handler.configure()
+        handler.configure()
 
-        # Assert
-        self.assertTrue(result)
+        # Assert - configure completed successfully (no exception raised)
 
         # Verify TerraformNoopExecutionCallback was created twice (init and plan)
         self.assertEqual(mock_noop_callback_cls.call_count, 2)

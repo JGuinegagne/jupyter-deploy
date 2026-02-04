@@ -427,6 +427,272 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
 
         self.assertEqual(cleaned, "Orange text")
 
+    # get_completion_context tests
+    def test_get_completion_context_config_plan_finds_plan_summary(self) -> None:
+        """Test that completion context finds Plan: summary in buffer for config_plan."""
+        callback = TerraformSupervisedExecutionCallback(
+            terminal_handler=Mock(),  # type: ignore[arg-type]
+            sequence_id=TerraformSequenceId.config_plan,
+        )
+
+        # Simulate terraform plan output in buffer
+        callback._line_buffer = deque(
+            [
+                "Previous output",
+                "Plan: 5 to add, 2 to change, 1 to destroy.",
+                "",
+                "Saved the plan to: jdout-tfplan",
+                "",
+                "To perform exactly these actions, run:",
+            ],
+            maxlen=200,
+        )
+
+        context = callback.get_completion_context()
+
+        self.assertIsNotNone(context)
+        assert context is not None  # Type narrowing for mypy
+        self.assertEqual(len(context.lines), 1)
+        self.assertIn("Plan: 5 to add", context.lines[0])
+
+    def test_get_completion_context_config_plan_handles_ansi_codes(self) -> None:
+        """Test that completion context handles ANSI codes in Plan line."""
+        callback = TerraformSupervisedExecutionCallback(
+            terminal_handler=Mock(),  # type: ignore[arg-type]
+            sequence_id=TerraformSequenceId.config_plan,
+        )
+
+        # Simulate terraform output with ANSI codes
+        callback._line_buffer = deque(
+            [
+                "Previous output",
+                "\x1b[1mPlan:\x1b[0m 3 to add, 0 to change, 0 to destroy.",
+                "",
+            ],
+            maxlen=200,
+        )
+
+        context = callback.get_completion_context()
+
+        self.assertIsNotNone(context)
+        assert context is not None  # Type narrowing for mypy
+        self.assertGreater(len(context.lines), 0)
+        # Line should still have ANSI codes preserved
+        self.assertIn("\x1b[1m", context.lines[0])
+        self.assertIn("Plan:", context.lines[0])
+
+    def test_get_completion_context_up_apply_finds_apply_complete(self) -> None:
+        """Test that completion context finds Apply complete in buffer for up_apply."""
+        callback = TerraformSupervisedExecutionCallback(
+            terminal_handler=Mock(),  # type: ignore[arg-type]
+            sequence_id=TerraformSequenceId.up_apply,
+        )
+
+        # Simulate terraform apply output
+        callback._line_buffer = deque(
+            [
+                "Previous output",
+                "Apply complete! Resources: 5 added, 2 changed, 1 destroyed.",
+                "",
+                "Outputs:",
+                "",
+                "instance_id = i-12345",
+                "url = https://example.com",
+            ],
+            maxlen=200,
+        )
+
+        context = callback.get_completion_context()
+
+        self.assertIsNotNone(context)
+        assert context is not None  # Type narrowing for mypy
+        self.assertGreater(len(context.lines), 0)
+        self.assertIn("Apply complete!", context.lines[0])
+        self.assertIn("Outputs", context.lines[2])
+
+    def test_get_completion_context_returns_none_for_other_sequences(self) -> None:
+        """Test that completion context returns None for sequences without completion patterns."""
+        callback = TerraformSupervisedExecutionCallback(
+            terminal_handler=Mock(),  # type: ignore[arg-type]
+            sequence_id=TerraformSequenceId.config_init,  # Not config_plan or up_apply
+        )
+
+        callback._line_buffer = deque(["Some output", "More output"], maxlen=200)
+
+        context = callback.get_completion_context()
+        self.assertIsNone(context)
+
+    def test_get_completion_context_returns_none_when_pattern_not_found(self) -> None:
+        """Test that completion context is None when pattern not in buffer."""
+        callback = TerraformSupervisedExecutionCallback(
+            terminal_handler=Mock(),  # type: ignore[arg-type]
+            sequence_id=TerraformSequenceId.config_plan,
+        )
+
+        callback._line_buffer = deque(
+            ["Some output", "More output", "No plan summary here"],
+            maxlen=200,
+        )
+
+        context = callback.get_completion_context()
+        self.assertIsNone(context)
+
+    def test_get_completion_context_limits_lines_returned(self) -> None:
+        """Test that completion context caps at max lines for sequence."""
+        callback = TerraformSupervisedExecutionCallback(
+            terminal_handler=Mock(),  # type: ignore[arg-type]
+            sequence_id=TerraformSequenceId.config_plan,
+        )
+
+        # Buffer with Plan: line and 20 more lines
+        lines = ["Plan: 1 to add, 0 to change, 0 to destroy."] + [f"Line {i}" for i in range(20)]
+        callback._line_buffer = deque(lines, maxlen=200)
+
+        context = callback.get_completion_context()
+
+        self.assertIsNotNone(context)
+        assert context is not None  # Type narrowing for mypy
+        # Should only return 1 line for config_plan (not all 21)
+        self.assertEqual(len(context.lines), 1)
+        self.assertIn("Plan:", context.lines[0])
+
+    def test_on_execution_error_finds_error_line(self) -> None:
+        """Test that on_execution_error finds and displays from Error: line."""
+        mock_terminal_handler: Mock = Mock()  # type: ignore[assignment]
+        callback = TerraformSupervisedExecutionCallback(
+            terminal_handler=mock_terminal_handler,
+            sequence_id=TerraformSequenceId.config_plan,
+        )
+
+        # Simulate terraform output with error at the end
+        callback._line_buffer = deque(
+            [
+                "Previous output line 1",
+                "Previous output line 2",
+                "Error: Invalid configuration",
+                "",
+                "  on main.tf line 12:",
+                '  12: resource "aws_instance" "example" {',
+                "",
+                "This configuration is not valid.",
+            ],
+            maxlen=200,
+        )
+
+        callback.on_execution_error(retcode=1)
+
+        # Should call display_error_context with lines from "Error: " onwards
+        mock_terminal_handler.display_error_context.assert_called_once()
+        error_lines = mock_terminal_handler.display_error_context.call_args[0][0]
+        self.assertEqual(len(error_lines), 6)
+        self.assertIn("Error: Invalid configuration", error_lines[0])
+        self.assertIn("This configuration is not valid.", error_lines[-1])
+
+    def test_on_execution_error_handles_ansi_codes(self) -> None:
+        """Test that on_execution_error strips ANSI codes when searching for errors."""
+        mock_terminal_handler: Mock = Mock()  # type: ignore[assignment]
+        callback = TerraformSupervisedExecutionCallback(
+            terminal_handler=mock_terminal_handler,
+            sequence_id=TerraformSequenceId.up_apply,
+        )
+
+        # Simulate terraform output with ANSI-wrapped error
+        callback._line_buffer = deque(
+            [
+                "Previous output",
+                "\x1b[1m\x1b[31mError: \x1b[0mResource not found",
+                "Additional error details",
+            ],
+            maxlen=200,
+        )
+
+        callback.on_execution_error(retcode=1)
+
+        # Should find the error despite ANSI codes
+        mock_terminal_handler.display_error_context.assert_called_once()
+        error_lines = mock_terminal_handler.display_error_context.call_args[0][0]
+        self.assertEqual(len(error_lines), 2)
+        # Should preserve ANSI codes in output
+        self.assertIn("\x1b[1m", error_lines[0])
+        self.assertIn("Error: ", error_lines[0])
+
+    def test_on_execution_error_limits_to_50_lines(self) -> None:
+        """Test that on_execution_error limits output to 50 lines from error."""
+        mock_terminal_handler: Mock = Mock()  # type: ignore[assignment]
+        callback = TerraformSupervisedExecutionCallback(
+            terminal_handler=mock_terminal_handler,
+            sequence_id=TerraformSequenceId.config_plan,
+        )
+
+        # Create buffer with error followed by 60 more lines
+        lines = ["Previous output", "Error: Something went wrong"] + [f"Line {i}" for i in range(60)]
+        callback._line_buffer = deque(lines, maxlen=200)
+
+        callback.on_execution_error(retcode=1)
+
+        # Should limit to 50 lines from the error
+        mock_terminal_handler.display_error_context.assert_called_once()
+        error_lines = mock_terminal_handler.display_error_context.call_args[0][0]
+        self.assertEqual(len(error_lines), 50)
+        self.assertIn("Error: Something went wrong", error_lines[0])
+        self.assertEqual("Line 48", error_lines[-1])
+
+    def test_on_execution_error_fallback_when_no_error_found(self) -> None:
+        """Test that on_execution_error falls back to default behavior when no Error: found."""
+        mock_terminal_handler: Mock = Mock()  # type: ignore[assignment]
+        callback = TerraformSupervisedExecutionCallback(
+            terminal_handler=mock_terminal_handler,
+            sequence_id=TerraformSequenceId.config_plan,
+        )
+
+        # Simulate output with no "Error: " pattern
+        callback._line_buffer = deque(
+            [
+                "Some output line 1",
+                "Some output line 2",
+                "Command failed but no explicit error message",
+            ],
+            maxlen=200,
+        )
+
+        callback.on_execution_error(retcode=1)
+
+        # Should fall back to base class behavior (last 50 lines)
+        mock_terminal_handler.display_error_context.assert_called_once()
+        error_lines = mock_terminal_handler.display_error_context.call_args[0][0]
+        # Base class takes last N lines from buffer
+        self.assertEqual(len(error_lines), 3)
+
+    def test_on_execution_error_finds_last_error_when_multiple(self) -> None:
+        """Test that on_execution_error finds the last Error: when there are multiple."""
+        mock_terminal_handler: Mock = Mock()  # type: ignore[assignment]
+        callback = TerraformSupervisedExecutionCallback(
+            terminal_handler=mock_terminal_handler,
+            sequence_id=TerraformSequenceId.up_apply,
+        )
+
+        # Simulate output with multiple errors
+        callback._line_buffer = deque(
+            [
+                "Previous output",
+                "Error: First error occurred",
+                "Some details about first error",
+                "More output",
+                "Error: Second error occurred",
+                "Details about second error",
+            ],
+            maxlen=200,
+        )
+
+        callback.on_execution_error(retcode=1)
+
+        # Should start from the last error (searching backwards finds most recent)
+        mock_terminal_handler.display_error_context.assert_called_once()
+        error_lines = mock_terminal_handler.display_error_context.call_args[0][0]
+        self.assertEqual(len(error_lines), 2)
+        self.assertIn("Second error", error_lines[0])
+        self.assertIn("Details about second error", error_lines[1])
+
 
 class TestTerraformNoopExecutionCallback(unittest.TestCase):
     """Test cases for TerraformNoopExecutionCallback."""

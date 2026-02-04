@@ -33,7 +33,38 @@ class TestUpHandler(unittest.TestCase):
 
         handler = UpHandler()
 
-        mock_tf_handler_cls.assert_called_once_with(project_path=Path("/mock/cwd"))
+        # Verify TerraformUpHandler was called with correct arguments
+        call_args = mock_tf_handler_cls.call_args
+        self.assertEqual(call_args.kwargs["project_path"], Path("/mock/cwd"))
+        self.assertEqual(call_args.kwargs["project_manifest"], self.mock_manifest)
+        self.assertIsNotNone(call_args.kwargs["command_history_handler"])
+        self.assertIsNone(call_args.kwargs["terminal_handler"])
+        self.assertEqual(handler._handler, mock_tf_handler)
+
+    @patch("jupyter_deploy.engine.terraform.tf_up.TerraformUpHandler")
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("pathlib.Path.cwd")
+    def test_init_passes_terminal_handler_to_terraform_handler(
+        self, mock_cwd: Mock, mock_retrieve_manifest: Mock, mock_tf_handler_cls: Mock
+    ) -> None:
+        """Test that a non-None terminal_handler is passed through to TerraformUpHandler."""
+        mock_cwd.return_value = Path("/mock/cwd")
+        mock_retrieve_manifest.return_value = self.mock_manifest
+        mock_tf_handler = Mock()
+        mock_tf_handler_cls.return_value = mock_tf_handler
+        mock_tf_handler.engine_dir_path = Path("/mock/cwd/engine")
+
+        # Create a mock terminal handler
+        mock_terminal_handler = Mock()
+
+        handler = UpHandler(terminal_handler=mock_terminal_handler)
+
+        # Verify TerraformUpHandler was called with the terminal_handler
+        call_args = mock_tf_handler_cls.call_args
+        self.assertEqual(call_args.kwargs["project_path"], Path("/mock/cwd"))
+        self.assertEqual(call_args.kwargs["project_manifest"], self.mock_manifest)
+        self.assertIsNotNone(call_args.kwargs["command_history_handler"])
+        self.assertEqual(call_args.kwargs["terminal_handler"], mock_terminal_handler)
         self.assertEqual(handler._handler, mock_tf_handler)
 
     @patch("jupyter_deploy.engine.terraform.tf_up.TerraformUpHandler")
@@ -108,14 +139,12 @@ class TestUpHandler(unittest.TestCase):
             UpHandler()
 
     @patch("jupyter_deploy.engine.terraform.tf_up.TerraformUpHandler")
-    @patch("jupyter_deploy.handlers.project.up_handler.Console")
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("pathlib.Path.cwd")
     def test_get_config_file_path_when_file_exists(
         self,
         mock_cwd: Mock,
         mock_retrieve_manifest: Mock,
-        mock_console_cls: Mock,
         mock_tf_handler_cls: Mock,
     ) -> None:
         mock_cwd.return_value = Path("/mock/cwd")
@@ -132,33 +161,28 @@ class TestUpHandler(unittest.TestCase):
         self.assertEqual(result, Path("/mock/cwd/engine/test-config"))
 
     @patch("jupyter_deploy.engine.terraform.tf_up.TerraformUpHandler")
-    @patch("pathlib.Path")
-    @patch("jupyter_deploy.handlers.project.up_handler.Console")
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("pathlib.Path.cwd")
     def test_get_config_file_path_when_file_does_not_exist(
         self,
         mock_cwd: Mock,
         mock_retrieve_manifest: Mock,
-        mock_console_cls: Mock,
-        mock_path_cls: Mock,
         mock_tf_handler_cls: Mock,
     ) -> None:
+        """Test that FileNotFoundError is raised when config file does not exist."""
         mock_cwd.return_value = Path("/mock/cwd")
         mock_retrieve_manifest.return_value = self.mock_manifest
-        config_path = Path("/mock/cwd/test-config")
 
-        mock_path_cls.return_value = config_path
         mock_tf_handler = Mock()
         mock_tf_handler.engine_dir_path = Path("/mock/cwd/engine")
         mock_tf_handler.get_default_config_filename.return_value = "jdout-tfplan"
         mock_tf_handler_cls.return_value = mock_tf_handler
-        mock_console_instance = Mock()
-        mock_console_cls.return_value = mock_console_instance
 
         with patch.object(Path, "exists", return_value=False):
             handler = UpHandler()
-            result = handler.get_config_file_path("test-config")
+            with self.assertRaises(FileNotFoundError) as context:
+                handler.get_config_file_path("test-config")
 
-        self.assertEqual(result, Path("/mock/cwd"))
-        mock_console_instance.print.assert_called_once()
+        # Verify error message contains helpful information
+        self.assertIn("test-config", str(context.exception))
+        self.assertIn("jd config", str(context.exception))

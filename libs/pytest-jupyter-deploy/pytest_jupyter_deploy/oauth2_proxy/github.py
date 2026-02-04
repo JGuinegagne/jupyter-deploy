@@ -5,6 +5,7 @@ import logging
 import os
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 from playwright.sync_api import Page, expect
 
@@ -437,8 +438,6 @@ class GitHubOAuth2ProxyApplication:
         Raises:
             RuntimeError: If navigation fails or authentication doesn't complete
         """
-        from urllib.parse import urlparse
-
         # Navigate to JupyterLab URL
         print(f"🔗 Navigating to {self.jupyterlab_url}")
         try:

@@ -2,7 +2,7 @@
 
 import re
 
-from jupyter_deploy.engine.supervised_execution import InteractionContext, TerminalHandler
+from jupyter_deploy.engine.supervised_execution import CompletionContext, InteractionContext, TerminalHandler
 from jupyter_deploy.engine.supervised_execution_callback import EngineExecutionCallback, NoopExecutionCallback
 from jupyter_deploy.engine.terraform.tf_enums import TerraformSequenceId
 
@@ -144,6 +144,62 @@ class TerraformSupervisedExecutionCallback(EngineExecutionCallback):
         """
         # Any new line after a prompt means user has responded
         return True
+
+    def get_completion_context(self) -> CompletionContext | None:
+        """Return CompletionContext with lines to display, or None if no pattern found.
+
+        Searches the line buffer for completion patterns (Plan:, Apply complete!)
+        and returns relevant lines for display. Called after successful execution.
+        """
+        # Determine pattern and max lines based on sequence
+        if self.sequence_id == TerraformSequenceId.config_plan:
+            pattern = "Plan:"
+            max_lines = 1
+        elif self.sequence_id == TerraformSequenceId.up_apply:
+            pattern = "Apply complete!"
+            max_lines = 50
+        else:
+            return None  # No completion context for other sequences
+
+        # Search backwards through buffer for the pattern
+        buffer_list = list(self._line_buffer)
+        for i in range(len(buffer_list) - 1, -1, -1):
+            # Strip ANSI codes before checking
+            clean_line = ANSI_ESCAPE.sub("", buffer_list[i])
+            if pattern in clean_line:
+                # Return from this line onwards, up to max_lines or end of buffer
+                end_index = min(i + max_lines, len(buffer_list))
+                return CompletionContext(lines=buffer_list[i:end_index])
+
+        return None
+
+    def on_execution_error(self, retcode: int) -> None:
+        """Handle terraform execution failure by extracting error context.
+
+        Searches backwards through buffer for the first line containing "Error: "
+        and displays context from that point onwards. This provides better error
+        visibility than showing just the last N lines, as terraform errors are
+        typically prefixed with "Error: ".
+
+        Falls back to default behavior (last 50 lines) if no "Error: " found.
+
+        Args:
+            retcode: The non-zero return code from the failed command
+        """
+        # Search backwards through buffer for first "Error: " line
+        buffer_list = list(self._line_buffer)
+        for i in range(len(buffer_list) - 1, -1, -1):
+            # Strip ANSI codes before checking
+            clean_line = ANSI_ESCAPE.sub("", buffer_list[i]).strip()
+            if "Error: " in clean_line:
+                # Found error line - extract from here to end (max 50 lines)
+                end_index = min(i + 50, len(buffer_list))
+                error_context = buffer_list[i:end_index]
+                self._terminal_handler.display_error_context(error_context)
+                return
+
+        # Fallback: no "Error: " found, use default behavior
+        super().on_execution_error(retcode)
 
 
 class TerraformNoopExecutionCallback(NoopExecutionCallback):

@@ -59,7 +59,7 @@ def create_terraform_executor(
     if sequence_id == TerraformSequenceId.config_init:
         # Init: count initialization events (backend, modules, plugins) and provider installations
         fallback_default_phase_config = JupyterDeploySupervisedExecutionDefaultPhaseV1(
-            label="Configuring",
+            label="Configuring terraform",
             **{
                 "progress-pattern": r"(Initializing|Installed|Terraform has been successfully initialized)",
                 "progress-events-estimate": 8,
@@ -72,7 +72,7 @@ def create_terraform_executor(
         fallback_default_phase_config = JupyterDeploySupervisedExecutionDefaultPhaseV1(
             label="Reading data sources",
             **{
-                "progress-pattern": r"(Read complete after|Refreshing state\.\.\. \[id=)",
+                "progress-pattern": r"(Read complete after|Refreshing state)",
                 "progress-events-estimate": 50,
             },
         )
@@ -91,20 +91,33 @@ def create_terraform_executor(
         end_reward = 100
 
     elif sequence_id == TerraformSequenceId.up_apply:
-        # Apply: count resource creation/modification events
+        # Apply: count resource creation/modification/destruction events
         # Use plan.to_update dynamically if plan_metadata is available
         fallback_default_phase_config = JupyterDeploySupervisedExecutionDefaultPhaseV1(
-            label="Mutating",
+            label="Mutating resources",
             **{
                 "progress-pattern": (
-                    r"(Creation complete after|Modifications complete after|Refreshing state\.\.\. \[id=)"
+                    r"(Creation complete after|Modifications complete after|"
+                    r"Destruction complete after|Refreshing state)"
                 ),
                 "progress-events-estimate-dynamic-source": "plan.to_update",
             },
         )
 
+    elif sequence_id == TerraformSequenceId.down_rm_state:
+        # State removal: simple operation with minimal progress tracking
+        # Takes 5% of the overall down progress (0-5)
+        fallback_default_phase_config = JupyterDeploySupervisedExecutionDefaultPhaseV1(
+            label="Persisting resources",
+            **{
+                "progress-pattern": r"(Successfully removed|Removed)",
+            },
+        )
+        end_reward = 5
+
     elif sequence_id == TerraformSequenceId.down_destroy:
         # Destroy: count resource destruction events
+        # Takes 95% of the overall down progress (5-100)
         fallback_default_phase_config = JupyterDeploySupervisedExecutionDefaultPhaseV1(
             label="Planning",
             **{
@@ -114,15 +127,17 @@ def create_terraform_executor(
         )
         fallback_phase_configs = [
             JupyterDeploySupervisedExecutionPhaseV1(
-                label="Destroying",
+                label="Destroying resources",
                 weight=80,
                 **{
-                    "enter-pattern": r"Plan: \d+ to add, \d+ to change, (\d+) to destroy\.",
+                    "enter-pattern": r"Plan:(?:\x1b\[[0-9;]*m)*\s+\d+ to add, \d+ to change, (\d+) to destroy\.",
                     "progress-events-estimate-capture-group": 1,  # Extract destroy count from capture group
-                    "progress-pattern": "Destruction complete after",
+                    "progress-pattern": r"Destruction complete after",
                 },
             ),
         ]
+        start_reward = 5
+        end_reward = 100
     else:
         raise NotImplementedError(f"Unknown sequence_id: {sequence_id}")
 

@@ -10,8 +10,9 @@ import argparse
 import re
 import sys
 import tomllib
-import tomli_w
 from pathlib import Path
+
+import tomli_w
 import yaml
 
 
@@ -49,7 +50,7 @@ def update_init_py(file_path: Path, new_version: str) -> None:
 
 def update_manifest_yaml(file_path: Path, new_version: str) -> None:
     """Update version in manifest.yaml file."""
-    with open(file_path, "r") as f:
+    with open(file_path) as f:
         data = yaml.safe_load(f)
 
     # Update the version
@@ -187,18 +188,14 @@ def update_kernel_pyproject_toml(file_path: Path, new_version: str) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Update version across all project files."
-    )
+    parser = argparse.ArgumentParser(description="Update version across all project files.")
     parser.add_argument("new_version", help="New version string (e.g., '0.2.1')")
 
     args = parser.parse_args()
     new_version = args.new_version
 
     # Base path to the project
-    project_path = (
-        Path(__file__).parent.parent / "libs" / "jupyter-deploy-tf-aws-ec2-base"
-    )
+    project_path = Path(__file__).parent.parent / "libs" / "jupyter-deploy-tf-aws-ec2-base"
 
     if not project_path.exists():
         print(f"Error: Project path {project_path} not found")
@@ -209,23 +206,10 @@ def main() -> None:
     # File paths
     pyproject_path = project_path / "pyproject.toml"
     init_path = project_path / "jupyter_deploy_tf_aws_ec2_base" / "__init__.py"
-    manifest_path = (
-        project_path / "jupyter_deploy_tf_aws_ec2_base" / "template" / "manifest.yaml"
-    )
-    main_tf_path = (
-        project_path
-        / "jupyter_deploy_tf_aws_ec2_base"
-        / "template"
-        / "engine"
-        / "main.tf"
-    )
+    manifest_path = project_path / "jupyter_deploy_tf_aws_ec2_base" / "template" / "manifest.yaml"
+    main_tf_path = project_path / "jupyter_deploy_tf_aws_ec2_base" / "template" / "engine" / "main.tf"
     jupyter_pyproject_path = (
-        project_path
-        / "jupyter_deploy_tf_aws_ec2_base"
-        / "template"
-        / "services"
-        / "jupyter"
-        / "pyproject.jupyter.toml"
+        project_path / "jupyter_deploy_tf_aws_ec2_base" / "template" / "services" / "jupyter" / "pyproject.jupyter.toml"
     )
     jupyter_pixi_path = (
         project_path
@@ -238,12 +222,7 @@ def main() -> None:
 
     # Kernel template file paths
     jupyter_kernel_path = (
-        project_path
-        / "jupyter_deploy_tf_aws_ec2_base"
-        / "template"
-        / "services"
-        / "jupyter"
-        / "pyproject.kernel.toml"
+        project_path / "jupyter_deploy_tf_aws_ec2_base" / "template" / "services" / "jupyter" / "pyproject.kernel.toml"
     )
     jupyter_pixi_kernel_path = (
         project_path

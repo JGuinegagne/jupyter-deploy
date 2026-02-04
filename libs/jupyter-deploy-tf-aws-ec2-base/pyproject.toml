@@ -56,6 +56,7 @@ extend-exclude = [
 line-length = 120
 
 [tool.ruff.lint]
+preview = true
 select = [
     "E",
     "F",
@@ -63,7 +64,18 @@ select = [
     "B",
     "SIM",
     "I",
+    "PLC0415",  # import-outside-toplevel - disallow lazy imports
 ]
+ignore = [
+    # Ignore other preview rules we're not ready for yet
+    "UP042",  # Replace str/Enum with StrEnum (Python 3.11+)
+    "UP046",  # Use PEP 695 type parameters (Python 3.12+)
+    "UP047",  # Use PEP 695 type parameters for functions (Python 3.12+)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Allow lazy imports in tests (common pattern for imports after mocks)
+"tests/**/*.py" = ["PLC0415"]
 
 [tool.ruff.format]
 quote-style = "double"

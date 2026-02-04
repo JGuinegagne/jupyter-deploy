@@ -2,52 +2,31 @@ import unittest
 from collections.abc import Callable
 from unittest.mock import Mock, patch
 
-from packaging.version import Version
-
 from jupyter_deploy import verify_utils
 from jupyter_deploy.enum import JupyterDeployTool
+from jupyter_deploy.verify_utils import ToolRequiredError
 
 
 class TestVerifyInstallation(unittest.TestCase):
     @patch("jupyter_deploy.cmd_utils.check_executable_installation")
-    def test_returns_true_when_check_exec_installation(self, mock_check: Mock) -> None:
+    def test_succeeds_when_tool_is_installed(self, mock_check: Mock) -> None:
         # Mock the check_executable_installation to return successful installation
         mock_check.return_value = (True, "2.0.0", None)
-        result = verify_utils._check_installation("my-tool")
-
-        # Verify
-        self.assertTrue(result)
+        # Should not raise
+        verify_utils._check_installation("my-tool")
         mock_check.assert_called_once_with(executable_name="my-tool")
 
     @patch("jupyter_deploy.cmd_utils.check_executable_installation")
-    def test_returns_false_when_check_exec_installation_not_found(self, mock_check: Mock) -> None:
+    def test_raises_when_tool_not_installed(self, mock_check: Mock) -> None:
         # Mock the check_executable_installation to return failed installation
         mock_check.return_value = (False, None, "Command 'my-tool' not found")
-        result = verify_utils._check_installation("my-tool")
 
-        # Verify
-        self.assertFalse(result)
-        mock_check.assert_called_once()
+        with self.assertRaises(ToolRequiredError) as context:
+            verify_utils._check_installation("my-tool", installation_url="https://example.com")
 
-    @patch("jupyter_deploy.cmd_utils.check_executable_installation")
-    def test_returns_true_with_version_check(self, mock_check: Mock) -> None:
-        # Mock the check_executable_installation to return successful installation with version
-        mock_check.return_value = (True, "2.5.0", None)
-
-        # Call the function under test with a minimum version requirement
-        result = verify_utils._check_installation("my-tool", min_version=Version("2.0.0"))
-
-        # Verify
-        self.assertTrue(result)
-        mock_check.assert_called_once()
-
-    @patch("jupyter_deploy.cmd_utils.check_executable_installation")
-    def test_returns_false_when_version_check_fails(self, mock_check: Mock) -> None:
-        mock_check.return_value = (True, "1.5.0", None)
-        result = verify_utils._check_installation("my-tool", min_version=Version("2.0.0"))
-
-        # Verify
-        self.assertFalse(result)
+        self.assertEqual(context.exception.tool_name, "my-tool")
+        self.assertEqual(context.exception.installation_url, "https://example.com")
+        self.assertEqual(context.exception.error_msg, "Command 'my-tool' not found")
         mock_check.assert_called_once()
 
     @patch("jupyter_deploy.cmd_utils.check_executable_installation")
@@ -77,21 +56,22 @@ class TestVerifyMap(unittest.TestCase):
                 self.assertIn(tool, mapped_tools, f"no verification function mapped for tool: {tool}")
 
     @patch("jupyter_deploy.verify_utils._check_installation")
-    def test_all_verification_methods_should_pass_response(self, mock_check: Mock) -> None:
+    def test_all_verification_methods_should_pass_through_to_check_installation(self, mock_check: Mock) -> None:
         for tool, verify_fn in verify_utils._TOOL_VERIFICATION_FN_MAP.items():
             mock_check.reset_mock()
-            mock_check.return_value = True
             with self.subTest(tool=tool, verify_fn=verify_fn):
-                self.assertTrue(verify_fn(None))
+                # Should not raise
+                verify_fn()
                 mock_check.assert_called_once()
 
 
 class TestVerifyToolsInstallation(unittest.TestCase):
-    def test_return_true_for_empty_list(self) -> None:
-        self.assertTrue(verify_utils.verify_tools_installation([]))
+    def test_succeeds_for_empty_list(self) -> None:
+        # Should not raise
+        verify_utils.verify_tools_installation([])
 
     @patch("jupyter_deploy.verify_utils._check_installation")
-    def test_call_each_verification_method(self, mock_check: Mock) -> None:
+    def test_calls_each_verification_method(self, mock_check: Mock) -> None:
         req1 = Mock()
         req2 = Mock()
         req1.name = "aws-cli"
@@ -99,27 +79,26 @@ class TestVerifyToolsInstallation(unittest.TestCase):
         req2.name = "terraform"
         req2.version = None
 
-        mock_check.return_value = True
-
-        self.assertTrue(verify_utils.verify_tools_installation([req1, req2]))
+        # Should not raise
+        verify_utils.verify_tools_installation([req1, req2])
         self.assertEqual(mock_check.call_count, 2)
-        self.assertEqual(mock_check.mock_calls[0][2]["min_version"], None)
 
     @patch("jupyter_deploy.verify_utils._check_installation")
-    def test_passes_min_versions(self, mock_check: Mock) -> None:
+    def test_raises_on_first_missing_tool(self, mock_check: Mock) -> None:
         req1 = Mock()
         req2 = Mock()
         req1.name = "aws-cli"
-        req1.version = "1.0.0"
+        req1.version = None
         req2.name = "terraform"
-        req2.version = "2.0.0"
+        req2.version = None
 
-        mock_check.side_effect = [False, True]
+        mock_check.side_effect = [ToolRequiredError("aws", None, None), None]
 
-        self.assertFalse(verify_utils.verify_tools_installation([req1, req2]))
-        self.assertEqual(mock_check.call_count, 2)
-        self.assertEqual(mock_check.mock_calls[0][2]["min_version"], Version("1.0.0"))
-        self.assertEqual(mock_check.mock_calls[1][2]["min_version"], Version("2.0.0"))
+        with self.assertRaises(ToolRequiredError):
+            verify_utils.verify_tools_installation([req1, req2])
+
+        # Should only call once before raising
+        self.assertEqual(mock_check.call_count, 1)
 
     @patch("jupyter_deploy.verify_utils._check_installation")
     def test_skips_unrecognized_tools(self, mock_check: Mock) -> None:
@@ -133,23 +112,6 @@ class TestVerifyToolsInstallation(unittest.TestCase):
         req3.name = "jq"
         req3.version = None
 
-        mock_check.return_value = True
-
-        self.assertTrue(verify_utils.verify_tools_installation([req1, req2, req3]))
+        # Should not raise, should call twice (skip the unknown tool)
+        verify_utils.verify_tools_installation([req1, req2, req3])
         self.assertEqual(mock_check.call_count, 2)
-
-    @patch("jupyter_deploy.verify_utils._check_installation")
-    def test_skip_version_verification_for_invalid_versions(self, mock_check: Mock) -> None:
-        req1 = Mock()
-        req2 = Mock()
-        req1.name = "aws-cli"
-        req1.version = "i-am-not-a-version"
-        req2.name = "terraform"
-        req2.version = None
-
-        mock_check.return_value = False
-
-        self.assertFalse(verify_utils.verify_tools_installation([req1, req2]))
-        self.assertEqual(mock_check.call_count, 2)
-        self.assertEqual(mock_check.mock_calls[0][2]["min_version"], None)
-        self.assertEqual(mock_check.mock_calls[1][2]["min_version"], None)

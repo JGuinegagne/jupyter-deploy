@@ -5,12 +5,15 @@ from subprocess import CalledProcessError
 from typing import Any
 
 from pydantic import ValidationError
-from rich import console as rich_console
 
-from jupyter_deploy import cmd_utils, fs_utils, verify_utils
-from jupyter_deploy.engine.engine_config import EngineConfigHandler
+from jupyter_deploy import cmd_utils, fs_utils
+from jupyter_deploy.engine.engine_config import (
+    EngineConfigHandler,
+    ReadConfigurationError,
+    WriteConfigurationError,
+)
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.engine.supervised_execution import ExecutionError, TerminalHandler
+from jupyter_deploy.engine.supervised_execution import CompletionContext, ExecutionError, TerminalHandler
 from jupyter_deploy.engine.supervised_execution_callback import ExecutionCallbackInterface
 from jupyter_deploy.engine.terraform import (
     tf_plan,
@@ -90,11 +93,6 @@ class TerraformConfigHandler(EngineConfigHandler):
         presets.extend([n[len("defaults-") : -len(".tfvars")] for n in matching_filenames])
         return sorted(presets)
 
-    def verify_requirements(self) -> bool:
-        requirements = self.project_manifest.get_requirements()
-        all_installed = verify_utils.verify_tools_installation(requirements)
-        return all_installed
-
     def reset_recorded_variables(self) -> None:
         self.variables_handler.reset_recorded_variables()
 
@@ -103,7 +101,7 @@ class TerraformConfigHandler(EngineConfigHandler):
 
     def configure(
         self, preset_name: str | None = None, variable_overrides: dict[str, TemplateVariableDefinition] | None = None
-    ) -> bool:
+    ) -> CompletionContext | None:
         # Create log file using command history handler
         self._log_file = self.command_history_handler.create_log_file("config")
 
@@ -191,29 +189,29 @@ class TerraformConfigHandler(EngineConfigHandler):
                 message="Error generating Terraform plan.",
             )
 
-        # on successful plan generation, terraform prints out where the plan is saved,
-        # hence no need to print it again.
-        return True
+        # Return completion context from callback
+        return plan_callback.get_completion_context()
 
     def record(self, record_vars: bool = False, record_secrets: bool = False) -> None:
-        console = rich_console.Console()
+        """Record variables and secrets from the plan file.
+
+        Raises:
+            ReadConfigurationError: If reading or parsing the plan fails.
+            WriteConfigurationError: If writing configuration files fails.
+        """
         cmds = TF_PARSE_PLAN_CMD + [f"{self.plan_out_path.absolute()}"]
 
         # Parse the plan (needed for both metadata and variables/secrets)
         try:
             plan_content_str = cmd_utils.run_cmd_and_capture_output(cmds, exec_dir=self.engine_dir_path)
         except CalledProcessError as e:
-            console.print(f":x: Failed to retrieve plan at: {self.plan_out_path.name}")
-            console.print(e.stdout)
-            console.print(e.stderr)
-            return
+            raise ReadConfigurationError(self.plan_out_path.name) from e
 
         # Parse JSON once for efficiency
         try:
             plan = tf_plan.extract_plan(plan_content_str)
-        except (ValueError, ValidationError):
-            console.print(f":x: invalid plan at: {self.plan_out_path.name}")
-            return
+        except (ValueError, ValidationError) as e:
+            raise ReadConfigurationError(self.plan_out_path.name) from e
 
         # Extract and save plan metadata (resource counts) - always done
         metadata_path = self.engine_dir_path / TF_PLAN_METADATA_FILENAME
@@ -225,11 +223,8 @@ class TerraformConfigHandler(EngineConfigHandler):
                 to_destroy=to_destroy,
             )
             tf_plan_metadata.save_plan_metadata(metadata, metadata_path)
-        except (ValueError, ValidationError):
-            # If we can't parse the plan metadata, just skip it
-            # This is not critical for the record operation
-            console.print(f":x: failed to save plan metadata at: {metadata_path}")
-            pass
+        except (ValueError, ValidationError) as e:
+            raise WriteConfigurationError(str(metadata_path)) from e
 
         # Early return if we don't need to record vars/secrets
         if not record_vars and not record_secrets:
@@ -238,9 +233,8 @@ class TerraformConfigHandler(EngineConfigHandler):
         # Extract variables and secrets for recording
         try:
             variables, secrets = tf_plan.extract_variables_from_plan(plan)
-        except (ValueError, ValidationError):  # noqa: B904
-            console.print(f":x: invalid plan at: {self.plan_out_path.name}")
-            return
+        except (ValueError, ValidationError) as e:
+            raise ReadConfigurationError(self.plan_out_path.name) from e
 
         vardefs: dict[str, Any] = {}
 
@@ -249,7 +243,6 @@ class TerraformConfigHandler(EngineConfigHandler):
             vars_file_lines = ["# generated by jupyter-deploy config command\n"]
             vars_file_lines.extend(tf_plan.format_plan_variables(variables))
             fs_utils.write_inline_file_content(vars_file_path, vars_file_lines)
-            console.print(f":floppy_disk: Recorded variables: {vars_file_path.name}")
 
             vardefs.update({k: v.value for k, v in variables.items()})
 
@@ -259,13 +252,8 @@ class TerraformConfigHandler(EngineConfigHandler):
             secrets_file_lines.append("# do NOT commit this file\n")
             secrets_file_lines.extend(tf_plan.format_plan_variables(secrets))
             fs_utils.write_inline_file_content(secrets_file_path, secrets_file_lines)
-            console.print(f":floppy_disk: Recorded secrets: {secrets_file_path.name}")
-            console.print(f":warning: Do [bold]not[/] commit the secret file: {secrets_file_path.name}", style="yellow")
 
             vardefs.update({k: v.value for k, v in secrets.items()})
 
         if record_vars or record_secrets:
             self.variables_handler.sync_project_variables_config(vardefs)
-            variables_config_path = self.variables_handler.get_variables_config_path()
-            console.line()
-            console.print(f":floppy_disk: Recorded variables config: {variables_config_path.name}")

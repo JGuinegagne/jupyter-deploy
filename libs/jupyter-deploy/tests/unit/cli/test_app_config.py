@@ -12,7 +12,11 @@ class TestConfigCommand(unittest.TestCase):
 
     def get_mock_config_handler(self) -> tuple[Mock, dict[str, Mock]]:
         mock_config_handler = Mock()
-        mock_validate = Mock()
+        mock_has_recorded_variables = Mock()
+        mock_verify_preset_exists = Mock()
+        mock_validate_preset = Mock()
+        mock_list_presets = Mock()
+        mock_set_preset = Mock()
         mock_reset_variables = Mock()
         mock_reset_secrets = Mock()
         mock_verify = Mock()
@@ -20,7 +24,11 @@ class TestConfigCommand(unittest.TestCase):
         mock_record = Mock()
         mock_has_used_preset = Mock()
 
-        mock_config_handler.validate_and_set_preset = mock_validate
+        mock_config_handler.has_recorded_variables = mock_has_recorded_variables
+        mock_config_handler.verify_preset_exists = mock_verify_preset_exists
+        mock_config_handler.validate_preset = mock_validate_preset
+        mock_config_handler.list_presets = mock_list_presets
+        mock_config_handler.set_preset = mock_set_preset
         mock_config_handler.reset_recorded_variables = mock_reset_variables
         mock_config_handler.reset_recorded_secrets = mock_reset_secrets
         mock_config_handler.verify_requirements = mock_verify
@@ -28,13 +36,19 @@ class TestConfigCommand(unittest.TestCase):
         mock_config_handler.record = mock_record
         mock_config_handler.has_used_preset = mock_has_used_preset
 
-        mock_validate.return_value = True
+        mock_has_recorded_variables.return_value = False
+        mock_verify_preset_exists.return_value = True
+        mock_list_presets.return_value = ["all", "base", "none"]
         mock_verify.return_value = True
-        mock_configure.return_value = True
+        mock_configure.return_value = None
         mock_has_used_preset.return_value = False
 
         return mock_config_handler, {
-            "validate_and_set_preset": mock_validate,
+            "has_recorded_variables": mock_has_recorded_variables,
+            "verify_preset_exists": mock_verify_preset_exists,
+            "validate_preset": mock_validate_preset,
+            "list_presets": mock_list_presets,
+            "set_preset": mock_set_preset,
             "reset_recorded_variables": mock_reset_variables,
             "reset_recorded_secrets": mock_reset_secrets,
             "verify": mock_verify,
@@ -55,9 +69,9 @@ class TestConfigCommand(unittest.TestCase):
         # Verify
         self.assertEqual(result.exit_code, 0)
         mock_config_handler.assert_called_once()
-        mock_config_fns["validate_and_set_preset"].assert_called_once_with(
-            preset_name="all", will_reset_variables=False
-        )
+        mock_config_fns["has_recorded_variables"].assert_called_once()
+        mock_config_fns["validate_preset"].assert_called_once_with("all")
+        mock_config_fns["set_preset"].assert_called_once_with("all")
         mock_config_fns["verify"].assert_called_once()
         mock_config_fns["configure"].assert_called_with(variable_overrides={})
         mock_config_fns["record"].assert_called_once_with(record_vars=True, record_secrets=False)
@@ -78,9 +92,9 @@ class TestConfigCommand(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         # Check that ConfigHandler is called with terminal_handler (ProgressDisplayManager instance)
         mock_config_handler.assert_called_once_with(output_filename=None, terminal_handler=ANY)
-        mock_config_fns["validate_and_set_preset"].assert_called_once_with(
-            preset_name="all", will_reset_variables=False
-        )
+        mock_config_fns["has_recorded_variables"].assert_called_once()
+        mock_config_fns["validate_preset"].assert_called_once_with("all")
+        mock_config_fns["set_preset"].assert_called_once_with("all")
         mock_config_fns["has_used_preset"].assert_called_with("all")
 
     @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
@@ -126,7 +140,9 @@ class TestConfigCommand(unittest.TestCase):
         # Verify
         self.assertEqual(result.exit_code, 0)
         mock_config_handler.assert_called_once_with(output_filename=None, terminal_handler=ANY)
-        mock_config_fns["validate_and_set_preset"].assert_called_once_with(preset_name=None, will_reset_variables=False)
+        mock_config_fns["has_recorded_variables"].assert_called_once()
+        mock_config_fns["validate_preset"].assert_not_called()  # None preset doesn't need validation
+        mock_config_fns["set_preset"].assert_called_once_with(None)
         mock_config_fns["has_used_preset"].assert_called_with(None)
 
     @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
@@ -141,25 +157,29 @@ class TestConfigCommand(unittest.TestCase):
         # Verify
         self.assertEqual(result.exit_code, 0)
         mock_config_handler.assert_called_once_with(output_filename=None, terminal_handler=ANY)
-        mock_config_fns["validate_and_set_preset"].assert_called_once_with(
-            preset_name="some-preset", will_reset_variables=False
-        )
+        mock_config_fns["has_recorded_variables"].assert_called_once()
+        mock_config_fns["validate_preset"].assert_called_once_with("some-preset")
+        mock_config_fns["set_preset"].assert_called_once_with("some-preset")
         mock_config_fns["has_used_preset"].assert_called_with("some-preset")
 
     @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
-    def test_config_stops_if_validate_returns_false(self, mock_config_handler: Mock) -> None:
+    def test_config_stops_if_validate_raises_invalid_preset(self, mock_config_handler: Mock) -> None:
+        from jupyter_deploy.handlers.project.config_handler import InvalidPreset
+
         mock_config_handler_instance, mock_config_fns = self.get_mock_config_handler()
         mock_config_handler.return_value = mock_config_handler_instance
-        mock_config_fns["validate_and_set_preset"].return_value = False
+        mock_config_fns["validate_preset"].side_effect = InvalidPreset("all", ["base", "none"])
 
         # Act
         runner = CliRunner()
         result = runner.invoke(app_runner.app, ["config"])
 
         # Verify
-        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(result.exit_code, 1)
         mock_config_handler.assert_called_once()
-        mock_config_fns["validate_and_set_preset"].assert_called_once()
+        mock_config_fns["has_recorded_variables"].assert_called_once()
+        mock_config_fns["validate_preset"].assert_called_once_with("all")
+        mock_config_fns["set_preset"].assert_not_called()
         mock_config_fns["verify"].assert_not_called()
         mock_config_fns["configure"].assert_not_called()
         mock_config_fns["record"].assert_not_called()
@@ -168,19 +188,23 @@ class TestConfigCommand(unittest.TestCase):
         mock_config_fns["has_used_preset"].assert_not_called()
 
     @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
-    def test_config_stops_if_verify_requirements_returns_false(self, mock_config_handler: Mock) -> None:
+    def test_config_stops_if_verify_requirements_raises(self, mock_config_handler: Mock) -> None:
+        from jupyter_deploy.verify_utils import ToolRequiredError
+
         mock_config_handler_instance, mock_config_fns = self.get_mock_config_handler()
         mock_config_handler.return_value = mock_config_handler_instance
-        mock_config_fns["verify"].return_value = False
+        mock_config_fns["verify"].side_effect = ToolRequiredError("terraform", "https://example.com", "not found")
 
         # Act
         runner = CliRunner()
         result = runner.invoke(app_runner.app, ["config"])
 
         # Verify
-        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(result.exit_code, 1)
         mock_config_handler.assert_called_once()
-        mock_config_fns["validate_and_set_preset"].assert_called_once()
+        mock_config_fns["has_recorded_variables"].assert_called_once()
+        mock_config_fns["validate_preset"].assert_called_once()
+        mock_config_fns["set_preset"].assert_called_once()
         mock_config_fns["verify"].assert_called_once()
         mock_config_fns["configure"].assert_not_called()
         mock_config_fns["record"].assert_not_called()
@@ -203,7 +227,9 @@ class TestConfigCommand(unittest.TestCase):
         # Verify - should exit with the error retcode
         self.assertEqual(result.exit_code, 1)
         mock_config_handler.assert_called_once()
-        mock_config_fns["validate_and_set_preset"].assert_called_once()
+        mock_config_fns["has_recorded_variables"].assert_called_once()
+        mock_config_fns["validate_preset"].assert_called_once()
+        mock_config_fns["set_preset"].assert_called_once()
         mock_config_fns["verify"].assert_called_once()
         mock_config_fns["configure"].assert_called_once()
         mock_config_fns["record"].assert_not_called()
@@ -222,7 +248,10 @@ class TestConfigCommand(unittest.TestCase):
 
         # Verify
         self.assertEqual(result.exit_code, 0)
-        mock_config_fns["validate_and_set_preset"].assert_called_once_with(preset_name="all", will_reset_variables=True)
+        # When reset=True, has_recorded_variables is not called
+        mock_config_fns["has_recorded_variables"].assert_not_called()
+        mock_config_fns["validate_preset"].assert_called_once_with("all")
+        mock_config_fns["set_preset"].assert_called_once_with("all")
         mock_config_fns["reset_recorded_variables"].assert_called_once()
         mock_config_fns["reset_recorded_secrets"].assert_called_once()
         mock_config_fns["verify"].assert_called_once()
@@ -241,7 +270,10 @@ class TestConfigCommand(unittest.TestCase):
 
         # Verify
         self.assertEqual(result.exit_code, 0)
-        mock_config_fns["validate_and_set_preset"].assert_called_once_with(preset_name="all", will_reset_variables=True)
+        # When reset=True, has_recorded_variables is not called
+        mock_config_fns["has_recorded_variables"].assert_not_called()
+        mock_config_fns["validate_preset"].assert_called_once_with("all")
+        mock_config_fns["set_preset"].assert_called_once_with("all")
         mock_config_fns["record"].assert_called_once_with(record_vars=True, record_secrets=False)
         mock_config_fns["reset_recorded_variables"].assert_called_once()
         mock_config_fns["reset_recorded_secrets"].assert_called_once()
@@ -254,9 +286,9 @@ class TestConfigCommand(unittest.TestCase):
 
         call_order: list[str] = []
 
-        def configure_mock(*a: list, **kw: dict) -> bool:
+        def configure_mock(*a: list, **kw: dict) -> None:
             call_order.append("configure")
-            return True
+            return None
 
         mock_config_fns["reset_recorded_variables"].side_effect = lambda *a, **kw: call_order.append("reset_vars")
         mock_config_fns["reset_recorded_secrets"].side_effect = lambda *a, **kw: call_order.append("reset_secrets")
@@ -313,7 +345,9 @@ class TestConfigCommand(unittest.TestCase):
         # Verify
         self.assertEqual(result.exit_code, 0)
         mock_config_handler.assert_called_once()
-        mock_config_fns["validate_and_set_preset"].assert_called_once()
+        mock_config_fns["has_recorded_variables"].assert_called_once()
+        mock_config_fns["validate_preset"].assert_called_once()
+        mock_config_fns["set_preset"].assert_called_once()
         mock_config_fns["verify"].assert_not_called()
         mock_config_fns["configure"].assert_called_once()
         mock_config_fns["record"].assert_called_once()

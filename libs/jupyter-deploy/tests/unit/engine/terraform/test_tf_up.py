@@ -3,6 +3,8 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.engine.supervised_execution import ExecutionError
+from jupyter_deploy.engine.terraform.tf_enums import TerraformSequenceId
 from jupyter_deploy.engine.terraform.tf_up import TerraformUpHandler
 
 
@@ -11,110 +13,196 @@ class TestTerraformUpHandler(unittest.TestCase):
 
     def test_init_sets_attributes(self) -> None:
         project_path = Path("/mock/project")
-        handler = TerraformUpHandler(project_path=project_path)
+        mock_manifest = Mock()
+        mock_history_handler = Mock()
+        handler = TerraformUpHandler(
+            project_path=project_path,
+            project_manifest=mock_manifest,
+            command_history_handler=mock_history_handler,
+        )
 
         self.assertEqual(handler.project_path, project_path)
         self.assertEqual(handler.engine, EngineType.TERRAFORM)
 
     def test_get_default_config_filename_returns_terraform_default(self) -> None:
         project_path = Path("/mock/project")
-        handler = TerraformUpHandler(project_path=project_path)
+        mock_manifest = Mock()
+        mock_history_handler = Mock()
+        handler = TerraformUpHandler(
+            project_path=project_path,
+            project_manifest=mock_manifest,
+            command_history_handler=mock_history_handler,
+        )
 
         result = handler.get_default_config_filename()
 
         self.assertEqual(result, "jdout-tfplan")
 
-    @patch("jupyter_deploy.engine.terraform.tf_up.cmd_utils")
-    @patch("jupyter_deploy.engine.terraform.tf_up.rich_console")
-    def test_apply_success(self, mock_console: Mock, mock_cmd_utils: Mock) -> None:
+    @patch("jupyter_deploy.engine.terraform.tf_up.tf_supervised_executor_factory.create_terraform_executor")
+    def test_apply_success(self, mock_create_executor: Mock) -> None:
+        """Test successful terraform apply."""
         path = Path("/mock/path")
         project_path = Path("/mock/project")
-        engine_path = project_path / "engine"
-        handler = TerraformUpHandler(project_path=project_path)
+        mock_manifest = Mock()
+        mock_history_handler = Mock()
+        mock_history_handler.create_log_file.return_value = Path("/mock/log.log")
 
-        mock_console_instance = Mock()
-        mock_console.Console.return_value = mock_console_instance
+        handler = TerraformUpHandler(
+            project_path=project_path,
+            project_manifest=mock_manifest,
+            command_history_handler=mock_history_handler,
+        )
 
-        mock_cmd_utils.run_cmd_and_pipe_to_terminal.return_value = (0, False)
+        # Mock the executor
+        mock_executor = Mock()
+        mock_executor.execute.return_value = 0
+        mock_create_executor.return_value = mock_executor
 
         handler.apply(path)
 
-        mock_cmd_utils.run_cmd_and_pipe_to_terminal.assert_called_once_with(
-            ["terraform", "apply", "/mock/path"], exec_dir=engine_path
-        )
-        mock_console_instance.print.assert_called_once()
-        self.assertTrue(mock_console_instance.print.call_args[0][0].lower().find("success") >= 0)
+        # Verify executor was called
+        mock_executor.execute.assert_called_once()
 
-    @patch("jupyter_deploy.engine.terraform.tf_up.cmd_utils")
-    @patch("jupyter_deploy.engine.terraform.tf_up.rich_console")
-    def test_apply_handles_error(self, mock_console: Mock, mock_cmd_utils: Mock) -> None:
+    @patch("jupyter_deploy.engine.terraform.tf_up.tf_supervised_executor_factory.create_terraform_executor")
+    def test_apply_handles_error(self, mock_create_executor: Mock) -> None:
+        """Test terraform apply failure."""
         path = Path("/mock/path")
         project_path = Path("/mock/project")
-        engine_path = project_path / "engine"
-        handler = TerraformUpHandler(project_path=project_path)
+        mock_manifest = Mock()
+        mock_history_handler = Mock()
+        mock_history_handler.create_log_file.return_value = Path("/mock/log.log")
 
-        mock_console_instance = Mock()
-        mock_console.Console.return_value = mock_console_instance
-
-        mock_cmd_utils.run_cmd_and_pipe_to_terminal.return_value = (1, False)
-
-        handler.apply(path)
-
-        mock_cmd_utils.run_cmd_and_pipe_to_terminal.assert_called_once_with(
-            ["terraform", "apply", "/mock/path"], exec_dir=engine_path
+        handler = TerraformUpHandler(
+            project_path=project_path,
+            project_manifest=mock_manifest,
+            command_history_handler=mock_history_handler,
         )
-        mock_console_instance.print.assert_called_once()
-        self.assertTrue(mock_console_instance.print.call_args[0][0].lower().find("error") >= 0)
 
-    @patch("jupyter_deploy.engine.terraform.tf_up.cmd_utils")
-    @patch("jupyter_deploy.engine.terraform.tf_up.rich_console")
-    def test_apply_handles_timeout(self, mock_console: Mock, mock_cmd_utils: Mock) -> None:
-        path = Path("/mock/path")
-        project_path = Path("/mock/project")
-        engine_path = project_path / "engine"
-        handler = TerraformUpHandler(project_path=project_path)
+        # Mock the executor to return error
+        mock_executor = Mock()
+        mock_executor.execute.return_value = 1
+        mock_create_executor.return_value = mock_executor
 
-        mock_console_instance = Mock()
-        mock_console.Console.return_value = mock_console_instance
-
-        mock_cmd_utils.run_cmd_and_pipe_to_terminal.return_value = (0, True)
-
-        handler.apply(path)
-
-        mock_cmd_utils.run_cmd_and_pipe_to_terminal.assert_called_once_with(
-            ["terraform", "apply", "/mock/path"], exec_dir=engine_path
-        )
-        mock_console_instance.print.assert_called_once()
-        self.assertTrue(mock_console_instance.print.call_args[0][0].lower().find("error") >= 0)
-
-    @patch("jupyter_deploy.engine.terraform.tf_up.cmd_utils")
-    def test_apply_propagates_exceptions(self, mock_cmd_utils: Mock) -> None:
-        path = Path("/mock/path")
-        project_path = Path("/mock/project")
-        handler = TerraformUpHandler(project_path=project_path)
-
-        mock_cmd_utils.run_cmd_and_pipe_to_terminal.side_effect = Exception("Command failed")
-
-        with self.assertRaises(Exception) as context:
+        with self.assertRaises(ExecutionError) as context:
             handler.apply(path)
 
-        self.assertEqual(str(context.exception), "Command failed")
-        mock_cmd_utils.run_cmd_and_pipe_to_terminal.assert_called_once()
+        self.assertEqual(context.exception.retcode, 1)
+        self.assertEqual(context.exception.command, "up")
 
-    @patch("jupyter_deploy.engine.terraform.tf_up.cmd_utils")
-    @patch("jupyter_deploy.engine.terraform.tf_up.rich_console")
-    def test_apply_with_auto_approve(self, mock_console: Mock, mock_cmd_utils: Mock) -> None:
+    @patch("jupyter_deploy.engine.terraform.tf_up.tf_supervised_executor_factory.create_terraform_executor")
+    def test_apply_with_auto_approve(self, mock_create_executor: Mock) -> None:
         """Test that auto_approve flag is properly passed to terraform command."""
         path = Path("/mock/path")
         project_path = Path("/mock/project")
-        handler = TerraformUpHandler(project_path=project_path)
+        mock_manifest = Mock()
+        mock_history_handler = Mock()
+        mock_history_handler.create_log_file.return_value = Path("/mock/log.log")
 
-        mock_console_instance = Mock()
-        mock_console.Console.return_value = mock_console_instance
-        mock_cmd_utils.run_cmd_and_pipe_to_terminal.return_value = (0, False)
+        handler = TerraformUpHandler(
+            project_path=project_path,
+            project_manifest=mock_manifest,
+            command_history_handler=mock_history_handler,
+        )
+
+        # Mock the executor
+        mock_executor = Mock()
+        mock_executor.execute.return_value = 0
+        mock_create_executor.return_value = mock_executor
 
         handler.apply(path, auto_approve=True)
 
-        mock_cmd_utils.run_cmd_and_pipe_to_terminal.assert_called_once()
-        cmd_args = mock_cmd_utils.run_cmd_and_pipe_to_terminal.call_args[0][0]
+        # Verify the command passed to executor includes -auto-approve
+        mock_executor.execute.assert_called_once()
+        cmd_args = mock_executor.execute.call_args[0][0]
         self.assertIn("-auto-approve", cmd_args)
+
+    @patch("jupyter_deploy.engine.terraform.tf_up.TerraformSupervisedExecutionCallback")
+    @patch("jupyter_deploy.engine.terraform.tf_up.tf_supervised_executor_factory.create_terraform_executor")
+    def test_apply_with_terminal_handler_uses_supervised_callback(
+        self, mock_create_executor: Mock, mock_callback_cls: Mock
+    ) -> None:
+        """Test that apply with terminal_handler uses TerraformSupervisedExecutionCallback."""
+        path = Path("/mock/path")
+        project_path = Path("/mock/project")
+        mock_manifest = Mock()
+        mock_history_handler = Mock()
+        mock_history_handler.create_log_file.return_value = Path("/mock/log.log")
+
+        # Mock executor - success
+        mock_executor = Mock()
+        mock_executor.execute.return_value = 0
+        mock_create_executor.return_value = mock_executor
+
+        # Mock callback
+        mock_callback = Mock()
+        mock_callback_cls.return_value = mock_callback
+
+        # Create handler WITH terminal_handler
+        mock_terminal_handler = Mock()
+        handler = TerraformUpHandler(
+            project_path=project_path,
+            project_manifest=mock_manifest,
+            command_history_handler=mock_history_handler,
+            terminal_handler=mock_terminal_handler,
+        )
+
+        # Act
+        handler.apply(path)
+
+        # Assert
+        # Verify TerraformSupervisedExecutionCallback was created
+        mock_callback_cls.assert_called_once_with(
+            terminal_handler=mock_terminal_handler,
+            sequence_id=TerraformSequenceId.up_apply,
+        )
+
+        # Verify executor was created with the supervised callback
+        mock_create_executor.assert_called_once()
+        self.assertEqual(mock_create_executor.call_args.kwargs["execution_callback"], mock_callback)
+
+    @patch("jupyter_deploy.engine.terraform.tf_up.TerraformSupervisedExecutionCallback")
+    @patch("jupyter_deploy.engine.terraform.tf_up.tf_supervised_executor_factory.create_terraform_executor")
+    def test_apply_with_terminal_handler_handles_error(
+        self, mock_create_executor: Mock, mock_callback_cls: Mock
+    ) -> None:
+        """Test that apply with terminal_handler properly raises ExecutionError on failure."""
+        path = Path("/mock/path")
+        project_path = Path("/mock/project")
+        mock_manifest = Mock()
+        mock_history_handler = Mock()
+        mock_history_handler.create_log_file.return_value = Path("/mock/log.log")
+
+        # Mock executor - failure
+        mock_executor = Mock()
+        mock_executor.execute.return_value = 1
+        mock_create_executor.return_value = mock_executor
+
+        # Mock callback
+        mock_callback = Mock()
+        mock_callback_cls.return_value = mock_callback
+
+        # Create handler WITH terminal_handler
+        mock_terminal_handler = Mock()
+        handler = TerraformUpHandler(
+            project_path=project_path,
+            project_manifest=mock_manifest,
+            command_history_handler=mock_history_handler,
+            terminal_handler=mock_terminal_handler,
+        )
+
+        # Act & Assert
+        with self.assertRaises(ExecutionError) as context:
+            handler.apply(path)
+
+        self.assertEqual(context.exception.retcode, 1)
+        self.assertEqual(context.exception.command, "up")
+
+        # Verify TerraformSupervisedExecutionCallback was created
+        mock_callback_cls.assert_called_once_with(
+            terminal_handler=mock_terminal_handler,
+            sequence_id=TerraformSequenceId.up_apply,
+        )
+
+        # Verify executor was created and executed
+        mock_create_executor.assert_called_once()
+        mock_executor.execute.assert_called_once()

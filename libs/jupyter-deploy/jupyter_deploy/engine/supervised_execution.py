@@ -17,6 +17,34 @@ class ExecutionProgress:
     reward: float
 
 
+@dataclass
+class InteractionContext:
+    """Context to display when user interaction is needed.
+
+    Used when the subprocess requires user input (e.g., terraform prompts).
+    Contains buffered output lines that provide context for the prompt.
+
+    Attributes:
+        lines: List of output lines to display (e.g., variable description, plan summary)
+    """
+
+    lines: list[str]
+
+
+@dataclass
+class CompletionContext:
+    """Context captured during execution to display after successful completion.
+
+    Contains summary lines to display after command completes successfully.
+    For example: terraform plan summary or apply outputs.
+
+    Attributes:
+        lines: List of lines to display (e.g., "Plan: X to add...", terraform outputs)
+    """
+
+    lines: list[str]
+
+
 @runtime_checkable
 class ExecutionCallback(Protocol):
     """Protocol for execution callbacks used by SupervisedExecutor.
@@ -26,6 +54,7 @@ class ExecutionCallback(Protocol):
     - Handle interaction lines
     - Handle normal log lines
     - Receive progress updates
+    - Provide completion context after successful execution
     """
 
     def is_requesting_user_input(self, line: str) -> bool:
@@ -71,19 +100,13 @@ class ExecutionCallback(Protocol):
         """
         ...
 
+    def get_completion_context(self) -> CompletionContext | None:
+        """Return CompletionContext with lines to display, or None if no context captured.
 
-@dataclass
-class InteractionContext:
-    """Context to display when user interaction is needed.
-
-    Used when the subprocess requires user input (e.g., terraform prompts).
-    Contains buffered output lines that provide context for the prompt.
-
-    Attributes:
-        lines: List of output lines to display (e.g., variable description, plan summary)
-    """
-
-    lines: list[str]
+        Called after successful execution to get summary lines to display.
+        For example: terraform plan summary or terraform outputs.
+        """
+        ...
 
 
 class TerminalHandler(Protocol):

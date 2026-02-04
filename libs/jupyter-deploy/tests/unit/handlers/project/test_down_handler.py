@@ -32,7 +32,37 @@ class TestDownHandler(unittest.TestCase):
 
         handler = DownHandler()
 
-        mock_tf_handler_cls.assert_called_once_with(project_path=Path("/mock/cwd"), project_manifest=self.mock_manifest)
+        # Verify TerraformDownHandler was called with correct arguments
+        call_args = mock_tf_handler_cls.call_args
+        self.assertEqual(call_args.kwargs["project_path"], Path("/mock/cwd"))
+        self.assertEqual(call_args.kwargs["project_manifest"], self.mock_manifest)
+        self.assertIsNotNone(call_args.kwargs["command_history_handler"])
+        self.assertIsNone(call_args.kwargs["terminal_handler"])
+        self.assertEqual(handler._handler, mock_tf_handler)
+
+    @patch("jupyter_deploy.engine.terraform.tf_down.TerraformDownHandler")
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("pathlib.Path.cwd")
+    def test_init_passes_terminal_handler_to_terraform_handler(
+        self, mock_cwd: Mock, mock_retrieve_manifest: Mock, mock_tf_handler_cls: Mock
+    ) -> None:
+        """Test that a non-None terminal_handler is passed through to TerraformDownHandler."""
+        mock_cwd.return_value = Path("/mock/cwd")
+        mock_retrieve_manifest.return_value = self.mock_manifest
+        mock_tf_handler = Mock()
+        mock_tf_handler_cls.return_value = mock_tf_handler
+
+        # Create a mock terminal handler
+        mock_terminal_handler = Mock()
+
+        handler = DownHandler(terminal_handler=mock_terminal_handler)
+
+        # Verify TerraformDownHandler was called with the terminal_handler
+        call_args = mock_tf_handler_cls.call_args
+        self.assertEqual(call_args.kwargs["project_path"], Path("/mock/cwd"))
+        self.assertEqual(call_args.kwargs["project_manifest"], self.mock_manifest)
+        self.assertIsNotNone(call_args.kwargs["command_history_handler"])
+        self.assertEqual(call_args.kwargs["terminal_handler"], mock_terminal_handler)
         self.assertEqual(handler._handler, mock_tf_handler)
 
     @patch("jupyter_deploy.engine.terraform.tf_down.TerraformDownHandler")
