@@ -1,10 +1,6 @@
 """E2E tests for configuration changes and redeployment."""
 
-from subprocess import CompletedProcess
-
 import pytest
-from pytest_jupyter_deploy.cli import JDCliError
-from pytest_jupyter_deploy.constants import E2E_UPGRADE_INSTANCE_LOG_FILE
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
 from pytest_jupyter_deploy.files import verify_file_exists_on_server, verify_file_or_dir_does_not_exist_on_server
 from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
@@ -80,22 +76,7 @@ def test_upgrade_config(
     )
 
     # Apply the changes
-    # Note: We tolerate failure here because config changes that modify the instance
-    # (instance type) can cause Docker containers to crash after the instance is
-    # stopped/modified/restarted. The waiter script will detect this and fail, but
-    # the infrastructure changes will have succeeded. The subsequent server restart
-    # via ensure_server_running() will bring the containers back to a healthy state.
-    result: CompletedProcess[str] | None = None
-    try:
-        result = e2e_deployment.cli.run_command(["jupyter-deploy", "up", "-y"])
-    except JDCliError:
-        # Command failed - this is expected when containers crash after instance changes
-        # Continue to restart step which will bring services back up
-        pass
-    finally:
-        # Save logs
-        if result is not None:
-            e2e_deployment.save_command_logs(E2E_UPGRADE_INSTANCE_LOG_FILE, result)
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "up", "--verbose"])
 
     # Ensure the server is running and healthy
     # After instance modifications, SSM agent may need time to register, so we use
@@ -130,3 +111,13 @@ def test_upgrade_config(
     verify_file_or_dir_does_not_exist_on_server(e2e_deployment, "e2e_flag_home.txt")
     verify_file_or_dir_does_not_exist_on_server(e2e_deployment, "external-ebs1/e2e_flag_ebs.txt")
     verify_file_or_dir_does_not_exist_on_server(e2e_deployment, "external-efs1/e2e_flag_efs.txt")
+
+    # Verify terraform output is visible in verbose mode
+    assert "Apply complete!" in result.stdout, "Expected 'Apply complete!' in verbose up output"
+    assert "Outputs:" in result.stdout, "Expected 'Outputs:' section in verbose up output"
+
+    # Verify up logs are accessible via jd history
+    history_result = e2e_deployment.cli.run_command(["jupyter-deploy", "history", "show", "-l", "50"])
+    history_content = history_result.stdout
+    assert "Apply complete!" in history_content, "Expected 'Apply complete!' in history logs"
+    assert "Outputs:" in history_content, "Expected 'Outputs:' section in history logs"

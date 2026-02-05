@@ -362,7 +362,7 @@ class GitHubOAuth2ProxyApplication:
             # Unexpected error - re-raise
             raise RuntimeError(f"Unexpected error while verifying server is unaccessible: {e}") from e
 
-    def verify_oauth_proxy_accessible(self) -> None:
+    def verify_oauth_proxy_accessible(self, max_retries: int = 10) -> None:
         """Verify that the OAuth2 Proxy page is accessible and responding.
 
         This method navigates to the JupyterLab URL and verifies that the OAuth2 Proxy
@@ -377,7 +377,7 @@ class GitHubOAuth2ProxyApplication:
         """
         # Navigate to the JupyterLab URL
         # Allows higher retry to account for route53 stabilization.
-        self._navigate_with_retry(self.jupyterlab_url, timeout=60000, max_retries=10)
+        self._navigate_with_retry(self.jupyterlab_url, timeout=60000, max_retries=max_retries)
 
         # Verify OAuth2 Proxy sign-in button is visible
         sign_in_button = self.page.get_by_role("button", name="Sign in with GitHub")

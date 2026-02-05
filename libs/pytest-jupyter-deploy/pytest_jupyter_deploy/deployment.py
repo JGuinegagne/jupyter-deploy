@@ -1,8 +1,6 @@
 """Deployment lifecycle management for E2E tests."""
 
 import ast
-import contextlib
-import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -23,9 +21,6 @@ from pytest_jupyter_deploy.constants import (
     CONFIGURATION_DEFAULT_NAME,
     DEPLOY_TIMEOUT_SECONDS,
     DESTROY_TIMEOUT_SECONDS,
-    E2E_CONFIG_LOG_FILE,
-    E2E_DOWN_LOG_FILE,
-    E2E_UP_LOG_FILE,
 )
 from pytest_jupyter_deploy.suite_config import SuiteConfig
 
@@ -209,14 +204,12 @@ class EndToEndDeployment:
     def configure_project(self, cli: JDCli | None = None) -> None:
         """Configure the E2E project by running jd config -s.
 
-        This method saves output of config to <project_dir>/logs/e2e-config.log
-
         Args:
             cli: Optional CLI instance to use. If provided, uses cli.project_dir as the project directory.
                  If not provided, uses self.cli and self.suite_config.project_dir.
 
         Raises:
-            RuntimeError: If configuration fails, with paths to logs and project directory
+            JDCliError: If configuration or deployment fails
         """
         # Ensure suite config is loaded
         self.suite_config.load()
@@ -235,28 +228,8 @@ class EndToEndDeployment:
             # Prepare configuration (copies variables.yaml to default project dir)
             self.suite_config.prepare_configuration(self.config_name)
 
-        # Create logs directory
-        logs_dir = project_dir / "logs"
-        logs_dir.mkdir(exist_ok=True)
-
         # Run jd config -s
-        try:
-            result = use_cli.run_command(["jupyter-deploy", "config", "-s"])
-            self.save_command_logs(E2E_CONFIG_LOG_FILE, result, project_dir=logs_dir)
-        except JDCliError as e:
-            # Save error output to log file
-            log_file = logs_dir / E2E_CONFIG_LOG_FILE
-            with open(log_file, "w") as f:
-                f.write("=== ERROR ===\n")
-                f.write(str(e))
-
-            # Raise with helpful error message including paths
-            raise RuntimeError(
-                f"Configuration failed for project.\n"
-                f"Project directory: {project_dir}\n"
-                f"Logs file: {log_file}\n"
-                f"Error: {e}"
-            ) from e
+        use_cli.run_command(["jupyter-deploy", "config", "-s"])
 
     def _deploy_e2e_project(self) -> None:
         """Calls jd init, jd config, jd up."""
@@ -285,12 +258,11 @@ class EndToEndDeployment:
         ]
         self.cli.run_command(init_cmd)
 
-        # Call config and capture output
+        # Call config
         self.configure_project()
 
-        # Run deployment and capture output
-        result = self.cli.run_command(["jupyter-deploy", "up", "-y"], timeout_seconds=self.deploy_timeout_seconds)
-        self.save_command_logs(E2E_UP_LOG_FILE, result)
+        # Run deployment
+        self.cli.run_command(["jupyter-deploy", "up", "-y"], timeout_seconds=self.deploy_timeout_seconds)
 
         self._is_deployed = True
 
@@ -300,11 +272,8 @@ class EndToEndDeployment:
             return
 
         try:
-            # Run teardown and capture output
-            result = self.cli.run_command(
-                ["jupyter-deploy", "down", "-y"], timeout_seconds=self.destroy_timeout_seconds
-            )
-            self.save_command_logs(E2E_DOWN_LOG_FILE, result)
+            # Run teardown
+            self.cli.run_command(["jupyter-deploy", "down", "-y"], timeout_seconds=self.destroy_timeout_seconds)
         finally:
             self._is_deployed = False
 
@@ -438,25 +407,6 @@ class EndToEndDeployment:
                     raise ValueError("Cannot set teams without an organization")
             self.cli.run_command(["jupyter-deploy", "teams", "set"] + teams)
 
-    def save_command_logs(
-        self, log_filename: str, result: subprocess.CompletedProcess[str], project_dir: Path | None = None
-    ) -> None:
-        """Save command output to a log file in the project directory.
-
-        Args:
-            log_filename: Name of the log file (e.g., "e2e-upgrade-instance.log")
-            result: CompletedProcess instance from run_command
-            project_dir: Optional project directory to save logs to.
-                         If not provided, uses self.suite_config.project_dir.
-        """
-        target_dir = project_dir if project_dir is not None else self.suite_config.project_dir
-        log_file = target_dir / log_filename
-        with open(log_file, "w") as f:
-            f.write("=== STDOUT ===\n")
-            f.write(result.stdout)
-            f.write("\n=== STDERR ===\n")
-            f.write(result.stderr)
-
     def get_variables_yaml_path(self) -> Path:
         """Get the path to the variables.yaml file."""
         return self.suite_config.project_dir / jd_constants.VARIABLES_FILENAME
@@ -533,13 +483,12 @@ class EndToEndDeployment:
         """Ensure the deployment is updated with new configuration.
 
         This method reconfigures and redeploys an existing project with new settings.
-        It includes resiliency logic to handle waiter script failures.
 
         Args:
             config_args: Additional arguments to pass to `jd config` command
 
         Raises:
-            RuntimeError: If deployment update fails
+            JDCliError: If configuration or deployment fails
         """
         # Ensure project exists
         self.ensure_deployed()
@@ -549,22 +498,7 @@ class EndToEndDeployment:
         self.cli.run_command(config_cmd)
 
         # Run jd up to apply changes
-        result = self.cli.run_command(["jupyter-deploy", "up", "-y"], timeout_seconds=self.deploy_timeout_seconds)
-
-        # Save deployment output to log file
-        log_file = self.suite_config.project_dir / "e2e-reconfig.log"
-        with open(log_file, "w") as f:
-            f.write("=== STDOUT ===\n")
-            f.write(result.stdout)
-            f.write("\n=== STDERR ===\n")
-            f.write(result.stderr)
-
-        # Wait for SSM to be ready after reconfiguration
-        # This is necessary because instance changes may cause SSM agent to restart
-        # If SSM still not ready, it's not critical for the deployment itself
-        # The waiter script may have failed, but infrastructure changes succeeded
-        with contextlib.suppress(JDCliError):
-            self.wait_for_ssm_ready()
+        self.cli.run_command(["jupyter-deploy", "up", "-y"], timeout_seconds=self.deploy_timeout_seconds)
 
     def get_str_variable_value(self, variable_name: str) -> str:
         """Call jupyter-deploy show CLI, return the parsed response as str."""
