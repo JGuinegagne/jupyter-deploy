@@ -199,3 +199,25 @@ def test_config_set_list_of_dict_variable(e2e_deployment: EndToEndDeployment) ->
     assert reverted_mounts == current_mounts, (
         f"Expected additional_ebs_mounts to be reverted to {current_mounts}, but got {reverted_mounts}"
     )
+
+
+def test_config_set_string_variable_with_verbose(e2e_deployment: EndToEndDeployment) -> None:
+    """Test that config --verbose shows full terraform output without progress bar artifacts."""
+    e2e_deployment.ensure_deployed()
+
+    # Run jd config --verbose to verify it shows full terraform output
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "config", "--verbose"])
+
+    # Verify command succeeded
+    assert result.returncode == 0, f"Expected config --verbose to succeed, got returncode {result.returncode}"
+
+    # Check for terraform init success message
+    assert "Terraform has been successfully initialized!" in result.stdout, (
+        "Expected 'Terraform has been successfully initialized!' in verbose output"
+    )
+
+    # Verify no progress bar artifacts (spinners, live box remnants)
+    # Progress bar typically uses ANSI escape codes or special characters
+    # Check that output doesn't contain common progress indicators
+    assert "⠋" not in result.stdout, "Found spinner character in verbose output (should not have progress bar)"
+    assert "⠙" not in result.stdout, "Found spinner character in verbose output (should not have progress bar)"

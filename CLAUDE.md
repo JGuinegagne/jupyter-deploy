@@ -46,10 +46,8 @@ Always run from the root of the repository:
    - Runs `uv run pytest`
 
 ## General coding rules
-1. **IMPORTANT**: Always place imports at the TOP of Python files. DO NOT use lazy imports (imports inside functions) except  
-  in `<cli>/provider/instruction_runner_factory` which handles optional dependencies.
-2. you MUST NOT silence linters without the user's permission
-3. you MUST NOT write docstrings that merely repeat a method name
+1. you MUST NOT silence linters without the user's permission
+2. you MUST NOT write docstrings that merely repeat a method name
 
 ## Writing unit tests
 Unit tests are located in `libs/<package-name>/tests/unit`
@@ -140,6 +138,8 @@ Essential commands for debugging a deployed instance that uses the base template
 - `jd show --outputs --list` - Display list of available outputs
 - `jd show -v VARIABLE-NAME --text` - Display the variable value (careful: it does not guarantee it was applied with `jd up`)
 - `jd show -o OUTPUT-NAME --text` - Display the output value
+- `jd history show CMD` - Display the content of the latest CMD (`config` or `up`) run (pass `-n 2` for the second-to-latest, etc)
+- `jd history show up -n 100 -s 100` - Display lines [-200:-100] of the latest `up` run
 - `jd --help` or `jd CMD SUB-CMD --help` - Find out about API shapes 
 
 ## Key file locations on instance in the base template
