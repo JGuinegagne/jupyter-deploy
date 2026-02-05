@@ -16,19 +16,19 @@ from jupyter_deploy.fs_utils import list_files_sorted
 
 
 class LogNotFound(ValueError):
-    """Raised when a log file cannot be found."""
+    """Raised when a command execution log cannot be found."""
 
     pass
 
 
 class LogCleanupError(Exception):
-    """Raised when log cleanup fails (non-critical, should warn user)."""
+    """Raised when log cleanup fails."""
 
     pass
 
 
 class CommandHistoryHandler:
-    """Manages command execution history and log files.
+    """Manages command execution history and log records.
 
     This handler abstracts log storage and provides methods for creating,
     listing, reading, and cleaning up execution logs.
@@ -43,23 +43,23 @@ class CommandHistoryHandler:
         self.project_path = project_path
         self.history_dir = project_path / HISTORY_DIR
 
-    def create_log_file(self, command: str) -> Path:
+    def create_log_file(self, command: HistoryEnabledCommandType) -> Path:
         """Create a log file for a command execution, return its path.
 
         Generates a timestamped log file path organized by command in subdirectories
         and ensures the necessary directories exist.
 
-        Note: Does NOT auto-cleanup. Caller should explicitly call clear_logs() on success.
+        Note: Does NOT auto-cleanup. Engine commands should explicitly call clear_logs().
 
         Args:
-            command: The command name (e.g., "config", "up", "down")
+            command: The command type (e.g., HistoryEnabledCommandType.CONFIG)
 
         Returns:
             Path to the created log file where command output should be written
             (e.g., .jd-history/config/20251224-120000.log)
         """
         # Create command-specific subdirectory
-        command_dir = self.history_dir / command
+        command_dir = self.history_dir / command.value
         command_dir.mkdir(parents=True, exist_ok=True)
 
         # Generate timestamped filename using UTC to avoid TZ edge cases
@@ -71,20 +71,20 @@ class CommandHistoryHandler:
 
         return log_file_path
 
-    def list_logs(self, command: str, max_logs: int | None = None) -> list[AnyLogDescriptor]:
+    def list_logs(self, command: HistoryEnabledCommandType, max_logs: int | None = None) -> list[AnyLogDescriptor]:
         """Return a list of LogDescriptors for a specific command, newest first.
 
         Log filenames (YYYYMMDD-HHMMSS.log) are lexicographically sortable, so we can use
         string comparison to find the most recent logs without parsing all timestamps.
 
         Args:
-            command: Command name (e.g., "config", "up", "down")
+            command: Command type (e.g., HistoryEnabledCommandType.CONFIG)
             max_logs: Maximum number of logs to return (None = unlimited)
 
         Returns:
             List of log descriptors, sorted newest first
         """
-        command_dir = self.history_dir / command
+        command_dir = self.history_dir / command.value
 
         # Get log files sorted by filename (newest first)
         # If directory doesn't exist, treat as "no logs" (not an error)
@@ -101,8 +101,8 @@ class CommandHistoryHandler:
             timestamp = datetime.strptime(timestamp_str, "%Y%m%d-%H%M%S").replace(tzinfo=UTC)
 
             descriptor = LogFileDescriptor(
-                id=f"{command}/{log_path.name}",
-                command=command,
+                id=f"{command.value}/{log_path.name}",
+                command=command.value,
                 timestamp=timestamp,
                 path=log_path,
             )
@@ -117,7 +117,7 @@ class CommandHistoryHandler:
         # Iterate through known command types only (from enum)
         # Only fetch the most recent log per command for efficiency
         for command_type in HistoryEnabledCommandType:
-            logs = self.list_logs(command_type.value, max_logs=1)
+            logs = self.list_logs(command_type, max_logs=1)
             all_logs.extend(logs)
 
         if not all_logs:
@@ -179,11 +179,11 @@ class CommandHistoryHandler:
         else:
             raise NotImplementedError(f"Unknown log type: {log_descriptor.__class__}")
 
-    def clear_logs(self, command: str, keep: int = 20) -> LogFilesCleanupResult:
+    def clear_logs(self, command: HistoryEnabledCommandType, keep: int = 20) -> LogFilesCleanupResult:
         """Clear old logs for a specific command, keeping only the most recent N logs.
 
         Args:
-            command: Command name to clear logs for (e.g., "config", "up", "down") - REQUIRED
+            command: Command type to clear logs for (e.g., HistoryEnabledCommandType.CONFIG)
             keep: Number of most recent logs to keep per command (default: 20)
 
         Returns:
@@ -201,20 +201,20 @@ class CommandHistoryHandler:
 
         return result
 
-    def _cleanup_log_files(self, command: str, keep: int = 20) -> LogFilesCleanupResult:
+    def _cleanup_log_files(self, command: HistoryEnabledCommandType, keep: int = 20) -> LogFilesCleanupResult:
         """Clean up log files for a specific command, keeping only the most recent N.
 
         Uses lexicographic ordering (filename-based) for performance.
 
         Args:
-            command: The command name (e.g., "config", "up", "down")
+            command: The command type (e.g., HistoryEnabledCommandType.CONFIG)
             keep: Number of most recent logs to keep (default: 20)
 
         Returns:
             LogFilesCleanupResult with details about cleaned, kept, and failed files
         """
         result = LogFilesCleanupResult()
-        command_dir = self.history_dir / command
+        command_dir = self.history_dir / command.value
 
         # Get all log files sorted by filename (newest first)
         # If directory doesn't exist, treat as "no logs to clean" (not an error)

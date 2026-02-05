@@ -15,7 +15,7 @@ from jupyter_deploy.handlers.command_history_handler import (
 )
 
 history_app = typer.Typer(
-    help=("View and manage logs emitted by the infrastructure-as-code engine as called by jupyter-deploy commands."),
+    help=("View and manage logs emitted by the infrastructure-as-code engine within jupyter-deploy commands."),
     no_args_is_help=True,
 )
 
@@ -24,7 +24,7 @@ history_app = typer.Typer(
 def list(
     command: Annotated[
         HistoryEnabledCommandType,
-        typer.Argument(help="Command type: config, up, or down."),
+        typer.Argument(help="Jupyter-deploy command that generated the logs."),
     ],
     project_dir: Annotated[
         str | None,
@@ -47,7 +47,7 @@ def list(
     with cmd_utils.project_dir(project_dir):
         project_path = Path.cwd()
         handler = CommandHistoryHandler(project_path)
-        logs = handler.list_logs(command.value, max_logs=n)
+        logs = handler.list_logs(command, max_logs=n)
 
         console = Console()
 
@@ -80,7 +80,7 @@ def show(
     command: Annotated[
         HistoryEnabledCommandType | None,
         typer.Argument(
-            help="Command type: config, up, or down. If omitted, show latest log from any command.",
+            help="Jupyter-deploy command that generated the log. If omitted, show latest log from any command.",
         ),
     ] = None,
     project_dir: Annotated[
@@ -119,7 +119,7 @@ def show(
 
         # Get log descriptor
         if command:
-            logs = handler.list_logs(command.value, max_logs=n)
+            logs = handler.list_logs(command, max_logs=n)
             if len(logs) < n:
                 if n == 1 or not logs:
                     console.print(
@@ -191,7 +191,7 @@ def clear(
     with cmd_utils.project_dir(project_dir):
         project_path = Path.cwd()
         handler = CommandHistoryHandler(project_path)
-        result = handler.clear_logs(command.value, keep=keep)
+        result = handler.clear_logs(command, keep=keep)
 
         if result.total_cleaned == 0 and result.total_failed == 0:
             console.print(":information: No stale log files to clear.")

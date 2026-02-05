@@ -7,6 +7,7 @@ from unittest.mock import Mock, mock_open, patch
 
 from jupyter_deploy.cmd_history import LogFileDescriptor, LogFilesCleanupResult
 from jupyter_deploy.constants import HISTORY_DIR
+from jupyter_deploy.enum import HistoryEnabledCommandType
 from jupyter_deploy.handlers.command_history_handler import (
     CommandHistoryHandler,
     LogCleanupError,
@@ -44,7 +45,7 @@ class TestCommandHistoryHandler(unittest.TestCase):
         mock_datetime_module.now.return_value = mock_utc_datetime
 
         # Act
-        log_file = self.handler.create_log_file("config")
+        log_file = self.handler.create_log_file(HistoryEnabledCommandType.CONFIG)
 
         # Assert
         expected_path = self.project_path / HISTORY_DIR / "config" / "20260129-143022.log"
@@ -60,7 +61,7 @@ class TestCommandHistoryHandler(unittest.TestCase):
     def test_create_log_file_does_not_auto_cleanup(self, _mock_mkdir: Mock, _mock_touch: Mock) -> None:
         """Test that create_log_file does NOT auto-cleanup (caller must explicitly cleanup)."""
         with patch.object(self.handler, "_cleanup_log_files") as mock_cleanup:
-            self.handler.create_log_file("config")
+            self.handler.create_log_file(HistoryEnabledCommandType.CONFIG)
             mock_cleanup.assert_not_called()
 
     @patch("jupyter_deploy.handlers.command_history_handler.list_files_sorted")
@@ -68,7 +69,7 @@ class TestCommandHistoryHandler(unittest.TestCase):
         """Test that list_logs returns empty list when command directory doesn't exist."""
         mock_list_files.side_effect = FileNotFoundError("Directory does not exist")
 
-        result = self.handler.list_logs(command="config")
+        result = self.handler.list_logs(command=HistoryEnabledCommandType.CONFIG)
 
         self.assertEqual(result, [])
 
@@ -82,7 +83,7 @@ class TestCommandHistoryHandler(unittest.TestCase):
         ]
 
         # Act
-        result = self.handler.list_logs(command="config")
+        result = self.handler.list_logs(command=HistoryEnabledCommandType.CONFIG)
 
         # Assert
         self.assertEqual(len(result), 2)
@@ -105,7 +106,7 @@ class TestCommandHistoryHandler(unittest.TestCase):
 
         # Act & Assert - should raise ValueError from strptime
         with self.assertRaises(ValueError):
-            self.handler.list_logs(command="config")
+            self.handler.list_logs(command=HistoryEnabledCommandType.CONFIG)
 
     @patch("pathlib.Path.exists")
     def test_get_latest_log_returns_none_when_no_logs(self, mock_exists: Mock) -> None:
@@ -264,7 +265,7 @@ class TestCommandHistoryHandler(unittest.TestCase):
         """Test that _cleanup_log_files returns empty result when directory doesn't exist."""
         mock_list_files.side_effect = FileNotFoundError("Directory does not exist")
 
-        result = self.handler._cleanup_log_files("config", keep=5)
+        result = self.handler._cleanup_log_files(HistoryEnabledCommandType.CONFIG, keep=5)
 
         self.assertIsInstance(result, LogFilesCleanupResult)
         self.assertEqual(result.total_cleaned, 0)
@@ -284,7 +285,7 @@ class TestCommandHistoryHandler(unittest.TestCase):
         mock_list_files.return_value = logs
 
         # Act - keep only 5 most recent
-        result = self.handler._cleanup_log_files("config", keep=5)
+        result = self.handler._cleanup_log_files(HistoryEnabledCommandType.CONFIG, keep=5)
 
         # Assert - should delete 3 oldest logs
         self.assertIsInstance(result, LogFilesCleanupResult)
@@ -317,7 +318,7 @@ class TestCommandHistoryHandler(unittest.TestCase):
         mock_list_files.return_value = logs
 
         # Act - keep only 5 most recent
-        result = self.handler._cleanup_log_files("config", keep=5)
+        result = self.handler._cleanup_log_files(HistoryEnabledCommandType.CONFIG, keep=5)
 
         # Assert - should delete only 1 (the second old log at index 6), track failure on the first (index 5)
         self.assertIsInstance(result, LogFilesCleanupResult)
@@ -337,7 +338,7 @@ class TestCommandHistoryHandler(unittest.TestCase):
             kept=[Path("/fake/log4.log"), Path("/fake/log5.log")],
         )
         with patch.object(self.handler, "_cleanup_log_files", return_value=mock_result) as mock_cleanup:
-            result = self.handler.clear_logs(command="config", keep=20)
+            result = self.handler.clear_logs(command=HistoryEnabledCommandType.CONFIG, keep=20)
 
             self.assertIsInstance(result, LogFilesCleanupResult)
             self.assertEqual(result.total_cleaned, 3)
@@ -350,7 +351,7 @@ class TestCommandHistoryHandler(unittest.TestCase):
             kept=[Path("/fake/log3.log")],
         )
         with patch.object(self.handler, "_cleanup_log_files", return_value=mock_result) as mock_cleanup:
-            result = self.handler.clear_logs(command="config")
+            result = self.handler.clear_logs(command=HistoryEnabledCommandType.CONFIG)
 
             self.assertIsInstance(result, LogFilesCleanupResult)
             self.assertEqual(result.total_cleaned, 2)
@@ -365,6 +366,6 @@ class TestCommandHistoryHandler(unittest.TestCase):
         )
         with patch.object(self.handler, "_cleanup_log_files", return_value=mock_result):
             with self.assertRaises(LogCleanupError) as context:
-                self.handler.clear_logs(command="config", keep=20)
+                self.handler.clear_logs(command=HistoryEnabledCommandType.CONFIG, keep=20)
 
             self.assertEqual(str(context.exception), "Failed to delete 1 log file(s)")
