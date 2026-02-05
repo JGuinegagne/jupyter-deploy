@@ -13,6 +13,7 @@ from jupyter_deploy.fs_utils import (
     find_matching_filenames,
     get_default_project_path,
     is_empty_dir,
+    list_files_sorted,
     read_short_file,
     safe_clean_directory,
     safe_copy_tree,
@@ -766,3 +767,128 @@ class TestWriteYamlFileWithComments(unittest.TestCase):
         # Execute and Assert
         with self.assertRaises(OSError):
             write_yaml_file_with_comments(file_path, content)
+
+
+class TestListFilesSorted(unittest.TestCase):
+    """Test cases for the list_files_sorted function."""
+
+    def test_raises_file_not_found_when_dir_does_not_exist(self) -> None:
+        """Test that list_files_sorted raises FileNotFoundError when directory doesn't exist."""
+        # Setup
+        dir_path = Path("/nonexistent/directory")
+
+        # Execute and Assert
+        with self.assertRaisesRegex(FileNotFoundError, "Directory does not exist"):
+            list_files_sorted(dir_path, "*.log")
+
+    def test_raises_not_a_directory_when_path_is_file(self) -> None:
+        """Test that list_files_sorted raises NotADirectoryError when path is a file."""
+        # Setup - create a temporary file
+        with tempfile.NamedTemporaryFile() as temp_file:
+            file_path = Path(temp_file.name)
+
+            # Execute and Assert
+            with self.assertRaisesRegex(NotADirectoryError, "Path is not a directory"):
+                list_files_sorted(file_path, "*.log")
+
+    def test_raises_value_error_when_pattern_is_invalid(self) -> None:
+        """Test that list_files_sorted raises ValueError for invalid pattern."""
+        # Setup - create a temporary directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dir_path = Path(temp_dir)
+
+            # Execute and Assert - pattern must start with '*'
+            with self.assertRaisesRegex(ValueError, "Pattern must start with"):
+                list_files_sorted(dir_path, "log*.txt")
+
+    def test_returns_files_sorted_ascending(self) -> None:
+        """Test that list_files_sorted returns files in ascending order (reverse=False)."""
+        # Setup - create temporary directory with log files
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dir_path = Path(temp_dir)
+
+            # Create files with sortable names
+            files = ["20260101-120000.log", "20260102-120000.log", "20260103-120000.log"]
+            for filename in files:
+                (dir_path / filename).touch()
+
+            # Execute
+            result = list_files_sorted(dir_path, "*.log", reverse=False)
+
+            # Assert - should be in ascending order (oldest first)
+            self.assertEqual(len(result), 3)
+            self.assertEqual(result[0].name, "20260101-120000.log")
+            self.assertEqual(result[1].name, "20260102-120000.log")
+            self.assertEqual(result[2].name, "20260103-120000.log")
+
+    def test_returns_files_sorted_descending(self) -> None:
+        """Test that list_files_sorted returns files in descending order (reverse=True)."""
+        # Setup - create temporary directory with log files
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dir_path = Path(temp_dir)
+
+            # Create files with sortable names
+            files = ["20260101-120000.log", "20260102-120000.log", "20260103-120000.log"]
+            for filename in files:
+                (dir_path / filename).touch()
+
+            # Execute
+            result = list_files_sorted(dir_path, "*.log", reverse=True)
+
+            # Assert - should be in descending order (newest first)
+            self.assertEqual(len(result), 3)
+            self.assertEqual(result[0].name, "20260103-120000.log")
+            self.assertEqual(result[1].name, "20260102-120000.log")
+            self.assertEqual(result[2].name, "20260101-120000.log")
+
+    def test_returns_empty_list_for_empty_directory(self) -> None:
+        """Test that list_files_sorted returns empty list for empty directory."""
+        # Setup - create empty temporary directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dir_path = Path(temp_dir)
+
+            # Execute
+            result = list_files_sorted(dir_path, "*.log")
+
+            # Assert
+            self.assertEqual(result, [])
+
+    def test_returns_max_files_latest_when_many_files_exist(self) -> None:
+        """Test that list_files_sorted returns only max_files newest files when reverse=True."""
+        # Setup - create temporary directory with many log files
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dir_path = Path(temp_dir)
+
+            # Create 10 files
+            files = [f"2026010{i}-120000.log" for i in range(10)]
+            for filename in files:
+                (dir_path / filename).touch()
+
+            # Execute - get only 3 most recent files
+            result = list_files_sorted(dir_path, "*.log", max_files=3, reverse=True)
+
+            # Assert - should return 3 newest files (lexicographically largest)
+            self.assertEqual(len(result), 3)
+            self.assertEqual(result[0].name, "20260109-120000.log")
+            self.assertEqual(result[1].name, "20260108-120000.log")
+            self.assertEqual(result[2].name, "20260107-120000.log")
+
+    def test_returns_max_files_earliest_when_many_files_exist(self) -> None:
+        """Test that list_files_sorted returns only max_files earliest files when reverse=False."""
+        # Setup - create temporary directory with many log files
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dir_path = Path(temp_dir)
+
+            # Create 10 files
+            files = [f"2026010{i}-120000.log" for i in range(10)]
+            for filename in files:
+                (dir_path / filename).touch()
+
+            # Execute - get only 3 earliest files
+            result = list_files_sorted(dir_path, "*.log", max_files=3, reverse=False)
+
+            # Assert - should return 3 earliest files (lexicographically smallest)
+            self.assertEqual(len(result), 3)
+            self.assertEqual(result[0].name, "20260100-120000.log")
+            self.assertEqual(result[1].name, "20260101-120000.log")
+            self.assertEqual(result[2].name, "20260102-120000.log")

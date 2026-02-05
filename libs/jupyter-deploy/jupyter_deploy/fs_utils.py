@@ -1,4 +1,5 @@
 import glob
+import heapq
 import os
 import shutil
 import stat
@@ -121,6 +122,64 @@ def find_matching_filenames(dir_path: Path, file_pattern: str) -> list[str]:
         valid_filenames.append(filename)
 
     return valid_filenames
+
+
+def list_files_sorted(
+    dir_path: Path,
+    pattern: str,
+    max_files: int | None = None,
+    reverse: bool = True,
+) -> list[Path]:
+    """Return a list of file paths matching pattern in directory, sorted lexicographically.
+
+    Uses efficient os.scandir() and heapq.nlargest() for performance with large directories.
+    When max_files is specified, uses O(n log k) heap selection instead of O(n log n) full sort.
+
+    Args:
+        dir_path: Directory to scan
+        pattern: Glob-style pattern (e.g., "*.log", "*.txt")
+        max_files: Maximum number of files to return (None = unlimited)
+        reverse: If True, return newest first (highest lexicographic value first)
+
+    Raises:
+        FileNotFoundError: If dir_path does not exist
+        NotADirectoryError: If dir_path is not a directory
+        ValueError: If pattern is invalid
+        OSError: If directory scanning fails (e.g., permission issues)
+
+    Example:
+        # Get 100 most recent log files (assuming YYYYMMDD-HHMMSS.log naming)
+        logs = list_files_sorted(Path("/logs"), "*.log", max_files=100, reverse=True)
+    """
+    # Validate preconditions
+    if not dir_path.exists():
+        raise FileNotFoundError(f"Directory does not exist: {dir_path}")
+    if not dir_path.is_dir():
+        raise NotADirectoryError(f"Path is not a directory: {dir_path}")
+
+    # Convert glob pattern to simple suffix check (only supports "*.ext" patterns)
+    if not pattern.startswith("*"):
+        raise ValueError(f"Pattern must start with '*': {pattern}")
+    suffix = pattern[1:]  # Remove the '*'
+
+    # Use os.scandir() for efficient directory listing (let OSError propagate)
+    entries = [entry for entry in os.scandir(dir_path) if entry.is_file() and entry.name.endswith(suffix)]
+
+    if not entries:
+        return []
+
+    # Sort by filename lexicographically
+    if max_files is not None and max_files < len(entries):
+        # O(n log k) complexity - more efficient when k << n
+        if reverse:
+            selected_entries = heapq.nlargest(max_files, entries, key=lambda e: e.name)
+        else:
+            selected_entries = heapq.nsmallest(max_files, entries, key=lambda e: e.name)
+    else:
+        # O(n log n) complexity - sort all entries
+        selected_entries = sorted(entries, key=lambda e: e.name, reverse=reverse)
+
+    return [Path(entry.path) for entry in selected_entries]
 
 
 def read_short_file(file_path: Path, max_size_mb: float = 1.0) -> str:

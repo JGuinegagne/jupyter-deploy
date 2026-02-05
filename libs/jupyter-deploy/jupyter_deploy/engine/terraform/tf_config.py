@@ -38,6 +38,7 @@ from jupyter_deploy.engine.terraform.tf_supervised_execution_callback import (
     TerraformSupervisedExecutionCallback,
 )
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
+from jupyter_deploy.enum import HistoryEnabledCommandType
 from jupyter_deploy.handlers.command_history_handler import CommandHistoryHandler
 from jupyter_deploy.manifest import JupyterDeployManifest
 
@@ -103,7 +104,7 @@ class TerraformConfigHandler(EngineConfigHandler):
         self, preset_name: str | None = None, variable_overrides: dict[str, TemplateVariableDefinition] | None = None
     ) -> CompletionContext | None:
         # Create log file using command history handler
-        self._log_file = self.command_history_handler.create_log_file("config")
+        self._log_file = self.command_history_handler.create_log_file(HistoryEnabledCommandType.CONFIG)
 
         # 1/ run terraform init with supervised execution
         # Note that it is safe to run several times, see ``terraform init --help``:
@@ -188,6 +189,9 @@ class TerraformConfigHandler(EngineConfigHandler):
                 retcode=plan_retcode,
                 message="Error generating Terraform plan.",
             )
+
+        # Success - cleanup old logs
+        self.command_history_handler.clear_logs(HistoryEnabledCommandType.CONFIG)
 
         # Return completion context from callback
         return plan_callback.get_completion_context()

@@ -18,6 +18,7 @@ from jupyter_deploy.engine.terraform.tf_supervised_execution_callback import (
     TerraformNoopExecutionCallback,
     TerraformSupervisedExecutionCallback,
 )
+from jupyter_deploy.enum import HistoryEnabledCommandType
 from jupyter_deploy.handlers.command_history_handler import CommandHistoryHandler
 from jupyter_deploy.manifest import JupyterDeployManifest
 
@@ -44,7 +45,7 @@ class TerraformUpHandler(EngineUpHandler):
 
     def apply(self, config_file_path: Path, auto_approve: bool = False) -> CompletionContext | None:
         # Create log file using command history handler
-        self._log_file = self.command_history_handler.create_log_file("up")
+        self._log_file = self.command_history_handler.create_log_file(HistoryEnabledCommandType.UP)
 
         # Build terraform apply command
         apply_cmd = TF_APPLY_CMD.copy()
@@ -79,6 +80,9 @@ class TerraformUpHandler(EngineUpHandler):
                 retcode=apply_retcode,
                 message="Error applying Terraform plan.",
             )
+
+        # Success - cleanup old logs
+        self.command_history_handler.clear_logs(HistoryEnabledCommandType.UP)
 
         # Return completion context from callback
         return apply_callback.get_completion_context()

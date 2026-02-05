@@ -23,6 +23,7 @@ from jupyter_deploy.engine.vardefs import (
     StrTemplateVariableDefinition,
     TemplateVariableDefinition,
 )
+from jupyter_deploy.handlers.command_history_handler import LogCleanupError
 
 
 class TestTerraformConfigHandler(unittest.TestCase):
@@ -34,6 +35,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         """Return a mock CommandHistoryHandler."""
         mock_history = Mock()
         mock_history.create_log_file.return_value = Path("/mock/path/.jd-history/config/20260129-143022.log")
+        mock_history.clear_logs.return_value = Mock()  # Returns cleanup result
         return mock_history
 
     def get_mock_variable_handler_and_fns(self) -> tuple[Mock, dict[str, Mock]]:
@@ -865,3 +867,78 @@ class TestTerraformConfigHandler(unittest.TestCase):
 
         plan_executor_call = mock_create_executor.call_args_list[1]
         self.assertEqual(plan_executor_call.kwargs["execution_callback"], mock_noop)
+
+    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor_factory.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
+    def test_configure_clears_old_logs_on_success(
+        self, mock_variable_handler_cls: Mock, mock_create_executor: Mock
+    ) -> None:
+        """Test that configure calls clear_logs on successful execution."""
+        # Arrange
+        mock_vars_handler, _ = self.get_mock_variable_handler_and_fns()
+        mock_variable_handler_cls.return_value = mock_vars_handler
+
+        # Mock executor for both init and plan - both succeed
+        mock_executor = Mock()
+        mock_executor.execute.return_value = 0
+        mock_create_executor.return_value = mock_executor
+
+        mock_history = self.get_mock_command_history()
+        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), mock_history)
+
+        # Act
+        handler.configure()
+
+        # Assert - clear_logs should be called after successful execution
+        mock_history.clear_logs.assert_called_once_with("config")
+
+    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor_factory.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
+    def test_configure_does_not_clear_logs_on_failure(
+        self, mock_variable_handler_cls: Mock, mock_create_executor: Mock
+    ) -> None:
+        """Test that configure does NOT call clear_logs when plan fails."""
+        # Arrange
+        mock_vars_handler, _ = self.get_mock_variable_handler_and_fns()
+        mock_variable_handler_cls.return_value = mock_vars_handler
+
+        # Mock executor: init succeeds, plan fails
+        mock_executor = Mock()
+        mock_executor.execute.side_effect = [0, 1]
+        mock_create_executor.return_value = mock_executor
+
+        mock_history = self.get_mock_command_history()
+        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), mock_history)
+
+        # Act & Assert - should raise ExecutionError
+        with self.assertRaises(ExecutionError):
+            handler.configure()
+
+        # Assert - clear_logs should NOT be called on failure
+        mock_history.clear_logs.assert_not_called()
+
+    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor_factory.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
+    def test_configure_bubbles_up_clear_logs_exception(
+        self, mock_variable_handler_cls: Mock, mock_create_executor: Mock
+    ) -> None:
+        """Test that configure bubbles up LogCleanupError from clear_logs."""
+        # Arrange
+        mock_vars_handler, _ = self.get_mock_variable_handler_and_fns()
+        mock_variable_handler_cls.return_value = mock_vars_handler
+
+        # Mock executor for both init and plan - both succeed
+        mock_executor = Mock()
+        mock_executor.execute.return_value = 0
+        mock_create_executor.return_value = mock_executor
+
+        mock_history = self.get_mock_command_history()
+        mock_history.clear_logs.side_effect = LogCleanupError("Failed to delete 2 log file(s)")
+        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), mock_history)
+
+        # Act & Assert - should raise LogCleanupError from clear_logs
+        with self.assertRaises(LogCleanupError) as context:
+            handler.configure()
+
+        self.assertEqual(str(context.exception), "Failed to delete 2 log file(s)")
+        mock_history.clear_logs.assert_called_once_with("config")

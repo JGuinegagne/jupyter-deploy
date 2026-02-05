@@ -5,6 +5,7 @@ from typer.testing import CliRunner
 
 from jupyter_deploy.cli.app import runner as app_runner
 from jupyter_deploy.engine.supervised_execution import ExecutionError
+from jupyter_deploy.handlers.command_history_handler import LogCleanupError
 
 
 class TestConfigCommand(unittest.TestCase):
@@ -236,6 +237,25 @@ class TestConfigCommand(unittest.TestCase):
         mock_config_fns["reset_recorded_variables"].assert_not_called()
         mock_config_fns["reset_recorded_secrets"].assert_not_called()
         mock_config_fns["has_used_preset"].assert_not_called()
+
+    @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
+    def test_config_warns_but_succeeds_if_log_cleanup_fails(self, mock_config_handler: Mock) -> None:
+        """Test that config shows warning but succeeds when log cleanup fails."""
+        mock_config_handler_instance, mock_config_fns = self.get_mock_config_handler()
+        mock_config_handler.return_value = mock_config_handler_instance
+        mock_config_fns["configure"].side_effect = LogCleanupError("Failed to delete 2 log file(s)")
+
+        # Act
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["config"])
+
+        # Verify - should succeed with warning
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Failed to delete 2 log file(s)", result.stdout)
+        mock_config_handler.assert_called_once()
+        mock_config_fns["configure"].assert_called_once()
+        # Record should still be called since configure "succeeded" (main operation worked)
+        mock_config_fns["record"].assert_called_once()
 
     @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
     def test_config_reset_vars_and_secrets_when_user_asks(self, mock_config_handler: Mock) -> None:

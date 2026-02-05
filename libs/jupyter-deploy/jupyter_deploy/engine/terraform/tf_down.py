@@ -23,6 +23,7 @@ from jupyter_deploy.engine.terraform.tf_supervised_execution_callback import (
     TerraformNoopExecutionCallback,
     TerraformSupervisedExecutionCallback,
 )
+from jupyter_deploy.enum import HistoryEnabledCommandType
 from jupyter_deploy.handlers.command_history_handler import CommandHistoryHandler
 from jupyter_deploy.manifest import JupyterDeployManifest
 
@@ -61,7 +62,7 @@ class TerraformDownHandler(EngineDownHandler):
         verbose = self.terminal_handler is None
 
         # Create log file using command history handler
-        self._log_file = self.command_history_handler.create_log_file("down")
+        self._log_file = self.command_history_handler.create_log_file(HistoryEnabledCommandType.DOWN)
 
         # first handle persisting resources: attempt to remove them from state
         persisting_resources = self.get_persisting_resources()
@@ -162,3 +163,6 @@ class TerraformDownHandler(EngineDownHandler):
                 retcode=destroy_retcode,
                 message="Error destroying Terraform infrastructure.",
             )
+
+        # Success - cleanup old logs
+        self.command_history_handler.clear_logs(HistoryEnabledCommandType.DOWN)
