@@ -2,6 +2,7 @@ from pathlib import Path
 
 from jupyter_deploy import fs_utils
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.handlers.docs_generator import DocsGenerator
 from jupyter_deploy.infrastructure.enum import AWSInfrastructureType, InfrastructureType
 from jupyter_deploy.provider.enum import ProviderType
 from jupyter_deploy.template_utils import TEMPLATES
@@ -76,3 +77,13 @@ class InitHandler:
     def setup(self) -> None:
         """Copies the files from the source location to the target path of the project."""
         fs_utils.safe_copy_tree(self.source_path, self.project_path)
+
+        # Generate documentation and configuration files
+        docs_generator = DocsGenerator(
+            project_path=self.project_path,
+            engine=self.engine.value,
+        )
+
+        # Generate documentation files
+        docs_generator.generate_gitignore()
+        docs_generator.generate_agent_md()

@@ -126,16 +126,14 @@ def init(
             console.line()
             console.print(f":x: The directory {project.project_path} is not empty, aborting.", style="red")
             console.line()
-            console.print(
-                "If you want to overwrite the content of this directory, use the --overwrite option.\n", style="yellow"
-            )
+            console.print(":bulb: To force this operation, use option: [bold cyan]--overwrite[/]")
             return
         else:
             console.line()
             console.print(f":warning: The target directory {project.abs_project_path} is not empty.", style="yellow")
             console.line()
             console.print(
-                "Initiating the project may overwrite your existing files, are you sure you want to proceed?",
+                ":warning: Initiating the project may overwrite existing files, are you sure you want to proceed?",
                 style="yellow",
             )
 
@@ -143,7 +141,7 @@ def init(
 
             if not overwrite_existing:
                 console.line()
-                console.print(f"Left files under {project.project_path} untouched.\n", style="yellow")
+                console.print(f"Left files under {project.project_path} untouched.\n")
                 typer.Abort()
                 return
 
@@ -154,18 +152,16 @@ def init(
 
     if Path.cwd().absolute() != project.project_path.absolute():
         console.print(
-            f"Change your working directory to [bold]{project.project_path}[/] "
-            "then you can run `[bold cyan]jd config[/]` to configure the project.",
-            style="green",
+            ":bulb: To configure the project with default variables, "
+            f"change your working directory to [bold]{project.project_path}[/] "
+            "then run: [bold cyan]jd config[/]",
         )
     else:
-        console.print("You can now run `[bold cyan]jd config[/]` to configure the project.")
-    console.line()
-    console.print(
-        "This command will use all the defaults specified in the template, unless you override specific variables."
-    )
-    console.print("The names of the variables depend on the template, use [bold cyan]--help[/] to find them.")
-    console.print("To manually set the value of [italic]all[/] variables, use [bold cyan]--defaults none[/].")
+        console.print(":bulb: To configure the project with default variables, run: [bold cyan]jd config[/]")
+
+    console.print(":bulb: To find out which variables are available for this template, use: [bold cyan]--help[/]")
+    console.print(":bulb: To set or override a specific variable, use: [bold cyan]--variable-name VARVALUE[/]")
+    console.print(":bulb: To ignore [italic]all[/] default values, use: [bold cyan]--defaults none[/]")
     console.line()
 
 

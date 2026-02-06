@@ -1,0 +1,127 @@
+# Jupyter-deploy: Terraform AWS EC2 base template
+
+## Project organization
+
+This project manages the AWS resources to deploy a JupyterLab application with a publicly accessible URL.
+It uses Terraform as the infrastructure-as-code engine, deploys the JupyterLab container to an Amazon EC2 instance, and controls access with GitHub identities. 
+It places the EC2 instance in the default VPC of the AWS account.
+It adds a DNS record to the hosted zone tied to a domain that the user owns using Amazon Route53.
+
+**IMPORTANT:** An Amazon Route53 hosted zone for the domain MUST exist in the AWS account.
+
+Within the EC2 instance, it leverages `docker-compose` to run docker services:
+- the `jupyter` service itself
+- a `traefik` sidecar to control ingress and TLS termination
+- an `oauth2-proxy` middleware to handle oauth with `traefik` ForwardAuth [protocol](https://doc.traefik.io/traefik/reference/routing-configuration/http/middlewares/forwardauth/).
+
+The instance only allows ingress on port 443 (HTTPS), which it routes to the `traefik` service.
+
+Most `jupyter-deploy` commands act on the host via the `ssm-agent`.
+Refer to [AWS SSM](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html) for more details.
+
+The `traefik` service requests TLS certificate from Let's Encrypt.
+This project creates an AWS Secret to store the TLS certificates so that they survive instance or root volume swaps.
+
+## Usage
+{{ jupyter-deploy-cli-general-instructions }}
+
+## General project information
+{{ show-info-instructions }}
+
+### Configure and create the infrastructure
+{{ config-up-instructions }}
+
+{{ set-variables-with-cmd-instructions }}
+
+{{ set-variables-with-file-instructions }}
+
+{{ read-variables-with-cmd-instructions }}
+
+### Access the JupyterLab application
+{{ single-server-open-instructions }}
+
+### Manage the EC2 instance
+{{ single-host-management-instructions }}
+
+### Manage the docker services
+{{ single-host-server-management-instructions }}
+
+### Manage access
+**Important:** the host MUST be running and all the services MUST be `IN_SERVICE`
+
+{{ github-users-org-teams-cmd-instructions }}
+
+### View the full terraform logs
+
+{{ history-logs-instructions }}
+
+### Delete all the resources
+
+**IMPORTANT:** Let's Encrypt has strict throttling rules, it will not issue TLS certificates for the same `subdomain.domain`
+more than 5 times in any 7 day-period.
+
+{{ down-instructions }}
+
+## The terraform project
+
+### Engine directory
+
+The core terraform files are located in `./engine`, including `main.tf`, `variables.tf` and `outputs.tf`.
+Standalone resources, such IAM roles or AWS secrets, are defined in `./engine/modules` as standard
+terraform modules.
+
+From the `engine` directory, this is a classic terraform project.
+It is possible to use the `terraform` CLI directly, but the recommended way is to use the jupyter-deploy commands. 
+
+#### Presets
+`./engine/presets` correspond to optional set of default variables. Users SHOULD NOT modify these files.
+
+### Services directory
+
+Terraform creates and manages the AWS resources, it creates the EC2 instance, an AWS SSM Document and an
+AWS SSM Association between the SSM Document and the EC2 instance.
+
+AWS SSM automatically executes the SSM document on the EC2 instance to configure it.
+It consists of several steps. The first step downloads all configuration files defined in `./services`
+to the EC2 instance root volume. The last step starts the docker service.
+
+## The deployed EC2 instance
+
+The EC2 instance runs the docker services.
+
+### Host execution commands (when host is running)
+- `jd host exec -- CMD` - Execute commands on the instance
+- `jd host exec -- docker container list` - View the docker services
+- `jd host exec -- tail -50 /var/log/jupyter-deploy/LOG-FILENAME` - View command logs
+- `jd host exec -- tail -50 /var/log/services/LOG-FILENAME` - View historic service logs
+
+### Server execution commands (when host and target docker service are running)
+- `jd server logs` - View docker logs of the jupyter service
+- `jd server logs -n traefik -- -n 50` - View last 50 lines of the docker logs of the traefik service
+- `jd server exec -- ls -la` - Execute a command in the jupyter container (view home dir in this case)
+
+### Deployment scripts (downloaded from S3 by SSM association)
+- `/usr/local/bin/check-status-internal.sh` - Status checking logic
+- `/usr/local/bin/get-status.sh` - Status code mapping
+- `/usr/local/bin/update-server.sh` - Service management (start/stop/restart)
+- `/usr/local/bin/update-auth.sh` - OAuth configuration updates
+- `/usr/local/bin/sync-acme.sh` - TLS certificate sync from Secrets Manager
+
+### Docker configuration files
+- `/opt/docker/docker-compose.yml` - Docker Compose configuration
+- `/opt/docker/docker-startup.sh` - Docker services startup script
+- `/opt/docker/dockerfile.jupyter` - Jupyter container Dockerfile
+- `/opt/docker/traefik.yml` - Traefik reverse proxy configuration
+
+### TLS certificates
+- `/opt/docker/acme.json` - TLS certs issued by Let's Encrypt
+
+### Logs
+- `/var/logs/jupyter-deploy` - Logs generated by jupyter-deploy commands
+- `/var/logs/services` - Logs generated by the docker services
+
+### Troubleshooting
+
+Refer to `./TROUBLESHOOT.md` for specific situations.
+
+{{ generated-by-footer }}

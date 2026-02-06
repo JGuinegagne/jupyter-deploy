@@ -116,7 +116,11 @@ def retrieve_project_manifest_if_available(project_path: Path) -> manifest.Jupyt
     manifest_path = project_path / constants.MANIFEST_FILENAME
     try:
         return retrieve_project_manifest(manifest_path)
-    except (FileNotFoundError, NotADictError, ValidationError) as e:
+    except FileNotFoundError:
+        # Silently return None when manifest doesn't exist (expected in some contexts)
+        return None
+    except (NotADictError, ValidationError) as e:
+        # Print errors for malformed manifests (indicates actual problems)
         print(e)
         return None
 

@@ -231,14 +231,23 @@ class TestInitHandler(unittest.TestCase):
         # Assert
         mock_safe_clean_directory.assert_called_once_with(mock_path)
 
+    @patch("jupyter_deploy.handlers.init_handler.DocsGenerator")
     @patch("jupyter_deploy.fs_utils.safe_copy_tree")
     @patch("jupyter_deploy.handlers.init_handler.InitHandler._find_template_path")
-    def test_setup(self, mock_find_template_path: MagicMock, mock_safe_copy_tree: MagicMock) -> None:
-        """Test setup calls fs_utils.safe_copy_tree with correct paths."""
+    def test_setup(
+        self,
+        mock_find_template_path: MagicMock,
+        mock_safe_copy_tree: MagicMock,
+        mock_docs_generator_class: MagicMock,
+    ) -> None:
+        """Test setup calls fs_utils.safe_copy_tree and generates docs."""
         # Setup
         mock_project_path = Path("/test/project/dir")
         mock_source_path = Path("/mock/template/path")
         mock_find_template_path.return_value = mock_source_path
+
+        mock_docs_generator = MagicMock()
+        mock_docs_generator_class.return_value = mock_docs_generator
 
         handler = InitHandler(project_dir="/test/project/dir")
         handler.project_path = mock_project_path
@@ -248,3 +257,9 @@ class TestInitHandler(unittest.TestCase):
 
         # Assert
         mock_safe_copy_tree.assert_called_once_with(mock_source_path, mock_project_path)
+        mock_docs_generator_class.assert_called_once_with(
+            project_path=mock_project_path,
+            engine=EngineType.TERRAFORM.value,
+        )
+        mock_docs_generator.generate_gitignore.assert_called_once()
+        mock_docs_generator.generate_agent_md.assert_called_once()
