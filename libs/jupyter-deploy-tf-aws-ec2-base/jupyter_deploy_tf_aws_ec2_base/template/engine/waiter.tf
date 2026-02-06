@@ -5,8 +5,6 @@ locals {
     association_id             = aws_ssm_association.instance_startup_with_secret.association_id
     status_check_document_name = aws_ssm_document.instance_status_check.name
     region                     = data.aws_region.current.id
-    subdomain                  = var.subdomain
-    domain                     = var.domain
   })
   await_indent_str      = join("", [for i in range(6) : " "])
   await_server_indented = join("\n${local.await_indent_str}", compact(split("\n", local.await_server_file)))

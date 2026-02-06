@@ -7,7 +7,6 @@ requirements:
 - name: terraform
 - name: awscli
 - name: jq
-- name: curl
 values:
 - name: open_url
   source: output
@@ -536,9 +535,9 @@ supervised-execution:
     up.terraform-apply:
       phases:
         - enter-pattern: "null_resource.wait_for_instance_ready: Creating"
-          exit-pattern: "Instance is ready!"
+          exit-pattern: "null_resource.wait_for_instance_ready: Creation complete"
           label: "Configuring EC2 instance"
-          weight: 35
+          weight: 40
           phases:
             - enter-pattern: "Waiting for SSM agent"
               label: "Waiting for SSM agent"
@@ -552,7 +551,3 @@ supervised-execution:
             - enter-pattern: "fetching TLS certificates"
               label: "Getting TLS certificates"
               weight: 20
-        - enter-pattern: "Verifying service is accessible"
-          exit-pattern: "Service is accessible"
-          label: "Verifying service accessibility"
-          weight: 5
