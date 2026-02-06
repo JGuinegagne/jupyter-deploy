@@ -24,7 +24,7 @@ def test_immediately_available_after_deployment(
     """
     # Immediately verify OAuth proxy is accessible
     # This will land on OAuth login page (before authentication)
-    github_oauth_app.verify_oauth_proxy_accessible(max_retries=20)
+    github_oauth_app.verify_oauth_proxy_accessible()
 
     # Now authenticate and verify full JupyterLab access
     github_oauth_app.ensure_authenticated()

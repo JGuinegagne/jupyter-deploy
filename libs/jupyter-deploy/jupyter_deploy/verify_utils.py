@@ -61,9 +61,18 @@ def _check_jq_installation() -> None:
     )
 
 
+def _check_curl_installation() -> None:
+    """Shell out to verify `curl` install, raise ToolRequiredError if not found."""
+    return _check_installation(
+        tool_name="curl",
+        installation_url="https://curl.se/download.html",
+    )
+
+
 _TOOL_VERIFICATION_FN_MAP: dict[JupyterDeployTool, Callable[[], None]] = {
     JupyterDeployTool.AWS_CLI: _check_aws_cli_installation,
     JupyterDeployTool.AWS_SSM_PLUGIN: _check_ssm_plugin_installation,
+    JupyterDeployTool.CURL: _check_curl_installation,
     JupyterDeployTool.JQ: _check_jq_installation,
     JupyterDeployTool.TERRAFORM: _check_terraform_installation,
 }

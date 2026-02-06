@@ -131,8 +131,8 @@ class SupervisedPhase:
                         self.scale_factor * (100 - self._total_subphase_weight) / extracted_estimate, 0.0
                     )
                 except (IndexError, ValueError):
-                    # Fall back to default of 10 if extraction fails
-                    self._reward_per_event = max(self.scale_factor * (100 - self._total_subphase_weight) / 10, 0.0)
+                    # Fall back to default of 50 if extraction fails
+                    self._reward_per_event = max(self.scale_factor * (100 - self._total_subphase_weight) / 50, 0.0)
 
             return True
 

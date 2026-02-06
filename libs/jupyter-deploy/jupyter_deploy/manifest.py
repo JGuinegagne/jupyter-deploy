@@ -120,7 +120,7 @@ class JupyterDeploySupervisedExecutionPhaseV1(BaseModel):
             as incremental progression
         progress_events_estimate: Optional number of countable progress events expected
         progress_events_estimate_capture_group: Optional capture group index to extract
-            progress_events_estimate from enter_pattern match. Defaults to 10 if extraction fails.
+            progress_events_estimate from enter_pattern match. Defaults to 50 if extraction fails.
         label: Human-readable phase name (e.g., "Waiting for deployment")
         weight: Relative weight out of 100 (e.g., 40 means this phase accounts for 40% of progress)
         phases: Optional nested sub-phases with their own patterns and weights

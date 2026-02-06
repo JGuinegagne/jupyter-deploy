@@ -4,6 +4,8 @@ INSTANCE_ID=${instance_id}
 INSTANCE_STARTUP_ASSOCIATION_ID=${association_id}
 STATUS_CHECK_DOC_NAME=${status_check_document_name}
 REGION=${region}
+SUBDOMAIN=${subdomain}
+DOMAIN=${domain}
 
 
 wait_for_instance(){
@@ -248,6 +250,44 @@ wait_for_cloudinit_execution() {
     fi
 }
 
+wait_for_dns_propagation() {
+    local MAX_WAIT_TIME_SECONDS=120
+    local SLEEP_INTERVAL_SECONDS=5
+    local total_wait_seconds=0
+    local url="https://${subdomain}.${domain}"
+
+    echo "Verifying service is accessible at $${url}..."
+
+    while true; do
+        # Try to access the URL using curl
+        # Use --max-time for individual request timeout, --silent to suppress progress
+        # We only care that we get some HTTP response (including 401/403 auth responses)
+        # indicating DNS + TLS + web server are working
+        # Capture HTTP status code
+        HTTP_CODE=$(curl --silent --output /dev/null --write-out "%%{http_code}" --max-time 10 --head "$url" 2>/dev/null)
+
+        # Success if we got any 2xx, 3xx, 401, or 403 response
+        # 401/403 mean auth is required but service is accessible
+        case "$HTTP_CODE" in
+            2[0-9][0-9]|3[0-9][0-9]|401|403)
+                echo "Service is accessible at $${url} (HTTP $${HTTP_CODE})"
+                return 0
+                ;;
+        esac
+
+        if [ $total_wait_seconds -ge $MAX_WAIT_TIME_SECONDS ]; then
+            echo "ERROR: Service not accessible at $${url} after $${MAX_WAIT_TIME_SECONDS} seconds"
+            echo "Last HTTP status code: $${HTTP_CODE}"
+            echo "Please check your DNS configuration, network connectivity, and TLS certificates."
+            return 1
+        fi
+
+        echo "Service not yet accessible (waiting $${total_wait_seconds}s/$${MAX_WAIT_TIME_SECONDS}s, last status: $${HTTP_CODE})..."
+        sleep $SLEEP_INTERVAL_SECONDS
+        total_wait_seconds=$((total_wait_seconds + SLEEP_INTERVAL_SECONDS))
+    done
+}
+
 get_status() {
     # Run the status check command
     COMMAND_ID=$(aws ssm send-command \
@@ -332,6 +372,9 @@ main(){
         echo "Timed out waiting for instance to be ready."
         exit 1
     fi
+
+    # Final check: verify the service is accessible via HTTPS (tests DNS + TLS + web server)
+    wait_for_dns_propagation
 }
 
 main
