@@ -1,0 +1,10 @@
+# JD internal state and outputs
+.jd-history/
+jdout-*
+jdinputs.*
+
+# Terraform state files
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl

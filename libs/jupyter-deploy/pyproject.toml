@@ -48,6 +48,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["jupyter_deploy"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"jupyter_deploy/handlers/init_static" = "jupyter_deploy/handlers/init_static"
+
 [dependency-groups]
 dev = [
     "mypy>=1.15.0",
