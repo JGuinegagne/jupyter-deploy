@@ -1,6 +1,6 @@
 [project]
 name = "jupyter-deploy-tf-aws-ec2-base"
-version = "0.3.0"
+version = "0.4.0"
 description = "Base terraform template to deploy a JupyterLab application on an AWS EC2 instance."
 readme = "README.md"
 authors = [
@@ -64,18 +64,18 @@ select = [
     "B",
     "SIM",
     "I",
-    "PLC0415",  # import-outside-toplevel - disallow lazy imports
+    "PLC0415",
 ]
 ignore = [
-    # Ignore other preview rules we're not ready for yet
-    "UP042",  # Replace str/Enum with StrEnum (Python 3.11+)
-    "UP046",  # Use PEP 695 type parameters (Python 3.12+)
-    "UP047",  # Use PEP 695 type parameters for functions (Python 3.12+)
+    "UP042",
+    "UP046",
+    "UP047",
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Allow lazy imports in tests (common pattern for imports after mocks)
-"tests/**/*.py" = ["PLC0415"]
+"tests/**/*.py" = [
+    "PLC0415",
+]
 
 [tool.ruff.format]
 quote-style = "double"

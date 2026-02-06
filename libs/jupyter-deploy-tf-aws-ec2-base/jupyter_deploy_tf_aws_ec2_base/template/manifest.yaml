@@ -2,7 +2,7 @@ schema_version: 1
 template:
   name: tf-aws-ec2-base
   engine: terraform
-  version: 0.3.0
+  version: 0.4.0
 requirements:
 - name: terraform
 - name: awscli
@@ -522,32 +522,32 @@ supervised-execution:
   config:
     config.terraform-plan:
       default-phase:
-        label: "Reading data sources"
-        progress-pattern: "(Read complete after|Refreshing state)"
+        label: Reading data sources
+        progress-pattern: (Read complete after|Refreshing state)
         progress-events-estimate: 50
       phases:
-        - enter-pattern: "Terraform will perform the following actions:"
-          progress-pattern: "(will be created|will be read during apply|will be destroyed)"
-          progress-events-estimate: 70
-          label: "Generating plan"
-          weight: 50
+      - enter-pattern: 'Terraform will perform the following actions:'
+        progress-pattern: (will be created|will be read during apply|will be destroyed)
+        progress-events-estimate: 70
+        label: Generating plan
+        weight: 50
   up:
     up.terraform-apply:
       phases:
-        - enter-pattern: "null_resource.wait_for_instance_ready: Creating"
-          exit-pattern: "null_resource.wait_for_instance_ready: Creation complete"
-          label: "Configuring EC2 instance"
-          weight: 40
-          phases:
-            - enter-pattern: "Waiting for SSM agent"
-              label: "Waiting for SSM agent"
-              weight: 10
-            - enter-pattern: "Cloudinit script is running"
-              label: "Configuring EC2 instance"
-              weight: 50
-            - enter-pattern: "Checking instance status"
-              label: "Checking instance status"
-              weight: 20
-            - enter-pattern: "fetching TLS certificates"
-              label: "Getting TLS certificates"
-              weight: 20
+      - enter-pattern: 'null_resource.wait_for_instance_ready: Creating'
+        exit-pattern: 'null_resource.wait_for_instance_ready: Creation complete'
+        label: Configuring EC2 instance
+        weight: 40
+        phases:
+        - enter-pattern: Waiting for SSM agent
+          label: Waiting for SSM agent
+          weight: 10
+        - enter-pattern: Cloudinit script is running
+          label: Configuring EC2 instance
+          weight: 50
+        - enter-pattern: Checking instance status
+          label: Checking instance status
+          weight: 20
+        - enter-pattern: fetching TLS certificates
+          label: Getting TLS certificates
+          weight: 20
