@@ -354,14 +354,14 @@ class TestSupervisedPhaseWithDynamicEstimate(unittest.TestCase):
 
     def test_evaluate_enter_extracts_dynamic_estimate(self) -> None:
         """Test that evaluate_enter extracts estimate from capture group."""
-        line = "Plan: 72 to add, 10 to change, 5 to destroy."
+        line = "Plan: 50 to add, 10 to change, 5 to destroy."
         result = self.phase.evaluate_enter(line)
 
         self.assertTrue(result)
         self.assertTrue(self.phase.is_active)
 
-        # Should now use extracted value of 1/72 from capture group (not fallback 1/50)
-        self.assertAlmostEqual(self.phase._reward_per_event, 0.6944, places=4)  # 100 * 0.5 / 72
+        # Should now use extracted value of 1/50th from estimate
+        self.assertAlmostEqual(self.phase._reward_per_event, 1)  # 100 * 0.5 / 50
 
     def test_evaluate_enter_handles_invalid_capture_group(self) -> None:
         """Test that evaluate_enter falls back to default when capture fails."""
@@ -375,13 +375,13 @@ class TestSupervisedPhaseWithDynamicEstimate(unittest.TestCase):
         )
         phase = SupervisedPhase(config=config, sequence_scale_factor=1.0)
 
-        line = "Plan: 20 to add"
+        line = "Plan: 50 to add"
         result = phase.evaluate_enter(line)
 
         self.assertTrue(result)
 
-        # Should fall back to default of 1/50th from estimate (not 1/20 from captured value)
-        self.assertAlmostEqual(phase._reward_per_event, 2)  # 100 * 1.0 / 50
+        # Should fall back to default of 1/10th from estimate
+        self.assertAlmostEqual(phase._reward_per_event, 10)  # 100 * 1.0 / 10
 
     def test_explicit_estimate_not_overridden_by_capture_group(self) -> None:
         """Test that explicit estimate is not overridden by capture group."""
