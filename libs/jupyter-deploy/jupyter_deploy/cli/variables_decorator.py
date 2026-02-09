@@ -78,7 +78,8 @@ def with_project_variables() -> Callable:
             option_name = f"--{var_def.get_cli_var_name()}"
             var_type = var_def.__class__.get_type()
             cli_description = var_def.get_cli_description()  # will embed default as [preset: <default>]
-            validator_cb = var_def.get_validator_callback()
+            # Pass typer.BadParameter so validators raise the correct exception for CLI
+            validator_cb = var_def.get_validator_callback(validation_error_class=typer.BadParameter)
 
             # Create parameter with Annotated type for typer.Option
             param = inspect.Parameter(

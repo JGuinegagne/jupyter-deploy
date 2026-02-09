@@ -2,16 +2,20 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, mock_open, patch
 
-import typer
 from pydantic import ValidationError
 from yaml.parser import ParserError
-from yaml.scanner import ScannerError
 
 from jupyter_deploy.constants import MANIFEST_FILENAME
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.exceptions import (
+    InvalidManifestError,
+    InvalidVariableError,
+    ManifestNotADictError,
+    ManifestNotFoundError,
+    ReadManifestError,
+)
 from jupyter_deploy.handlers.base_project_handler import (
     BaseProjectHandler,
-    NotADictError,
     retrieve_project_manifest,
     retrieve_project_manifest_if_available,
     retrieve_variables_config,
@@ -38,141 +42,36 @@ class TestBaseProjectHandler(unittest.TestCase):
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("pathlib.Path.cwd")
-    @patch("rich.console.Console")
-    def test_exits_and_print_on_filenotfound_error(
-        self, mock_console_class: Mock, mock_cwd: Mock, mock_retrieve: Mock
-    ) -> None:
+    def test_raises_project_not_found_error(self, mock_cwd: Mock, mock_retrieve: Mock) -> None:
         # Setup
         mock_cwd.return_value = Path("/fake/path")
-        mock_console = Mock()
-        mock_console_class.return_value = mock_console
-        mock_retrieve.side_effect = FileNotFoundError("Missing jupyter-deploy manifest.")
+        mock_retrieve.side_effect = ManifestNotFoundError("Could not find manifest file")
 
         # Execute and Assert
-        with self.assertRaises(typer.Exit):
+        with self.assertRaises(ManifestNotFoundError):
             BaseProjectHandler()
-
-        # Verify console output
-        mock_console.print.assert_any_call(
-            ":x: The path does not correspond to a jupyter-deploy project.", style="bold red"
-        )
-        mock_console.line.assert_any_call()
-        mock_console.print.assert_any_call("Reason: could not find the jupyter-deploy manifest file.", style="red")
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("pathlib.Path.cwd")
-    @patch("rich.console.Console")
-    def test_exits_and_print_on_os_error(self, mock_console_class: Mock, mock_cwd: Mock, mock_retrieve: Mock) -> None:
+    def test_raises_invalid_manifest_error_on_notadict(self, mock_cwd: Mock, mock_retrieve: Mock) -> None:
         # Setup
         mock_cwd.return_value = Path("/fake/path")
-        mock_console = Mock()
-        mock_console_class.return_value = mock_console
-        mock_retrieve.side_effect = OSError("Permission denied")
+        mock_retrieve.side_effect = ManifestNotADictError("Invalid manifest: not a dict")
 
         # Execute and Assert
-        with self.assertRaises(typer.Exit):
+        with self.assertRaises(InvalidManifestError):
             BaseProjectHandler()
-
-        # Verify console output
-        mock_console.print.assert_any_call(":x: Could not access the jupyter-deploy manifest.", style="bold red")
-        mock_console.line.assert_any_call()
-        mock_console.print.assert_any_call(
-            "Reason: OS error when reading the jupyter-deploy manifest file.", style="red"
-        )
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("pathlib.Path.cwd")
-    @patch("rich.console.Console")
-    def test_exits_and_prints_on_runtime_error(
-        self, mock_console_class: Mock, mock_cwd: Mock, mock_retrieve: Mock
-    ) -> None:
+    def test_raises_invalid_manifest_error(self, mock_cwd: Mock, mock_retrieve: Mock) -> None:
         # Setup
         mock_cwd.return_value = Path("/fake/path")
-        mock_console = Mock()
-        mock_console_class.return_value = mock_console
-        mock_retrieve.side_effect = NotADictError("Invalid type: jupyter-deploy manifest is not a dict.")
+        mock_retrieve.side_effect = InvalidManifestError("Manifest validation failed")
 
         # Execute and Assert
-        with self.assertRaises(typer.Exit):
+        with self.assertRaises(InvalidManifestError):
             BaseProjectHandler()
-
-        # Verify console output
-        mock_console.print.assert_any_call(":x: The jupyter-deploy manifest is invalid.", style="bold red")
-        mock_console.line.assert_any_call()
-        mock_console.print.assert_any_call(
-            "Reason: expected the jupyter-deploy manifest file to parse as dict.", style="red"
-        )
-
-    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
-    @patch("pathlib.Path.cwd")
-    @patch("rich.console.Console")
-    def test_exits_and_prints_on_yamlparse_error(
-        self, mock_console_class: Mock, mock_cwd: Mock, mock_retrieve: Mock
-    ) -> None:
-        # Setup
-        mock_cwd.return_value = Path("/fake/path")
-        mock_console = Mock()
-        mock_console_class.return_value = mock_console
-        mock_retrieve.side_effect = ParserError("YAML parsing error")
-
-        # Execute and Assert
-        with self.assertRaises(typer.Exit):
-            BaseProjectHandler()
-
-        # Verify console output
-        mock_console.print.assert_any_call(":x: The jupyter-deploy manifest is invalid.", style="bold red")
-        mock_console.line.assert_any_call()
-        mock_console.print.assert_any_call(
-            "Reason: cannot parse the jupyter-deploy manifest content as YAML.", style="red"
-        )
-
-    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
-    @patch("pathlib.Path.cwd")
-    @patch("rich.console.Console")
-    def test_exits_and_prints_on_yamlscanner_error(
-        self, mock_console_class: Mock, mock_cwd: Mock, mock_retrieve: Mock
-    ) -> None:
-        # Setup
-        mock_cwd.return_value = Path("/fake/path")
-        mock_console = Mock()
-        mock_console_class.return_value = mock_console
-        mock_retrieve.side_effect = ScannerError("YAML scanner error")
-
-        # Execute and Assert
-        with self.assertRaises(typer.Exit):
-            BaseProjectHandler()
-
-        # Verify console output
-        mock_console.print.assert_any_call(":x: The jupyter-deploy manifest is invalid.", style="bold red")
-        mock_console.line.assert_any_call()
-        mock_console.print.assert_any_call(
-            "Reason: cannot parse the jupyter-deploy manifest content as YAML.", style="red"
-        )
-
-    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
-    @patch("pathlib.Path.cwd")
-    @patch("rich.console.Console")
-    def test_exits_and_prints_on_pydantic_error(
-        self, mock_console_class: Mock, mock_cwd: Mock, mock_retrieve: Mock
-    ) -> None:
-        # Setup
-        mock_cwd.return_value = Path("/fake/path")
-        mock_console = Mock()
-        mock_console_class.return_value = mock_console
-        mock_retrieve.side_effect = ValidationError("some error", [])
-
-        # Execute and Assert
-        with self.assertRaises(typer.Exit):
-            BaseProjectHandler()
-
-        print(mock_console.print.mock_calls[1])
-
-        # Verify console output
-        mock_console.print.assert_any_call(":x: The jupyter-deploy manifest is invalid.", style="bold red")
-        mock_console.line.assert_any_call()
-        mock_console.print.assert_any_call(
-            "Reason: the manifest file does not conform to the expected schema.", style="red"
-        )
 
 
 class TestRetrieveProjectManifestIfAvailable(unittest.TestCase):
@@ -191,10 +90,10 @@ class TestRetrieveProjectManifestIfAvailable(unittest.TestCase):
         self.assertEqual(result, mock_manifest)
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
-    def test_returns_none_when_filenotfound_error(self, mock_retrieve: Mock) -> None:
+    def test_returns_none_when_project_not_found_error(self, mock_retrieve: Mock) -> None:
         # Setup
         project_path = Path("/fake/path")
-        mock_retrieve.side_effect = FileNotFoundError("Missing jupyter-deploy manifest.")
+        mock_retrieve.side_effect = ManifestNotFoundError("Missing jupyter-deploy manifest.")
 
         # Execute
         result = retrieve_project_manifest_if_available(project_path)
@@ -204,10 +103,10 @@ class TestRetrieveProjectManifestIfAvailable(unittest.TestCase):
         self.assertIsNone(result)
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
-    def test_returns_none_when_notadict_error(self, mock_retrieve: Mock) -> None:
+    def test_returns_none_when_invalid_manifest_error(self, mock_retrieve: Mock) -> None:
         # Setup
         project_path = Path("/fake/path")
-        mock_retrieve.side_effect = NotADictError("Invalid manifest: jupyter-deploy manifest is not a dict.")
+        mock_retrieve.side_effect = InvalidManifestError("Invalid manifest")
 
         # Execute
         result = retrieve_project_manifest_if_available(project_path)
@@ -217,10 +116,10 @@ class TestRetrieveProjectManifestIfAvailable(unittest.TestCase):
         self.assertIsNone(result)
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
-    def test_returns_none_when_validation_error(self, mock_retrieve: Mock) -> None:
+    def test_returns_none_when_read_manifest_error(self, mock_retrieve: Mock) -> None:
         # Setup
         project_path = Path("/fake/path")
-        mock_retrieve.side_effect = ValidationError("Invalid manifest schema", [])
+        mock_retrieve.side_effect = ReadManifestError("Cannot read manifest")
 
         # Execute
         result = retrieve_project_manifest_if_available(project_path)
@@ -238,7 +137,7 @@ class TestRetrieveProjectManifest(unittest.TestCase):
         manifest_path = Path("/fake/path/manifest.yaml")
 
         # Execute and Assert
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(ManifestNotFoundError):
             retrieve_project_manifest(manifest_path)
 
         mock_file_exists.assert_called_once_with(manifest_path)
@@ -309,7 +208,7 @@ class TestRetrieveProjectManifest(unittest.TestCase):
         mock_open_file.side_effect = OSError("Permission denied")
 
         # Execute and Assert
-        with self.assertRaises(OSError):
+        with self.assertRaises(ReadManifestError):
             retrieve_project_manifest(manifest_path)
 
     @patch("jupyter_deploy.fs_utils.file_exists")
@@ -324,7 +223,7 @@ class TestRetrieveProjectManifest(unittest.TestCase):
         mock_yaml_load.side_effect = ParserError("YAML parsing error")
 
         # Execute and Assert
-        with self.assertRaises(ParserError):
+        with self.assertRaises(InvalidManifestError):
             retrieve_project_manifest(manifest_path)
 
     @patch("jupyter_deploy.fs_utils.file_exists")
@@ -339,9 +238,9 @@ class TestRetrieveProjectManifest(unittest.TestCase):
         mock_yaml_load.return_value = ["item1", "item2"]  # Not a dict
 
         # Execute and Assert
-        with self.assertRaises(NotADictError) as context:
+        with self.assertRaises(ManifestNotADictError) as context:
             retrieve_project_manifest(manifest_path)
-        self.assertIn("Invalid manifest: jupyter-deploy manifest is not a dict.", str(context.exception))
+        self.assertIn("Manifest file must be a YAML dictionary", str(context.exception))
 
     @patch("jupyter_deploy.fs_utils.file_exists")
     @patch(
@@ -367,7 +266,7 @@ class TestRetrieveProjectManifest(unittest.TestCase):
         }
 
         # Execute and Assert
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(InvalidManifestError):
             retrieve_project_manifest(manifest_path)
 
 
@@ -508,7 +407,7 @@ class TestRetrieveVariablesConfig(unittest.TestCase):
         mock_yaml_load.return_value = ["item1", "item2"]  # Not a dict
 
         # Execute and Assert
-        with self.assertRaises(NotADictError):
+        with self.assertRaises(InvalidVariableError):
             retrieve_variables_config(variables_config_path)
 
     @patch("jupyter_deploy.fs_utils.file_exists")

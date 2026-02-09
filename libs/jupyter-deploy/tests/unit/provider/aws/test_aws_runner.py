@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch
 
 from rich.console import Console
 
+from jupyter_deploy.exceptions import InstructionNotFoundError
 from jupyter_deploy.provider.aws.aws_runner import AwsApiRunner, AwsService
 from jupyter_deploy.provider.resolved_argdefs import ResolvedInstructionArgument
 from jupyter_deploy.provider.resolved_resultdefs import ResolvedInstructionResult
@@ -103,7 +104,7 @@ class TestAwsApiRunner(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"arg1": Mock(spec=ResolvedInstructionArgument)}
 
         # Execute and Assert
-        with self.assertRaises(NotImplementedError) as context:
+        with self.assertRaises(InstructionNotFoundError) as context:
             runner.execute_instruction(
                 instruction_name="aws.unknown-service.command", resolved_arguments=resolved_args, console=console
             )

@@ -9,6 +9,7 @@ from jupyter_core.application import JupyterApp
 from rich.console import Console
 
 from jupyter_deploy import cmd_utils
+from jupyter_deploy.cli.error_decorator import handle_cli_errors
 from jupyter_deploy.cli.history_app import history_app
 from jupyter_deploy.cli.host_app import host_app
 from jupyter_deploy.cli.organization_app import organization_app
@@ -17,22 +18,17 @@ from jupyter_deploy.cli.servers_app import servers_app
 from jupyter_deploy.cli.teams_app import teams_app
 from jupyter_deploy.cli.users_app import users_app
 from jupyter_deploy.cli.variables_decorator import with_project_variables
-from jupyter_deploy.engine.engine_config import ReadConfigurationError, WriteConfigurationError
-from jupyter_deploy.engine.engine_down import DownAutoApproveRequiredError
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.engine.supervised_execution import ExecutionError
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
-from jupyter_deploy.handlers.command_history_handler import LogCleanupError
+from jupyter_deploy.exceptions import LogCleanupError
 from jupyter_deploy.handlers.init_handler import InitHandler
 from jupyter_deploy.handlers.project import config_handler
-from jupyter_deploy.handlers.project.config_handler import InvalidPreset
 from jupyter_deploy.handlers.project.down_handler import DownHandler
 from jupyter_deploy.handlers.project.open_handler import OpenHandler
 from jupyter_deploy.handlers.project.show_handler import ShowHandler
 from jupyter_deploy.handlers.project.up_handler import UpHandler
 from jupyter_deploy.infrastructure.enum import AWSInfrastructureType, InfrastructureType
 from jupyter_deploy.provider.enum import ProviderType
-from jupyter_deploy.verify_utils import ToolRequiredError
 
 
 class JupyterDeployCliRunner:
@@ -112,57 +108,61 @@ def init(
         init_help_cmds = ["jupyter", "deploy", "init", "--help"]
         subprocess.run(init_help_cmds)
         return
-    project = InitHandler(
-        project_dir=path,
-        engine=engine,
-        provider=provider,
-        infrastructure=infrastructure,
-        template=template,
-    )
+
     console = Console()
-
-    if not project.may_export_to_project_path():
-        if not overwrite:
-            console.line()
-            console.print(f":x: The directory {project.project_path} is not empty, aborting.", style="red")
-            console.line()
-            console.print(":bulb: To force this operation, use option: [bold cyan]--overwrite[/]")
-            return
-        else:
-            console.line()
-            console.print(f":warning: The target directory {project.abs_project_path} is not empty.", style="yellow")
-            console.line()
-            console.print(
-                ":warning: Initiating the project may overwrite existing files, are you sure you want to proceed?",
-                style="yellow",
-            )
-
-            overwrite_existing = typer.confirm("")
-
-            if not overwrite_existing:
-                console.line()
-                console.print(f"Left files under {project.project_path} untouched.\n")
-                typer.Abort()
-                return
-
-    project.setup()
-
-    console.print(f"Created start-up project files at: {project.project_path.absolute()}", style="bold green")
-    console.line()
-
-    if Path.cwd().absolute() != project.project_path.absolute():
-        console.print(
-            ":bulb: To configure the project with default variables, "
-            f"change your working directory to [bold]{project.project_path}[/] "
-            "then run: [bold cyan]jd config[/]",
+    with handle_cli_errors(console):
+        project = InitHandler(
+            project_dir=path,
+            engine=engine,
+            provider=provider,
+            infrastructure=infrastructure,
+            template=template,
         )
-    else:
-        console.print(":bulb: To configure the project with default variables, run: [bold cyan]jd config[/]")
 
-    console.print(":bulb: To find out which variables are available for this template, use: [bold cyan]--help[/]")
-    console.print(":bulb: To set or override a specific variable, use: [bold cyan]--variable-name VARVALUE[/]")
-    console.print(":bulb: To ignore [italic]all[/] default values, use: [bold cyan]--defaults none[/]")
-    console.line()
+        if not project.may_export_to_project_path():
+            if not overwrite:
+                console.line()
+                console.print(f":x: The directory {project.project_path} is not empty, aborting.", style="red")
+                console.line()
+                console.print(":bulb: To force this operation, use option: [bold cyan]--overwrite[/]")
+                return
+            else:
+                console.line()
+                console.print(
+                    f":warning: The target directory {project.abs_project_path} is not empty.", style="yellow"
+                )
+                console.line()
+                console.print(
+                    ":warning: Initiating the project may overwrite existing files, are you sure you want to proceed?",
+                    style="yellow",
+                )
+
+                overwrite_existing = typer.confirm("")
+
+                if not overwrite_existing:
+                    console.line()
+                    console.print(f"Left files under {project.project_path} untouched.\n")
+                    typer.Abort()
+                    return
+
+        project.setup()
+
+        console.print(f"Created start-up project files at: {project.project_path.absolute()}", style="bold green")
+        console.line()
+
+        if Path.cwd().absolute() != project.project_path.absolute():
+            console.print(
+                ":bulb: To configure the project with default variables, "
+                f"change your working directory to [bold]{project.project_path}[/] "
+                "then run: [bold cyan]jd config[/]",
+            )
+        else:
+            console.print(":bulb: To configure the project with default variables, run: [bold cyan]jd config[/]")
+
+        console.print(":bulb: To find out which variables are available for this template, use: [bold cyan]--help[/]")
+        console.print(":bulb: To set or override a specific variable, use: [bold cyan]--variable-name VARVALUE[/]")
+        console.print(":bulb: To ignore [italic]all[/] default values, use: [bold cyan]--defaults none[/]")
+        console.line()
 
 
 @runner.app.command()
@@ -211,136 +211,112 @@ def config(
 
     You can specify where to save the planned change with `--output-file` or `-f`.
     """
-    preset_name = None if defaults_preset_name == "none" else defaults_preset_name
-
-    # Create progress display manager (or None if verbose mode)
-    progress_display = None if verbose else ProgressDisplayManager()
-
-    handler = config_handler.ConfigHandler(output_filename=output_filename, terminal_handler=progress_display)
-
     console = Console()
+    with handle_cli_errors(console):
+        preset_name = None if defaults_preset_name == "none" else defaults_preset_name
 
-    # Validate and set preset
-    # First, verify whether there are recorded variables values from user inputs
-    # if yes, do NOT use the preset defaults.
-    # `jd config` records values automatically, and we want users to be able to rerun `jd config`
-    # without getting prompted again or having their previous choices overridden by defaults.
-    if not reset and handler.has_recorded_variables():
-        preset_name = None
-        if verbose:
-            console.rule()
-            console.print(
-                ":magnifying_glass_tilted_right: Detected variables values that [bold]jupyter-deploy[/] "
-                "recorded previously."
-            )
-            console.print("Recorded values take precedent over any default preset.")
-            console.print("You can override any recorded variable value with [bold cyan]--variable-name <value>[/].")
+        # Create progress display manager (or None if verbose mode)
+        progress_display = None if verbose else ProgressDisplayManager()
 
-    # Validate preset if provided
-    if preset_name is not None:
-        try:
+        handler = config_handler.ConfigHandler(output_filename=output_filename, terminal_handler=progress_display)
+
+        # Validate and set preset
+        # First, verify whether there are recorded variables values from user inputs
+        # if yes, do NOT use the preset defaults.
+        # `jd config` records values automatically, and we want users to be able to rerun `jd config`
+        # without getting prompted again or having their previous choices overridden by defaults.
+        if not reset and handler.has_recorded_variables():
+            preset_name = None
+            if verbose:
+                console.rule()
+                console.print(
+                    ":magnifying_glass_tilted_right: Detected variables values that [bold]jupyter-deploy[/] "
+                    "recorded previously."
+                )
+                console.print("Recorded values take precedent over any default preset.")
+                console.print(
+                    "You can override any recorded variable value with [bold cyan]--variable-name <value>[/]."
+                )
+
+        # Validate preset if provided
+        if preset_name is not None:
             handler.validate_preset(preset_name)
-        except InvalidPreset as e:
-            console.print(f":x: preset [bold]{e.preset_name}[/] is invalid for this template.", style="red")
-            console.print(f"Valid presets: {e.valid_presets}")
-            raise typer.Exit(code=1) from None
 
-    # Set the preset, which may have been overridden to None if it detected recorded variables.
-    handler.set_preset(preset_name)
+        # Set the preset, which may have been overridden to None if it detected recorded variables.
+        handler.set_preset(preset_name)
 
-    run_verify = not skip_verify
-    run_configure = False
+        run_verify = not skip_verify
+        run_configure = False
 
-    if reset:
-        if verbose:
-            console.rule("[bold]jupyter-deploy:[/] resetting recorded variables and secrets")
-        handler.reset_recorded_variables()
-        handler.reset_recorded_secrets()
+        if reset:
+            if verbose:
+                console.rule("[bold]jupyter-deploy:[/] resetting recorded variables and secrets")
+            handler.reset_recorded_variables()
+            handler.reset_recorded_secrets()
 
-    if run_verify:
-        try:
+        if run_verify:
             handler.verify_requirements()
             run_configure = True
-        except ToolRequiredError as e:
-            console.print(f":x: {e}", style="red")
-            console.line()
-            if e.error_msg:
-                console.print(f"Error: {e.error_msg}", style="red")
-                console.line()
-            if e.installation_url:
-                console.print(f"Refer to the installation guide: {e.installation_url}")
-            raise typer.Exit(code=1) from None
-    else:
-        if verbose:
-            console.print("[bold]jupyter-deploy:[/] skipping verification of requirements")
-        run_configure = True
-
-    if run_configure:
-        if verbose:
-            console.rule("[bold]jupyter-deploy:[/] configuring the project")
-
-        completion_context = None
-        with progress_display or nullcontext():
-            try:
-                completion_context = handler.configure(variable_overrides=variables)
-            except LogCleanupError as e:
-                # Log cleanup failed, but main operation succeeded - warn and continue
-                console.print(f":warning: log clean up failed: {e}", style="yellow")
-            except ExecutionError as e:
-                # Error context already displayed by callback
-                console.print(f":x: {e.message}", style="red")
-                console.line()
-                console.print(":bulb: To view the full logs, run [bold cyan]jd history show[/]")
-                raise typer.Exit(code=e.retcode) from None
-
-        if verbose:
-            console.rule("[bold]jupyter-deploy:[/] recording input values")
-
-        try:
-            handler.record(record_vars=True, record_secrets=record_secrets)
-        except ReadConfigurationError as e:
-            console.print(f":x: {e}", style="red")
-            raise typer.Exit(code=1) from None
-        except WriteConfigurationError as e:
-            console.print(f":x: {e}", style="red")
-            raise typer.Exit(code=1) from None
-
-        if verbose:
-            if record_secrets:
-                console.print(":floppy_disk: Recorded configuration, variables and secrets")
-            else:
-                console.print(":floppy_disk: Recorded configuration and variables")
-
-        # finally, display a message to the user if config ignored the template defaults
-        # in favor of the recorded variables, with instructions on how to change this behavior.
-        has_used_preset = handler.has_used_preset(preset_name)
-        if verbose and not has_used_preset:
-            console.line()
-            console.print(
-                "[bold]jupyter-deploy[/] reused the variables values that you elected previously "
-                f"instead of the template preset: [bold cyan]{preset_name}[/]."
-            )
-            console.print("You can use `[bold cyan]--reset[/]` to clear your recorded values.")
-        if verbose:
-            console.rule()
-
-        console.print("Your project is ready.", style="bold green")
-
-        # Display completion summary if available
-        # Verbose mode prints everything, so no need to add a summary
-        if completion_context and not verbose:
-            # Use raw print() instead of console.print() to avoid adding extra ANSI styling
-            # The lines already contain ANSI codes from terraform output that we want to preserve as-is
-            for line in completion_context.lines:
-                print(line)
-
-        console.line()
-        console.print(":bulb: To view the full logs, run: [bold cyan]jd history show[/]")
-
-        if output_filename:
-            console.print(f":bulb: To apply the changes, run: [bold cyan]jd up --config-filename {output_filename}[/]")
         else:
-            console.print(":bulb: To apply the changes, run: [bold cyan]jd up[/]")
+            if verbose:
+                console.print("[bold]jupyter-deploy:[/] skipping verification of requirements")
+            run_configure = True
+
+        if run_configure:
+            if verbose:
+                console.rule("[bold]jupyter-deploy:[/] configuring the project")
+
+            completion_context = None
+            with progress_display or nullcontext():
+                try:
+                    completion_context = handler.configure(variable_overrides=variables)
+                except LogCleanupError as e:
+                    # Log cleanup failed, but main operation succeeded - warn and continue
+                    console.print(f":warning: log clean up failed: {e}", style="yellow")
+
+            if verbose:
+                console.rule("[bold]jupyter-deploy:[/] recording input values")
+
+            handler.record(record_vars=True, record_secrets=record_secrets)
+
+            if verbose:
+                if record_secrets:
+                    console.print(":floppy_disk: Recorded configuration, variables and secrets")
+                else:
+                    console.print(":floppy_disk: Recorded configuration and variables")
+
+            # finally, display a message to the user if config ignored the template defaults
+            # in favor of the recorded variables, with instructions on how to change this behavior.
+            has_used_preset = handler.has_used_preset(preset_name)
+            if verbose and not has_used_preset:
+                console.line()
+                console.print(
+                    "[bold]jupyter-deploy[/] reused the variables values that you elected previously "
+                    f"instead of the template preset: [bold cyan]{preset_name}[/]."
+                )
+                console.print("You can use `[bold cyan]--reset[/]` to clear your recorded values.")
+            if verbose:
+                console.rule()
+
+            console.print("Your project is ready.", style="bold green")
+
+            # Display completion summary if available
+            # Verbose mode prints everything, so no need to add a summary
+            if completion_context and not verbose:
+                # Use raw print() instead of console.print() to avoid adding extra ANSI styling
+                # The lines already contain ANSI codes from terraform output that we want to preserve as-is
+                for line in completion_context.lines:
+                    print(line)
+
+            console.line()
+            console.print(":bulb: To view the full logs, run: [bold cyan]jd history show[/]")
+
+            if output_filename:
+                console.print(
+                    f":bulb: To apply the changes, run: [bold cyan]jd up --config-filename {output_filename}[/]"
+                )
+            else:
+                console.print(":bulb: To apply the changes, run: [bold cyan]jd up[/]")
 
 
 @runner.app.command()
@@ -368,9 +344,8 @@ def up(
     Call `jd config` first to set the input variables and
     verify the configuration.
     """
-    with cmd_utils.project_dir(project_dir):
-        console = Console()
-
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         # Create progress display manager (or None if verbose mode)
         progress_display = None if verbose else ProgressDisplayManager()
 
@@ -379,11 +354,7 @@ def up(
 
         if verbose:
             console.rule("[bold]jupyter-deploy:[/] verifying presence of config file")
-        try:
-            config_file_path = handler.get_config_file_path(config_filename)
-        except FileNotFoundError as e:
-            console.print(f":x: {e}", style="red")
-            raise typer.Exit(1) from None
+        config_file_path = handler.get_config_file_path(config_filename)
 
         if verbose:
             console.rule("[bold]jupyter-deploy:[/] applying infrastructure changes")
@@ -394,11 +365,6 @@ def up(
             except LogCleanupError as e:
                 # Log cleanup failed, but main operation succeeded - warn and continue
                 console.print(f":warning: log clean up failed: {e}", style="yellow")
-            except ExecutionError as e:
-                console.print(f":x: {e.message}", style="red")
-                console.line()
-                console.print(":bulb: To view the full logs, run: [bold cyan]jd history show[/]")
-                raise typer.Exit(code=e.retcode) from None
 
         # Display completion summary if available
         # Verbose mode prints everything, so no need to add a summary
@@ -433,9 +399,8 @@ def down(
     No-op if you have not already created the infrastructure with `jd up`, or if you
     already ran `jd down`.
     """
-    with cmd_utils.project_dir(project_dir):
-        console = Console()
-
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         # Create progress display manager (or None if verbose mode)
         progress_display = None if verbose else ProgressDisplayManager()
 
@@ -458,22 +423,6 @@ def down(
             except LogCleanupError as e:
                 # Log cleanup failed, but main operation succeeded - warn and continue
                 console.print(f":warning: log clean up failed: {e}", style="yellow")
-            except ExecutionError as e:
-                console.print(f":x: {e.message}", style="red")
-                console.line()
-                console.print(":bulb: To view the full logs, run: [bold cyan]jd history show[/]")
-                raise typer.Exit(code=e.retcode) from None
-            except DownAutoApproveRequiredError:
-                console.print(
-                    (
-                        ":x: You must pass [bold]--answer-yes[/] or [bold]-y[/] to proceed.\n"
-                        "Proceed carefully: you will need to manage the persisting resources, "
-                        "and they may incur cost until you delete them."
-                    ),
-                    style="red",
-                )
-                console.line()
-                raise typer.Exit(code=1) from None
 
         console.print("Infrastructure resources destroyed successfully.", style="green")
         console.line()
@@ -493,7 +442,8 @@ def open(
 
     Call `jd config` and `jd up` first.
     """
-    with cmd_utils.project_dir(project_dir):
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         handler = OpenHandler()
         handler.open()
 
@@ -578,7 +528,8 @@ def show(
         )
         raise typer.Exit(code=1)
 
-    with cmd_utils.project_dir(project_dir):
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         handler = ShowHandler()
 
         # Handle single variable query

@@ -7,13 +7,9 @@ from typing import Any
 from pydantic import ValidationError
 
 from jupyter_deploy import cmd_utils, fs_utils
-from jupyter_deploy.engine.engine_config import (
-    EngineConfigHandler,
-    ReadConfigurationError,
-    WriteConfigurationError,
-)
+from jupyter_deploy.engine.engine_config import EngineConfigHandler
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.engine.supervised_execution import CompletionContext, ExecutionError, TerminalHandler
+from jupyter_deploy.engine.supervised_execution import CompletionContext, TerminalHandler
 from jupyter_deploy.engine.supervised_execution_callback import ExecutionCallbackInterface
 from jupyter_deploy.engine.terraform import (
     tf_plan,
@@ -39,6 +35,11 @@ from jupyter_deploy.engine.terraform.tf_supervised_execution_callback import (
 )
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
 from jupyter_deploy.enum import HistoryEnabledCommandType
+from jupyter_deploy.exceptions import (
+    ReadConfigurationError,
+    SupervisedExecutionError,
+    WriteConfigurationError,
+)
 from jupyter_deploy.handlers.command_history_handler import CommandHistoryHandler
 from jupyter_deploy.manifest import JupyterDeployManifest
 
@@ -131,7 +132,7 @@ class TerraformConfigHandler(EngineConfigHandler):
 
         init_retcode = init_executor.execute(TF_INIT_CMD.copy())
         if init_retcode != 0:
-            raise ExecutionError(
+            raise SupervisedExecutionError(
                 command="config",
                 retcode=init_retcode,
                 message="Error initializing Terraform project.",
@@ -184,7 +185,7 @@ class TerraformConfigHandler(EngineConfigHandler):
 
         plan_retcode = plan_executor.execute(plan_cmds)
         if plan_retcode != 0:
-            raise ExecutionError(
+            raise SupervisedExecutionError(
                 command="config",
                 retcode=plan_retcode,
                 message="Error generating Terraform plan.",

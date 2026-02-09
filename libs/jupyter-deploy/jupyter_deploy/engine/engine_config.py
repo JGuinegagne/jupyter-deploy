@@ -9,22 +9,6 @@ from jupyter_deploy.handlers.command_history_handler import CommandHistoryHandle
 from jupyter_deploy.manifest import JupyterDeployManifest
 
 
-class ReadConfigurationError(RuntimeError):
-    """Raised when reading or parsing configuration fails."""
-
-    def __init__(self, plan_path: str) -> None:
-        self.plan_path = plan_path
-        super().__init__(f"Failed to read or parse plan at: {plan_path}")
-
-
-class WriteConfigurationError(RuntimeError):
-    """Raised when writing configuration fails."""
-
-    def __init__(self, file_path: str) -> None:
-        self.file_path = file_path
-        super().__init__(f"Failed to write configuration to: {file_path}")
-
-
 class EngineConfigHandler(ABC):
     def __init__(
         self,

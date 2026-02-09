@@ -6,8 +6,8 @@ from subprocess import CalledProcessError
 from rich import console as rich_console
 
 from jupyter_deploy import cmd_utils, fs_utils
-from jupyter_deploy.engine.engine_down import DownAutoApproveRequiredError, EngineDownHandler
-from jupyter_deploy.engine.supervised_execution import ExecutionError, TerminalHandler
+from jupyter_deploy.engine.engine_down import EngineDownHandler
+from jupyter_deploy.engine.supervised_execution import TerminalHandler
 from jupyter_deploy.engine.supervised_execution_callback import ExecutionCallbackInterface
 from jupyter_deploy.engine.terraform import tf_outputs, tf_supervised_executor_factory
 from jupyter_deploy.engine.terraform.tf_constants import (
@@ -24,6 +24,7 @@ from jupyter_deploy.engine.terraform.tf_supervised_execution_callback import (
     TerraformSupervisedExecutionCallback,
 )
 from jupyter_deploy.enum import HistoryEnabledCommandType
+from jupyter_deploy.exceptions import DownAutoApproveRequiredError, SupervisedExecutionError
 from jupyter_deploy.handlers.command_history_handler import CommandHistoryHandler
 from jupyter_deploy.manifest import JupyterDeployManifest
 
@@ -115,7 +116,7 @@ class TerraformDownHandler(EngineDownHandler):
 
             rm_retcode = rm_executor.execute(rm_cmd)
             if rm_retcode != 0:
-                raise ExecutionError(
+                raise SupervisedExecutionError(
                     command="down",
                     retcode=rm_retcode,
                     message="Error removing persisting resources from Terraform state.",
@@ -158,7 +159,7 @@ class TerraformDownHandler(EngineDownHandler):
         # Execute terraform destroy
         destroy_retcode = destroy_executor.execute(destroy_cmd)
         if destroy_retcode != 0:
-            raise ExecutionError(
+            raise SupervisedExecutionError(
                 command="down",
                 retcode=destroy_retcode,
                 message="Error destroying Terraform infrastructure.",

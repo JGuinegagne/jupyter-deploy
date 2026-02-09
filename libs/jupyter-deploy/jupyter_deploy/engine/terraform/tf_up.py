@@ -4,7 +4,7 @@ from pathlib import Path
 
 from jupyter_deploy.engine.engine_up import EngineUpHandler
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.engine.supervised_execution import CompletionContext, ExecutionError, TerminalHandler
+from jupyter_deploy.engine.supervised_execution import CompletionContext, TerminalHandler
 from jupyter_deploy.engine.supervised_execution_callback import ExecutionCallbackInterface
 from jupyter_deploy.engine.terraform import tf_supervised_executor_factory
 from jupyter_deploy.engine.terraform.tf_constants import (
@@ -19,6 +19,7 @@ from jupyter_deploy.engine.terraform.tf_supervised_execution_callback import (
     TerraformSupervisedExecutionCallback,
 )
 from jupyter_deploy.enum import HistoryEnabledCommandType
+from jupyter_deploy.exceptions import SupervisedExecutionError
 from jupyter_deploy.handlers.command_history_handler import CommandHistoryHandler
 from jupyter_deploy.manifest import JupyterDeployManifest
 
@@ -75,7 +76,7 @@ class TerraformUpHandler(EngineUpHandler):
         # Execute terraform apply
         apply_retcode = apply_executor.execute(apply_cmd)
         if apply_retcode != 0:
-            raise ExecutionError(
+            raise SupervisedExecutionError(
                 command="up",
                 retcode=apply_retcode,
                 message="Error applying Terraform plan.",

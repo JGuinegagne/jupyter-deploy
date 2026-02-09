@@ -1,8 +1,10 @@
 from typing import Annotated
 
 import typer
+from rich.console import Console
 
 from jupyter_deploy import cmd_utils
+from jupyter_deploy.cli.error_decorator import handle_cli_errors
 from jupyter_deploy.handlers.access import organization_handler
 
 organization_app = typer.Typer(
@@ -24,7 +26,8 @@ def set(
     Run either from a jupyter-deploy project directory that you created with `jd init`;
     or pass a --path PATH to such a directory.
     """
-    with cmd_utils.project_dir(project_dir):
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         handler = organization_handler.OrganizationHandler()
         handler.set_organization(organization)
 
@@ -41,7 +44,8 @@ def unset(
     Run either from a jupyter-deploy project directory that you created with `jd init`;
     or pass a --path PATH to such a directory.
     """
-    with cmd_utils.project_dir(project_dir):
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         handler = organization_handler.OrganizationHandler()
         handler.unset_organization()
 
@@ -58,10 +62,10 @@ def get(
     Run either from a jupyter-deploy project directory that you created with `jd init`;
     or pass a --path PATH to such a directory.
     """
-    with cmd_utils.project_dir(project_dir):
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         handler = organization_handler.OrganizationHandler()
         organization = handler.get_organization()
-        console = handler.get_console()
 
         if organization:
             console.print(f"Allowlisted organization: [bold cyan]{organization}[/]")

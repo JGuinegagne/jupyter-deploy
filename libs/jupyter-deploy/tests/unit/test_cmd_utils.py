@@ -16,6 +16,7 @@ from jupyter_deploy.cmd_utils import (
     run_cmd_and_pipe_to_terminal,
     switch_dir,
 )
+from jupyter_deploy.exceptions import InvalidProjectPathError
 
 
 class TestCheckExecutableInstallation(unittest.TestCase):
@@ -628,13 +629,13 @@ class TestProjectManagerDirContextManager(unittest.TestCase):
     @patch("os.getcwd")
     @patch("pathlib.Path.exists")
     def test_raise_value_error_when_path_does_not_exist(self, mock_exists: Mock, mock_getcwd: Mock) -> None:
-        """Test that ValueError is raised when the specified path doesn't exist."""
+        """Test that InvalidProjectPathError is raised when the specified path doesn't exist."""
         # Setup mocks
         mock_getcwd.return_value = "/original/dir"
         mock_exists.return_value = False
 
         # Call the context manager with a non-existent directory
-        with self.assertRaises(ValueError) as context:  # noqa: SIM117
+        with self.assertRaises(InvalidProjectPathError) as context:  # noqa: SIM117
             with project_dir("/nonexistent/dir"):
                 pass
 
@@ -647,14 +648,14 @@ class TestProjectManagerDirContextManager(unittest.TestCase):
     def test_raise_value_error_when_path_not_a_dir(
         self, mock_is_dir: Mock, mock_exists: Mock, mock_getcwd: Mock
     ) -> None:
-        """Test that ValueError is raised when the specified path is not a directory."""
+        """Test that InvalidProjectPathError is raised when the specified path is not a directory."""
         # Setup mocks
         mock_getcwd.return_value = "/original/dir"
         mock_exists.return_value = True
         mock_is_dir.return_value = False
 
         # Call the context manager with a path that's not a directory
-        with self.assertRaises(ValueError) as context:  # noqa: SIM117
+        with self.assertRaises(InvalidProjectPathError) as context:  # noqa: SIM117
             with project_dir("/path/to/file.txt"):
                 pass
 

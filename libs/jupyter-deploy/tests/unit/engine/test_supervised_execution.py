@@ -1,10 +1,8 @@
 import unittest
 from dataclasses import is_dataclass
 
-from jupyter_deploy.engine.supervised_execution import (
-    ExecutionError,
-    ExecutionProgress,
-)
+from jupyter_deploy.engine.supervised_execution import ExecutionProgress
+from jupyter_deploy.exceptions import SupervisedExecutionError
 
 
 class TestExecutionProgress(unittest.TestCase):
@@ -36,12 +34,12 @@ class TestExecutionProgress(unittest.TestCase):
         self.assertTrue(is_dataclass(ExecutionProgress))
 
 
-class TestExecutionError(unittest.TestCase):
+class TestSupervisedExecutionError(unittest.TestCase):
     """Test cases for ExecutionError exception."""
 
     def test_init_sets_attributes(self) -> None:
         """Test that initialization sets all attributes correctly."""
-        error = ExecutionError(
+        error = SupervisedExecutionError(
             command="up",
             retcode=1,
             message="Terraform apply failed",
@@ -49,11 +47,11 @@ class TestExecutionError(unittest.TestCase):
 
         self.assertEqual(error.command, "up")
         self.assertEqual(error.retcode, 1)
-        self.assertEqual(error.message, "Terraform apply failed")
+        self.assertEqual(str(error), "Terraform apply failed")
 
     def test_is_exception(self) -> None:
         """Test that ExecutionError is an Exception."""
-        error = ExecutionError(
+        error = SupervisedExecutionError(
             command="config",
             retcode=2,
             message="Invalid configuration",
@@ -64,7 +62,7 @@ class TestExecutionError(unittest.TestCase):
     def test_exception_message(self) -> None:
         """Test that exception message is set correctly."""
         message = "Something went wrong"
-        error = ExecutionError(
+        error = SupervisedExecutionError(
             command="down",
             retcode=1,
             message=message,
@@ -74,8 +72,8 @@ class TestExecutionError(unittest.TestCase):
 
     def test_can_be_raised_and_caught(self) -> None:
         """Test that the exception can be raised and caught."""
-        with self.assertRaises(ExecutionError) as context:
-            raise ExecutionError(
+        with self.assertRaises(SupervisedExecutionError) as context:
+            raise SupervisedExecutionError(
                 command="up",
                 retcode=1,
                 message="Test error",
@@ -84,26 +82,26 @@ class TestExecutionError(unittest.TestCase):
         error = context.exception
         self.assertEqual(error.command, "up")
         self.assertEqual(error.retcode, 1)
-        self.assertEqual(error.message, "Test error")
+        self.assertEqual(str(error), "Test error")
 
     def test_different_commands(self) -> None:
         """Test ExecutionError with different command types."""
         commands = ["config", "up", "down"]
 
         for cmd in commands:
-            error = ExecutionError(
+            error = SupervisedExecutionError(
                 command=cmd,
                 retcode=1,
                 message=f"{cmd} failed",
             )
 
             self.assertEqual(error.command, cmd)
-            self.assertEqual(error.message, f"{cmd} failed")
+            self.assertEqual(str(error), f"{cmd} failed")
 
     def test_different_return_codes(self) -> None:
         """Test ExecutionError with different return codes."""
         for retcode in [1, 2, 127, 255]:
-            error = ExecutionError(
+            error = SupervisedExecutionError(
                 command="test",
                 retcode=retcode,
                 message="Error",

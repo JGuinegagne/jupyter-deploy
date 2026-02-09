@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import ANY, Mock, patch
 
+from jupyter_deploy.exceptions import InvalidPresetError
 from jupyter_deploy.handlers.project.config_handler import ConfigHandler
 from jupyter_deploy.manifest import JupyterDeployManifestV1
 
@@ -178,8 +179,6 @@ class TestConfigHandler(unittest.TestCase):
     def test_validate_preset_raises_for_invalid_preset(
         self, mock_tf_handler: Mock, mock_retrieve_manifest: Mock
     ) -> None:
-        from jupyter_deploy.handlers.project.config_handler import InvalidPreset
-
         mock_retrieve_manifest.return_value = self.mock_manifest
         tf_mock_handler_instance, tf_fns = self.get_mock_handler_and_fns()
         tf_mock_verify_preset = tf_fns["verify_preset_exists"]
@@ -189,7 +188,7 @@ class TestConfigHandler(unittest.TestCase):
         mock_tf_handler.return_value = tf_mock_handler_instance
 
         handler = ConfigHandler()
-        with self.assertRaises(InvalidPreset) as context:
+        with self.assertRaises(InvalidPresetError) as context:
             handler.validate_preset("invalid")
 
         self.assertEqual(context.exception.preset_name, "invalid")

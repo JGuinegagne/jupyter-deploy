@@ -269,13 +269,13 @@ class TestTemplateVariableClasses(unittest.TestCase):
     def test_get_validator_callback_is_set(self, clz: type, expect_none: bool) -> None:
         instance: TemplateVariableDefinition = clz(variable_name="var", description="desc")
         if expect_none:
-            self.assertIsNone(instance.get_validator_callback())
+            self.assertIsNone(instance.get_validator_callback(typer.BadParameter))
         else:
-            self.assertIsNotNone(instance.get_validator_callback())
+            self.assertIsNotNone(instance.get_validator_callback(typer.BadParameter))
 
     def test_list_map_str_validator_callback(self) -> None:
         instance = ListMapStrTemplateVariableDefinition(variable_name="var", description="desc")
-        cb = instance.get_validator_callback()
+        cb = instance.get_validator_callback(typer.BadParameter)
 
         if not cb:
             raise ValueError("to keep mypy happy")
@@ -294,7 +294,7 @@ class TestTemplateVariableClasses(unittest.TestCase):
 
     def test_map_str_validator_callback(self) -> None:
         instance = DictStrTemplateVariableDefinition(variable_name="var", description="desc")
-        cb = instance.get_validator_callback()
+        cb = instance.get_validator_callback(typer.BadParameter)
 
         if not cb:
             raise ValueError("to keep mypy happy")

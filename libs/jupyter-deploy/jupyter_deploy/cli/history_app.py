@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.table import Table
 
 from jupyter_deploy import cmd_utils
+from jupyter_deploy.cli.error_decorator import handle_cli_errors
 from jupyter_deploy.enum import HistoryEnabledCommandType
 from jupyter_deploy.handlers.command_history_handler import (
     CommandHistoryHandler,
@@ -44,12 +45,11 @@ def list(
     Run either from a jupyter-deploy project directory that you created with `jd init`;
     or pass a --path PATH to such a directory.
     """
-    with cmd_utils.project_dir(project_dir):
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         project_path = Path.cwd()
         handler = CommandHistoryHandler(project_path)
         logs = handler.list_logs(command, max_logs=n)
-
-        console = Console()
 
         if not logs:
             console.print(f"No execution logs found for command: [bold cyan]{command.value}[/]")
@@ -112,8 +112,7 @@ def show(
     Use --skip/-s to offset the first line returned (from the end of the content).
     """
     console = Console()
-
-    with cmd_utils.project_dir(project_dir):
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         project_path = Path.cwd()
         handler = CommandHistoryHandler(project_path)
 
@@ -187,8 +186,7 @@ def clear(
     or pass a --path PATH to such a directory.
     """
     console = Console()
-
-    with cmd_utils.project_dir(project_dir):
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         project_path = Path.cwd()
         handler = CommandHistoryHandler(project_path)
         result = handler.clear_logs(command, keep=keep)

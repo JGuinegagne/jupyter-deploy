@@ -4,16 +4,8 @@ from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.engine.supervised_execution import CompletionContext, TerminalHandler
 from jupyter_deploy.engine.terraform import tf_config
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
+from jupyter_deploy.exceptions import InvalidPresetError
 from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
-
-
-class InvalidPreset(ValueError):
-    """Raised when an invalid preset name is provided."""
-
-    def __init__(self, preset_name: str, valid_presets: list[str]) -> None:
-        self.preset_name = preset_name
-        self.valid_presets = valid_presets
-        super().__init__(f"Preset '{preset_name}' is invalid for this template.")
 
 
 class ConfigHandler(BaseProjectHandler):
@@ -48,14 +40,14 @@ class ConfigHandler(BaseProjectHandler):
         return self._handler.list_presets()
 
     def validate_preset(self, preset_name: str) -> None:
-        """Validate that the preset exists, raise InvalidPreset if not.
+        """Validate that the preset exists, raise InvalidPresetError if not.
 
         Raises:
-            InvalidPreset: If the preset is not valid for this template.
+            InvalidPresetError: If the preset is not valid for this template.
         """
         if not self.verify_preset_exists(preset_name):
             valid_presets = self.list_presets()
-            raise InvalidPreset(preset_name, valid_presets)
+            raise InvalidPresetError(preset_name, valid_presets)
 
     def set_preset(self, preset_name: str | None) -> None:
         """Set the preset name to use for configuration."""

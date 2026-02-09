@@ -5,13 +5,11 @@ from pathlib import Path
 from subprocess import CalledProcessError
 from unittest.mock import Mock, patch
 
-from jupyter_deploy.engine.engine_down import DownAutoApproveRequiredError
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.engine.outdefs import ListStrTemplateOutputDefinition
-from jupyter_deploy.engine.supervised_execution import ExecutionError
 from jupyter_deploy.engine.terraform.tf_down import TerraformDownHandler
 from jupyter_deploy.engine.terraform.tf_enums import TerraformSequenceId
-from jupyter_deploy.handlers.command_history_handler import LogCleanupError
+from jupyter_deploy.exceptions import DownAutoApproveRequiredError, LogCleanupError, SupervisedExecutionError
 
 
 class TestTerraformDownHandler(unittest.TestCase):
@@ -90,7 +88,7 @@ class TestTerraformDownHandler(unittest.TestCase):
         mock_executor.execute.return_value = 1
         mock_create_executor.return_value = mock_executor
 
-        with self.assertRaises(ExecutionError) as context:
+        with self.assertRaises(SupervisedExecutionError) as context:
             handler.destroy()
 
         self.assertEqual(context.exception.retcode, 1)
@@ -314,7 +312,7 @@ class TestTerraformDownHandler(unittest.TestCase):
         mock_create_executor.return_value = mock_executor
 
         # Act & Assert
-        with self.assertRaises(ExecutionError) as context:
+        with self.assertRaises(SupervisedExecutionError) as context:
             handler.destroy(auto_approve=True)
 
         # Check dry-run call
@@ -474,7 +472,7 @@ class TestTerraformDownHandler(unittest.TestCase):
         )
 
         # Act & Assert
-        with self.assertRaises(ExecutionError) as context:
+        with self.assertRaises(SupervisedExecutionError) as context:
             handler.destroy()
 
         self.assertEqual(context.exception.retcode, 1)
@@ -551,7 +549,7 @@ class TestTerraformDownHandler(unittest.TestCase):
         )
 
         # Act & Assert - should raise ExecutionError
-        with self.assertRaises(ExecutionError):
+        with self.assertRaises(SupervisedExecutionError):
             handler.destroy()
 
         # Assert - clear_logs should NOT be called on failure

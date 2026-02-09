@@ -2,8 +2,8 @@ import unittest
 from unittest.mock import Mock, patch
 
 from jupyter_deploy.engine.outdefs import StrTemplateOutputDefinition, TemplateOutputDefinition
+from jupyter_deploy.exceptions import InstructionError, InvalidInstructionResultError
 from jupyter_deploy.manifest import JupyterDeployCommandV1
-from jupyter_deploy.provider.instruction_runner import InterruptInstructionError
 from jupyter_deploy.provider.manifest_command_runner import ManifestCommandRunner
 from jupyter_deploy.provider.resolved_clidefs import ResolvedCliParameter, StrResolvedCliParameter
 from jupyter_deploy.provider.resolved_resultdefs import (
@@ -371,7 +371,7 @@ class TestManifestCommandRunner(unittest.TestCase):
             modified_cmd.results.append(invalid_result)
 
         # Test with invalid source key
-        with self.assertRaises(KeyError):
+        with self.assertRaises(InvalidInstructionResultError):
             runner.get_result_value(modified_cmd, "invalid-result", str)
 
     @patch(
@@ -622,17 +622,14 @@ class TestManifestCommandRunner(unittest.TestCase):
         # Assert
         self.assertTrue(success)
 
-        # Assert - should raise KeyError for invalid source key
-        with self.assertRaises(KeyError):
+        # Assert - should raise InvalidInstructionResultError for invalid source key
+        with self.assertRaises(InvalidInstructionResultError):
             runner.update_variables(cmd)
 
     @patch(
         "jupyter_deploy.provider.instruction_runner_factory.InstructionRunnerFactory.get_provider_instruction_runner"
     )
-    @patch("typer.Abort")
-    def test_interrupt_instruction_error_calls_typer_abort(
-        self, mock_typer_abort: Mock, mock_get_provider_instruction_runner: Mock
-    ) -> None:
+    def test_instruction_error_bubbles_up(self, mock_get_provider_instruction_runner: Mock) -> None:
         # Arrange
         cmd = self.get_cmd_def()
         mock_output_defs = self.get_project_outputs()
@@ -642,17 +639,14 @@ class TestManifestCommandRunner(unittest.TestCase):
         output_handler_mock = Mock()
         output_handler_mock.get_full_project_outputs.return_value = mock_output_defs
 
-        # Configure the mock runner to raise InterruptInstructionError
+        # Configure the mock runner to raise InstructionError
         mock_runner = Mock()
-        mock_runner.execute_instruction.side_effect = InterruptInstructionError()
+        mock_runner.execute_instruction.side_effect = InstructionError("Test instruction error")
         mock_get_provider_instruction_runner.return_value = mock_runner
 
-        # Act
+        # Act & Assert - exception should bubble up
         runner = ManifestCommandRunner(
             console=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
         )
-        success, results = runner.run_command_sequence(cmd, mock_cliparam_defs)
-
-        # Assert
-        self.assertFalse(success)
-        mock_typer_abort.assert_called_once()
+        with self.assertRaises(InstructionError):
+            runner.run_command_sequence(cmd, mock_cliparam_defs)

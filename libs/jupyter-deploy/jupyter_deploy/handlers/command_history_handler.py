@@ -12,19 +12,8 @@ from jupyter_deploy.cmd_history import (
 )
 from jupyter_deploy.constants import HISTORY_DIR
 from jupyter_deploy.enum import HistoryEnabledCommandType
+from jupyter_deploy.exceptions import LogCleanupError, LogNotFound
 from jupyter_deploy.fs_utils import list_files_sorted
-
-
-class LogNotFound(ValueError):
-    """Raised when a command execution log cannot be found."""
-
-    pass
-
-
-class LogCleanupError(Exception):
-    """Raised when log cleanup fails."""
-
-    pass
 
 
 class CommandHistoryHandler:

@@ -3,15 +3,21 @@ from unittest.mock import Mock, patch
 
 from rich.console import Console
 
+from jupyter_deploy.exceptions import (
+    HostCommandInstructionError,
+    InstructionNotFoundError,
+    InteractiveSessionError,
+    InteractiveSessionTimeoutError,
+    ToolRequiredError,
+    UnreachableHostError,
+)
 from jupyter_deploy.provider.aws.aws_ssm_runner import AwsSsmInstruction, AwsSsmRunner
-from jupyter_deploy.provider.instruction_runner import InterruptInstructionError
 from jupyter_deploy.provider.resolved_argdefs import (
     IntResolvedInstructionArgument,
     ListStrResolvedInstructionArgument,
     ResolvedInstructionArgument,
     StrResolvedInstructionArgument,
 )
-from jupyter_deploy.verify_utils import ToolRequiredError
 
 
 class TestAwsSsmRunner(unittest.TestCase):
@@ -36,7 +42,7 @@ class TestAwsSsmRunner(unittest.TestCase):
         invalid_instruction = "invalid-instruction"
 
         # Act & Assert
-        with self.assertRaises(NotImplementedError) as context:
+        with self.assertRaises(InstructionNotFoundError) as context:
             runner.execute_instruction(instruction_name=invalid_instruction, resolved_arguments={}, console=console)
 
         self.assertIn(f"aws.ssm.{invalid_instruction}", str(context.exception))
@@ -57,11 +63,10 @@ class TestVerifyEc2InstanceAccessible(unittest.TestCase):
             "LastPingDateTime": "2023-01-01T00:00:00.000Z",
         }
 
-        # Act
-        result = runner._verify_ec2_instance_accessible(instance_id, console)
+        # Act - should not raise
+        runner._verify_ec2_instance_accessible(instance_id, console)
 
         # Assert
-        self.assertTrue(result)
         mock_describe.assert_called_once_with(runner.client, instance_id=instance_id)
         # Console print should not be called when silent_success=True (default)
         console.print.assert_not_called()
@@ -80,18 +85,17 @@ class TestVerifyEc2InstanceAccessible(unittest.TestCase):
             "LastPingDateTime": "2023-01-01T00:00:00.000Z",
         }
 
-        # Act
-        result = runner._verify_ec2_instance_accessible(instance_id, console, silent_success=False)
+        # Act - should not raise
+        runner._verify_ec2_instance_accessible(instance_id, console, silent_success=False)
 
         # Assert
-        self.assertTrue(result)
         mock_describe.assert_called_once_with(runner.client, instance_id=instance_id)
         # Console print should be called when silent_success=False
         console.print.assert_called_once()
         self.assertIn(instance_id, console.print.mock_calls[0][1][0])
 
     @patch("jupyter_deploy.api.aws.ssm.ssm_session.describe_instance_information")
-    def test_ping_status_connection_lost_return_false_and_print_irrespective_of_flag(self, mock_describe: Mock) -> None:
+    def test_ping_status_connection_lost_raises_unreachable_host_error(self, mock_describe: Mock) -> None:
         # Arrange
         runner = AwsSsmRunner(region_name="us-west-2")
         console = Mock(spec=Console)
@@ -105,25 +109,16 @@ class TestVerifyEc2InstanceAccessible(unittest.TestCase):
             "LastPingDateTime": last_ping_date,
         }
 
-        # Test both with silent_success=True and False
-        for silent_success in [True, False]:
-            # Reset console mock between iterations
-            console.reset_mock()
+        # Act & Assert - should raise UnreachableHostError
+        with self.assertRaises(UnreachableHostError) as context:
+            runner._verify_ec2_instance_accessible(instance_id, console)
 
-            # Act
-            result = runner._verify_ec2_instance_accessible(instance_id, console, silent_success=silent_success)
-
-            # Assert
-            self.assertFalse(result)
-            # Console print should be called regardless of silent_success for error cases
-            console.print.assert_called_once()
-            # Verify that the print indicates connection lost
-            self.assertIn(instance_id, console.print.mock_calls[0][1][0])
-            self.assertIn(last_ping_date, console.print.mock_calls[0][1][0])
-            self.assertEqual(console.print.mock_calls[0][2].get("style"), "red")
+        # Verify error message contains relevant information
+        self.assertIn(instance_id, str(context.exception))
+        self.assertIn(last_ping_date, str(context.exception))
 
     @patch("jupyter_deploy.api.aws.ssm.ssm_session.describe_instance_information")
-    def test_ping_status_inactive_return_false_and_print_irrespective_of_flag(self, mock_describe: Mock) -> None:
+    def test_ping_status_inactive_raises_unreachable_host_error(self, mock_describe: Mock) -> None:
         # Arrange
         runner = AwsSsmRunner(region_name="us-west-2")
         console = Mock(spec=Console)
@@ -135,23 +130,15 @@ class TestVerifyEc2InstanceAccessible(unittest.TestCase):
             "PingStatus": "Inactive",
         }
 
-        # Test both with silent_success=True and False
-        for silent_success in [True, False]:
-            # Reset console mock between iterations
-            console.reset_mock()
+        # Act & Assert - should raise UnreachableHostError
+        with self.assertRaises(UnreachableHostError) as context:
+            runner._verify_ec2_instance_accessible(instance_id, console)
 
-            # Act
-            result = runner._verify_ec2_instance_accessible(instance_id, console, silent_success=silent_success)
-
-            # Assert
-            self.assertFalse(result)
-            # Console print should be called regardless of silent_success for error cases
-            console.print.assert_called_once()
-            self.assertIn(instance_id, console.print.mock_calls[0][1][0])
-            self.assertEqual(console.print.mock_calls[0][2].get("style"), "red")
+        # Verify error message contains instance ID
+        self.assertIn(instance_id, str(context.exception))
 
     @patch("jupyter_deploy.api.aws.ssm.ssm_session.describe_instance_information")
-    def test_other_ping_status_return_false_and_print_irrespective_of_flag(self, mock_describe: Mock) -> None:
+    def test_missing_ping_status_raises_unreachable_host_error(self, mock_describe: Mock) -> None:
         # Arrange
         runner = AwsSsmRunner(region_name="us-west-2")
         console = Mock(spec=Console)
@@ -163,20 +150,12 @@ class TestVerifyEc2InstanceAccessible(unittest.TestCase):
             # No PingStatus provided
         }
 
-        # Test both with silent_success=True and False
-        for silent_success in [True, False]:
-            # Reset console mock between iterations
-            console.reset_mock()
+        # Act & Assert - should raise UnreachableHostError
+        with self.assertRaises(UnreachableHostError) as context:
+            runner._verify_ec2_instance_accessible(instance_id, console)
 
-            # Act
-            result = runner._verify_ec2_instance_accessible(instance_id, console, silent_success=silent_success)
-
-            # Assert
-            self.assertFalse(result)
-            # Console print should be called regardless of silent_success for error cases
-            console.print.assert_called_once()
-            self.assertIn(instance_id, console.print.mock_calls[0][1][0])
-            self.assertEqual(console.print.mock_calls[0][2].get("style"), "red")
+        # Verify error message contains instance ID
+        self.assertIn(instance_id, str(context.exception))
 
     @patch("jupyter_deploy.api.aws.ssm.ssm_session.describe_instance_information")
     def test_bubbles_up_errors_from_api(self, mock_describe: Mock) -> None:
@@ -208,7 +187,6 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
         instance_id = "i-1234567890abcdef0"
 
         # Mock the verify method to return True (agent is accessible)
-        mock_verify.return_value = True
 
         # Added standard error content to match the updated implementation
         mock_send_cmd.return_value = {
@@ -272,7 +250,6 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
         workingDirectory = "/tmp"
 
         # Mock the verify method to return True (agent is accessible)
-        mock_verify.return_value = True
 
         mock_send_cmd.return_value = {
             "Status": "Success",
@@ -343,7 +320,6 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
         wait_after_send_seconds = 5
 
         # Mock the verify method to return True (agent is accessible)
-        mock_verify.return_value = True
 
         mock_send_cmd.return_value = {
             "Status": "Success",
@@ -385,15 +361,12 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
 
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
     @patch("jupyter_deploy.api.aws.ssm.ssm_command.send_cmd_to_one_instance_and_wait_sync")
-    def test_execute_cmd_fail_prints_stdout_and_stderror(self, mock_send_cmd: Mock, mock_verify: Mock) -> None:
+    def test_execute_cmd_fail_raises_instruction_error(self, mock_send_cmd: Mock, mock_verify: Mock) -> None:
         # Arrange
         runner = AwsSsmRunner(region_name="us-west-2")
         console = Mock(spec=Console)
         document_name = "AWS-RunShellScript"
         instance_id = "i-1234567890abcdef0"
-
-        # Mock the verify method to return True (agent is accessible)
-        mock_verify.return_value = True
 
         # Setup mock to return failed status with stdout and stderr content
         mock_send_cmd.return_value = {
@@ -407,49 +380,20 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
             "instance_id": StrResolvedInstructionArgument(argument_name="instance_id", value=instance_id),
         }
 
-        # Act
-        result = runner.execute_instruction(
-            instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
-            resolved_arguments=resolved_arguments,
-            console=console,
-        )
+        # Act & Assert - should raise InstructionError
+        with self.assertRaises(HostCommandInstructionError) as context:
+            runner.execute_instruction(
+                instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
+                resolved_arguments=resolved_arguments,
+                console=console,
+            )
 
-        # Assert
-        # Verify that SSM agent connection was checked
-        mock_verify.assert_called_once_with(instance_id=instance_id, console=console)
-
-        self.assertEqual(result["Status"].value, "Failed")
-        self.assertEqual(result["StandardOutputContent"].value, "Some output before failure")
-
-        # Verify that console.print was called with appropriate error messages
-        # First call should be the executing message
-        # Second call should indicate failure
-        self.assertTrue(console.print.call_count >= 3)
-
-        # Check for failure message
-        failure_call_idx = -1
-        for i, call in enumerate(console.print.mock_calls):
-            if len(call[1]) > 0 and isinstance(call[1][0], str) and "failed" in call[1][0]:
-                failure_call_idx = i
-                break
-
-        self.assertNotEqual(failure_call_idx, -1, "No failure message found in console output")
-        failure_call = console.print.mock_calls[failure_call_idx]
-        self.assertIn("failed", failure_call[1][0])
-        self.assertEqual(failure_call[2].get("style"), "red")
-
-        # Check that stderr content was printed somewhere
-        stderr_found = False
-        stdout_found = False
-
-        for call in console.print.mock_calls:
-            if len(call[1]) > 0 and call[1][0] == "Error: Command not found":
-                stderr_found = True
-            if len(call[1]) > 0 and call[1][0] == "Some output before failure":
-                stdout_found = True
-
-        self.assertTrue(stderr_found, "stderr content not found in console output")
-        self.assertTrue(stdout_found, "stdout content not found in console output")
+        # Verify error message and attributes
+        error = context.exception
+        self.assertIn(document_name, str(error))
+        self.assertEqual(error.stderr, "Error: Command not found")
+        self.assertEqual(error.stdout, "Some output before failure")
+        self.assertEqual(error.retcode, 0)
 
     def test_execute_raise_on_missing_or_invalid_type_instance_id(self) -> None:
         # Arrange
@@ -533,7 +477,6 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
         instance_id = "i-1234567890abcdef0"
 
         # Mock the verify method to return True (agent is accessible)
-        mock_verify.return_value = True
 
         # Setup mock to raise an exception
         mock_send_cmd.side_effect = Exception("API Error")
@@ -571,8 +514,8 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
         document_name = "AWS-RunShellScript"
         instance_id = "i-1234567890abcdef0"
 
-        # Mock the verify method to return False (agent is NOT accessible)
-        mock_verify.return_value = False
+        # Mock the verify method to raise UnreachableHostError (agent is NOT accessible)
+        mock_verify.side_effect = UnreachableHostError(f"SSM agent on instance '{instance_id}' is not running")
 
         resolved_arguments: dict[str, ResolvedInstructionArgument] = {
             "document_name": StrResolvedInstructionArgument(argument_name="document_name", value=document_name),
@@ -580,7 +523,7 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
         }
 
         # Act & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(UnreachableHostError):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
                 resolved_arguments=resolved_arguments,
@@ -599,7 +542,6 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
         document_name = "AWS-RunShellScript"
         instance_id = "i-1234567890abcdef0"
 
-        mock_verify.return_value = True
         mock_send_cmd.return_value = {
             "Status": "Success",
             "StandardOutputContent": "Command output",
@@ -633,7 +575,6 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
         document_name = "AWS-RunShellScript"
         instance_id = "i-1234567890abcdef0"
 
-        mock_verify.return_value = True
         # Simulate command failure with exit code 127 (command not found)
         mock_send_cmd.return_value = {
             "Status": "Failed",
@@ -647,17 +588,13 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
             "instance_id": StrResolvedInstructionArgument(argument_name="instance_id", value=instance_id),
         }
 
-        # Act
-        result = runner.execute_instruction(
-            instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
-            resolved_arguments=resolved_arguments,
-            console=console,
-        )
-
-        # Assert
-        self.assertIn("ResponseCode", result)
-        self.assertEqual(result["ResponseCode"].value, 127)
-        self.assertEqual(result["Status"].value, "Failed")
+        # Act & Assert - should raise InstructionError
+        with self.assertRaises(HostCommandInstructionError):
+            runner.execute_instruction(
+                instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
+                resolved_arguments=resolved_arguments,
+                console=console,
+            )
 
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
     @patch("jupyter_deploy.api.aws.ssm.ssm_command.send_cmd_to_one_instance_and_wait_sync")
@@ -668,7 +605,6 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
         document_name = "AWS-RunShellScript"
         instance_id = "i-1234567890abcdef0"
 
-        mock_verify.return_value = True
         # Simulate response without ResponseCode (backward compatibility)
         mock_send_cmd.return_value = {
             "Status": "Success",
@@ -757,7 +693,7 @@ class TestStartSession(unittest.TestCase):
         }
 
         # Act & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(ToolRequiredError):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.START_SESSION,
                 resolved_arguments=resolved_arguments,
@@ -776,15 +712,14 @@ class TestStartSession(unittest.TestCase):
         target_id = "i-1234567890abcdef0"
 
         # Mock successful tools verification but failed EC2 connection
-        mock_verify_tools.return_value = True
-        mock_verify_ec2.return_value = False
+        mock_verify_ec2.side_effect = UnreachableHostError(f"SSM agent on instance '{target_id}' is not running")
 
         resolved_arguments: dict[str, ResolvedInstructionArgument] = {
             "target_id": StrResolvedInstructionArgument(argument_name="target_id", value=target_id),
         }
 
         # Act & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(UnreachableHostError):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.START_SESSION,
                 resolved_arguments=resolved_arguments,
@@ -818,7 +753,7 @@ class TestStartSession(unittest.TestCase):
         }
 
         # Act & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(InteractiveSessionError):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.START_SESSION,
                 resolved_arguments=resolved_arguments,
@@ -851,7 +786,7 @@ class TestStartSession(unittest.TestCase):
         }
 
         # Act & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(InteractiveSessionTimeoutError):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.START_SESSION,
                 resolved_arguments=resolved_arguments,
@@ -955,7 +890,7 @@ class TestExecuteInstructions(unittest.TestCase):
         }
 
         # Act & Assert
-        with self.assertRaises(NotImplementedError) as context:
+        with self.assertRaises(InstructionNotFoundError) as context:
             runner.execute_instruction(
                 instruction_name=invalid_instruction, resolved_arguments=resolved_arguments, console=console
             )
@@ -972,7 +907,6 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
         console = Mock(spec=Console)
         instance_id = "i-1234567890abcdef0"
 
-        mock_verify.return_value = True
         mock_send_cmd.return_value = {
             "Status": "Success",
             "StandardOutputContent": "output",
@@ -1011,7 +945,6 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
         instance_id = "i-1234567890abcdef0"
         commands = ["df", "-h"]
 
-        mock_verify.return_value = True
         mock_send_cmd.return_value = {
             "Status": "Success",
             "StandardOutputContent": "output",
@@ -1043,7 +976,6 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
         console = Mock(spec=Console)
         instance_id = "i-1234567890abcdef0"
 
-        mock_verify.return_value = True
         mock_send_cmd.return_value = {
             "Status": "Success",
             "StandardOutputContent": "stdout content",
@@ -1075,7 +1007,6 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
         console = Mock(spec=Console)
         instance_id = "i-1234567890abcdef0"
 
-        mock_verify.return_value = True
         mock_send_cmd.return_value = {
             "Status": "Failed",
             "StandardOutputContent": "",
@@ -1089,18 +1020,19 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
             ),
         }
 
-        # Act
-        result = runner.execute_instruction(
-            instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
-            resolved_arguments=resolved_arguments,
-            console=console,
-        )
+        # Act & Assert - should raise InstructionError
+        with self.assertRaises(HostCommandInstructionError) as context:
+            runner.execute_instruction(
+                instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
+                resolved_arguments=resolved_arguments,
+                console=console,
+            )
 
-        # Assert
-        self.assertEqual(result["Status"].value, "Failed")
-        self.assertEqual(result["StandardErrorContent"].value, "command not found")
-        # Verify that error was printed to console
-        console.print.assert_called()
+        # Verify error attributes contain stderr content
+        error = context.exception
+        self.assertEqual(error.stderr, "command not found")
+        self.assertEqual(error.stdout, "")
+        self.assertEqual(error.retcode, 0)
 
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
     def test_raises_when_verification_fails(self, mock_verify: Mock) -> None:
@@ -1109,7 +1041,7 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
         console = Mock(spec=Console)
         instance_id = "i-1234567890abcdef0"
 
-        mock_verify.return_value = False
+        mock_verify.side_effect = UnreachableHostError(f"SSM agent on instance '{instance_id}' is not running")
 
         resolved_arguments: dict[str, ResolvedInstructionArgument] = {
             "instance_id": StrResolvedInstructionArgument(argument_name="instance_id", value=instance_id),
@@ -1117,7 +1049,7 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
         }
 
         # Act & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(UnreachableHostError):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
                 resolved_arguments=resolved_arguments,
@@ -1134,7 +1066,6 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
         console = Mock(spec=Console)
         instance_id = "i-1234567890abcdef0"
 
-        mock_verify.return_value = True
         mock_send_cmd.return_value = {
             "Status": "Success",
             "StandardOutputContent": "jovyan",
@@ -1161,13 +1092,12 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
 
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.ssm_command.send_cmd_to_one_instance_and_wait_sync")
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
-    def test_includes_non_zero_response_code_on_failure(self, mock_verify: Mock, mock_send_cmd: Mock) -> None:
+    def test_raises_instruction_error_on_failure(self, mock_verify: Mock, mock_send_cmd: Mock) -> None:
         # Arrange
         runner = AwsSsmRunner(region_name="us-west-2")
         console = Mock(spec=Console)
         instance_id = "i-1234567890abcdef0"
 
-        mock_verify.return_value = True
         # Simulate command failure with exit code 1
         mock_send_cmd.return_value = {
             "Status": "Failed",
@@ -1181,17 +1111,13 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
             "commands": ListStrResolvedInstructionArgument(argument_name="commands", value=["false"]),
         }
 
-        # Act
-        result = runner.execute_instruction(
-            instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
-            resolved_arguments=resolved_arguments,
-            console=console,
-        )
-
-        # Assert
-        self.assertIn("ResponseCode", result)
-        self.assertEqual(result["ResponseCode"].value, 1)
-        self.assertEqual(result["Status"].value, "Failed")
+        # Act & Assert - should raise InstructionError
+        with self.assertRaises(HostCommandInstructionError):
+            runner.execute_instruction(
+                instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
+                resolved_arguments=resolved_arguments,
+                console=console,
+            )
 
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.ssm_command.send_cmd_to_one_instance_and_wait_sync")
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
@@ -1201,7 +1127,6 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
         console = Mock(spec=Console)
         instance_id = "i-1234567890abcdef0"
 
-        mock_verify.return_value = True
         # Simulate response without ResponseCode (backward compatibility)
         mock_send_cmd.return_value = {
             "Status": "Success",

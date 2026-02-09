@@ -6,8 +6,6 @@ from unittest.mock import Mock, patch
 
 from pydantic import ValidationError
 
-from jupyter_deploy.engine.engine_config import ReadConfigurationError
-from jupyter_deploy.engine.supervised_execution import ExecutionError
 from jupyter_deploy.engine.terraform.tf_config import TerraformConfigHandler
 from jupyter_deploy.engine.terraform.tf_constants import (
     TF_DEFAULT_PLAN_FILENAME,
@@ -23,6 +21,7 @@ from jupyter_deploy.engine.vardefs import (
     StrTemplateVariableDefinition,
     TemplateVariableDefinition,
 )
+from jupyter_deploy.exceptions import ReadConfigurationError, SupervisedExecutionError
 from jupyter_deploy.handlers.command_history_handler import LogCleanupError
 
 
@@ -356,7 +355,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history())
 
         # Act & Assert - should raise ExecutionError
-        with self.assertRaises(ExecutionError) as context:
+        with self.assertRaises(SupervisedExecutionError) as context:
             handler.configure()
 
         self.assertEqual(context.exception.retcode, 1)
@@ -406,7 +405,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history())
 
         # Act & Assert - should raise ExecutionError
-        with self.assertRaises(ExecutionError) as context:
+        with self.assertRaises(SupervisedExecutionError) as context:
             handler.configure()
 
         self.assertEqual(context.exception.retcode, 1)
@@ -911,7 +910,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         handler = TerraformConfigHandler(Path("/fake/path"), Mock(), mock_history)
 
         # Act & Assert - should raise ExecutionError
-        with self.assertRaises(ExecutionError):
+        with self.assertRaises(SupervisedExecutionError):
             handler.configure()
 
         # Assert - clear_logs should NOT be called on failure

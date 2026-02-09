@@ -5,7 +5,8 @@ from mypy_boto3_ec2.client import EC2Client
 from rich import console as rich_console
 
 from jupyter_deploy.api.aws.ec2 import ec2_instance
-from jupyter_deploy.provider.instruction_runner import InstructionRunner, InterruptInstructionError
+from jupyter_deploy.exceptions import IncompatibleHostStateError, InstructionNotFoundError
+from jupyter_deploy.provider.instruction_runner import InstructionRunner
 from jupyter_deploy.provider.resolved_argdefs import (
     ResolvedInstructionArgument,
     StrResolvedInstructionArgument,
@@ -69,29 +70,31 @@ class AwsEc2Runner(InstructionRunner):
         state = ec2_instance.Ec2InstanceState.from_state_response(instance_status.get("InstanceState", {}))
 
         if state == ec2_instance.Ec2InstanceState.PENDING:
-            console.print(f":warning: Instance [bold]{instance_id}[/] is already starting...", style="yellow")
-            console.line()
-            console.print("Wait for the instance to come online.")
-            raise InterruptInstructionError
+            raise IncompatibleHostStateError(
+                f"Instance '{instance_id}' is already starting",
+                hint="Wait for the instance to come online",
+            )
         elif state == ec2_instance.Ec2InstanceState.RUNNING:
-            console.print(f":white_check_mark: Instance [bold]{instance_id}[/] is already running.", style="green")
-            console.line()
-            raise InterruptInstructionError
+            raise IncompatibleHostStateError(
+                f"Instance '{instance_id}' is already running",
+            )
         elif state == ec2_instance.Ec2InstanceState.SHUTTING_DOWN:
-            console.print(f":x: Cannot start instance [bold]{instance_id}[/], it is being terminated.", style="red")
-            console.line()
-            raise InterruptInstructionError
+            raise IncompatibleHostStateError(
+                f"Cannot start instance '{instance_id}', it is being terminated",
+            )
         elif state == ec2_instance.Ec2InstanceState.TERMINATED:
-            console.print(f":x: Cannot start terminated instance [bold]{instance_id}[/].", style="red")
-            console.line()
-            raise InterruptInstructionError
+            raise IncompatibleHostStateError(
+                f"Cannot start terminated instance '{instance_id}'",
+            )
         elif state == ec2_instance.Ec2InstanceState.STOPPING:
-            console.print(f":x: Cannot start stopping instance [bold]{instance_id}[/]...", style="red")
-            console.line()
-            console.print("Wait for instance to fully stop.")
-            raise InterruptInstructionError
+            raise IncompatibleHostStateError(
+                f"Instance '{instance_id}' is stopping",
+                hint="Wait for the instance to fully stop",
+            )
         elif not state.is_startable():
-            raise ValueError(f"Unhandled instance state: '{state.value}'")
+            raise IncompatibleHostStateError(
+                f"Cannot start instance '{instance_id}' in state '{state.value}'",
+            )
 
         ec2_instance.start_instance(
             self.client,
@@ -114,29 +117,31 @@ class AwsEc2Runner(InstructionRunner):
         state = ec2_instance.Ec2InstanceState.from_state_response(instance_status.get("InstanceState", {}))
 
         if state == ec2_instance.Ec2InstanceState.PENDING:
-            console.print(f":x: Instance [bold]{instance_id}[/] is starting...", style="yellow")
-            console.line()
-            console.print("Wait for the instance to come online.")
-            raise InterruptInstructionError
+            raise IncompatibleHostStateError(
+                f"Instance '{instance_id}' is starting",
+                hint="Wait for the instance to come online",
+            )
         elif state == ec2_instance.Ec2InstanceState.SHUTTING_DOWN:
-            console.print(f":x: Cannot stop instance [bold]{instance_id}[/], it is being terminated.", style="red")
-            console.line()
-            raise InterruptInstructionError
+            raise IncompatibleHostStateError(
+                f"Cannot stop instance '{instance_id}', it is being terminated",
+            )
         elif state == ec2_instance.Ec2InstanceState.TERMINATED:
-            console.print(f":x: Cannot stop terminated instance [bold]{instance_id}[/].", style="red")
-            console.line()
-            raise InterruptInstructionError
+            raise IncompatibleHostStateError(
+                f"Cannot stop terminated instance '{instance_id}'",
+            )
         elif state == ec2_instance.Ec2InstanceState.STOPPING:
-            console.print(f":warning: Instance [bold]{instance_id}[/] is already stopping...", style="yellow")
-            console.line()
-            console.print("Wait for the instance to fully stop.")
-            raise InterruptInstructionError
+            raise IncompatibleHostStateError(
+                f"Instance '{instance_id}' is already stopping",
+                hint="Wait for the instance to fully stop",
+            )
         elif state == ec2_instance.Ec2InstanceState.STOPPED:
-            console.print(f":white_check_mark: Instance [bold]{instance_id}[/] is already stopped.", style="green")
-            console.line()
-            raise InterruptInstructionError
+            raise IncompatibleHostStateError(
+                f"Instance '{instance_id}' is already stopped",
+            )
         elif not state.is_stoppable():
-            raise ValueError(f"Unhandled instance state: '{state.value}'")
+            raise IncompatibleHostStateError(
+                f"Cannot stop instance '{instance_id}' in state '{state.value}'",
+            )
 
         ec2_instance.stop_instance(
             self.client,
@@ -159,30 +164,32 @@ class AwsEc2Runner(InstructionRunner):
         state = ec2_instance.Ec2InstanceState.from_state_response(instance_status.get("InstanceState", {}))
 
         if state == ec2_instance.Ec2InstanceState.PENDING:
-            console.print(f":x: Cannot reboot instance [bold]{instance_id}[/], it is still starting...", style="red")
-            console.line()
-            console.print("Wait for the instance to come online.")
-            raise InterruptInstructionError
+            raise IncompatibleHostStateError(
+                f"Instance '{instance_id}' is starting",
+                hint="Wait for the instance to come online",
+            )
         elif state == ec2_instance.Ec2InstanceState.SHUTTING_DOWN:
-            console.print(f":x: Cannot reboot instance [bold]{instance_id}[/], it is being terminated.", style="red")
-            console.line()
-            raise InterruptInstructionError
+            raise IncompatibleHostStateError(
+                f"Cannot reboot instance '{instance_id}', it is being terminated",
+            )
         elif state == ec2_instance.Ec2InstanceState.TERMINATED:
-            console.print(f":x: Cannot reboot terminated instance [bold]{instance_id}[/].", style="red")
-            console.line()
-            raise InterruptInstructionError
+            raise IncompatibleHostStateError(
+                f"Cannot reboot terminated instance '{instance_id}'",
+            )
         elif state == ec2_instance.Ec2InstanceState.STOPPING:
-            console.print(f"Cannot reboot stopping instance [bold]{instance_id}[/].", style="red")
-            console.line()
-            console.print("Wait for the instance to fully stop, then run `jd host start`.")
-            raise InterruptInstructionError
+            raise IncompatibleHostStateError(
+                f"Instance '{instance_id}' is stopping",
+                hint="Wait for the instance to fully stop, then run 'jd host start'",
+            )
         elif state == ec2_instance.Ec2InstanceState.STOPPED:
-            console.print(f":x: Cannot reboot stopped instance [bold]{instance_id}[/].", style="red")
-            console.line()
-            console.print("Run the start command instead.")
-            raise InterruptInstructionError
+            raise IncompatibleHostStateError(
+                f"Cannot reboot stopped instance '{instance_id}'",
+                hint="Run 'jd host start' instead",
+            )
         elif not state.is_stoppable():
-            raise ValueError(f"Unhandled instance state: '{state.value}'")
+            raise IncompatibleHostStateError(
+                f"Cannot reboot instance '{instance_id}' in state '{state.value}'",
+            )
 
         ec2_instance.restart_instance(
             self.client,
@@ -256,4 +263,4 @@ class AwsEc2Runner(InstructionRunner):
                 timeout_seconds=600,  # GPU instances take a while to stop
             )
 
-        raise NotImplementedError(f"No execution implementation for command: 'aws.ec2.{instruction_name}'")
+        raise InstructionNotFoundError(f"No execution implementation for command: 'aws.ec2.{instruction_name}'")

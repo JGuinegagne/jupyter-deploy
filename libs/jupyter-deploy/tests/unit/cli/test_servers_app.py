@@ -62,20 +62,20 @@ class TestServerStatusCmd(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_server_handler_class.assert_called_once()
         mock_handler_fns["get_server_status"].assert_called_once()
-        mock_handler_fns["get_console"].assert_called_once()
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_uses_handler_console_to_print_status_response(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
+        mock_project_dir.return_value.__enter__.return_value = None
 
         mock_console = Mock()
-        mock_handler_fns["get_console"].return_value = mock_console
-        mock_project_dir.return_value.__enter__.return_value = None
+        mock_console_class.return_value = mock_console
 
         # Execute
         runner = CliRunner()
@@ -87,9 +87,12 @@ class TestServerStatusCmd(unittest.TestCase):
         mock_call = mock_console.print.mock_calls[0]
         self.assertTrue("IN_SERVICE" in mock_call[1][0])
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_switches_dir_when_passed_a_project(self, mock_project_dir: Mock, mock_server_handler_class: Mock) -> None:
+    def test_switches_dir_when_passed_a_project(
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+    ) -> None:
         # Setup
         mock_server_handler, _ = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
@@ -157,40 +160,43 @@ class TestServerStartCmd(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_server_handler_class.assert_called_once()
         mock_handler_fns["start_server"].assert_called_once_with("all")
-        mock_handler_fns["get_console"].assert_called_once()
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_print_the_valid_services_when_passed_an_invalid_service(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
         mock_project_dir.return_value.__enter__.return_value = None
 
-        mock_handler_fns["start_server"].side_effect = InvalidServiceError(
-            "Invalid service, use one of ['jupyter', 'traefik']"
-        )
+        mock_handler_fns["start_server"].side_effect = InvalidServiceError("invalid-service", ["jupyter", "traefik"])
 
         # Set up the console mock
         mock_console = Mock()
-        mock_handler_fns["get_console"].return_value = mock_console
+        mock_console_class.return_value = mock_console
 
         # Execute
         runner = CliRunner()
         result = runner.invoke(servers_app, ["start", "--service", "invalid_service"])
 
         # Assert
-        self.assertEqual(result.exit_code, 0)
-        mock_console.print.assert_called_once()
-        mock_call = mock_console.print.mock_calls[0]
-        self.assertTrue("Invalid service" in mock_call[1][0])
-        self.assertTrue("red" in mock_call[2]["style"])
+        self.assertEqual(result.exit_code, 1)
+        # Error decorator calls print twice: once for error, once for available services
+        self.assertEqual(mock_console.print.call_count, 2)
+        # First call is the error message
+        first_call = mock_console.print.mock_calls[0]
+        self.assertTrue("Invalid service" in first_call[1][0])
+        self.assertTrue("red" in first_call[2]["style"])
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_switches_dir_when_passed_a_project(self, mock_project_dir: Mock, mock_server_handler_class: Mock) -> None:
+    def test_switches_dir_when_passed_a_project(
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+    ) -> None:
         # Setup
         mock_server_handler, _ = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
@@ -204,9 +210,12 @@ class TestServerStartCmd(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_project_dir.assert_called_once_with("/test/project/path")
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_raises_when_start_raises(self, mock_project_dir: Mock, mock_server_handler_class: Mock) -> None:
+    def test_raises_when_start_raises(
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+    ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
@@ -274,40 +283,43 @@ class TestServerStopCmd(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_server_handler_class.assert_called_once()
         mock_handler_fns["stop_server"].assert_called_once_with("all")
-        mock_handler_fns["get_console"].assert_called_once()
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_print_the_valid_services_when_passed_an_invalid_service(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
         mock_project_dir.return_value.__enter__.return_value = None
 
-        mock_handler_fns["stop_server"].side_effect = InvalidServiceError(
-            "Invalid service, use one of ['jupyter', 'traefik']"
-        )
+        mock_handler_fns["stop_server"].side_effect = InvalidServiceError("invalid-service", ["jupyter", "traefik"])
 
         # Set up the console mock
         mock_console = Mock()
-        mock_handler_fns["get_console"].return_value = mock_console
+        mock_console_class.return_value = mock_console
 
         # Execute
         runner = CliRunner()
         result = runner.invoke(servers_app, ["stop", "--service", "invalid_service"])
 
         # Assert
-        self.assertEqual(result.exit_code, 0)
-        mock_console.print.assert_called_once()
-        mock_call = mock_console.print.mock_calls[0]
-        self.assertTrue("Invalid service" in mock_call[1][0])
-        self.assertTrue("red" in mock_call[2]["style"])
+        self.assertEqual(result.exit_code, 1)
+        # Error decorator calls print twice: once for error, once for available services
+        self.assertEqual(mock_console.print.call_count, 2)
+        # First call is the error message
+        first_call = mock_console.print.mock_calls[0]
+        self.assertTrue("Invalid service" in first_call[1][0])
+        self.assertTrue("red" in first_call[2]["style"])
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_switches_dir_when_passed_a_project(self, mock_project_dir: Mock, mock_server_handler_class: Mock) -> None:
+    def test_switches_dir_when_passed_a_project(
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+    ) -> None:
         # Setup
         mock_server_handler, _ = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
@@ -321,9 +333,12 @@ class TestServerStopCmd(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_project_dir.assert_called_once_with("/test/project/path")
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_raises_when_stop_raises(self, mock_project_dir: Mock, mock_server_handler_class: Mock) -> None:
+    def test_raises_when_stop_raises(
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+    ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
@@ -391,40 +406,43 @@ class TestServerRestartCmd(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_server_handler_class.assert_called_once()
         mock_handler_fns["restart_server"].assert_called_once_with("all")
-        mock_handler_fns["get_console"].assert_called_once()
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_print_the_valid_services_when_passed_an_invalid_service(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
         mock_project_dir.return_value.__enter__.return_value = None
 
-        mock_handler_fns["restart_server"].side_effect = InvalidServiceError(
-            "Invalid service, use one of ['jupyter', 'traefik']"
-        )
+        mock_handler_fns["restart_server"].side_effect = InvalidServiceError("invalid-service", ["jupyter", "traefik"])
 
         # Set up the console mock
         mock_console = Mock()
-        mock_handler_fns["get_console"].return_value = mock_console
+        mock_console_class.return_value = mock_console
 
         # Execute
         runner = CliRunner()
         result = runner.invoke(servers_app, ["restart", "--service", "invalid_service"])
 
         # Assert
-        self.assertEqual(result.exit_code, 0)
-        mock_console.print.assert_called_once()
-        mock_call = mock_console.print.mock_calls[0]
-        self.assertTrue("Invalid service" in mock_call[1][0])
-        self.assertTrue("red" in mock_call[2]["style"])
+        self.assertEqual(result.exit_code, 1)
+        # Error decorator calls print twice: once for error, once for available services
+        self.assertEqual(mock_console.print.call_count, 2)
+        # First call is the error message
+        first_call = mock_console.print.mock_calls[0]
+        self.assertTrue("Invalid service" in first_call[1][0])
+        self.assertTrue("red" in first_call[2]["style"])
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_switches_dir_when_passed_a_project(self, mock_project_dir: Mock, mock_server_handler_class: Mock) -> None:
+    def test_switches_dir_when_passed_a_project(
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+    ) -> None:
         # Setup
         mock_server_handler, _ = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
@@ -438,9 +456,12 @@ class TestServerRestartCmd(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_project_dir.assert_called_once_with("/test/project/path")
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_raises_when_restart_raises(self, mock_project_dir: Mock, mock_server_handler_class: Mock) -> None:
+    def test_raises_when_restart_raises(
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+    ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
@@ -491,10 +512,11 @@ class TestServerLogsCmd(unittest.TestCase):
             "get_console": mock_get_console,
         }
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_instantiates_server_handler_and_calls_get_logs_and_print_results(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
@@ -502,7 +524,7 @@ class TestServerLogsCmd(unittest.TestCase):
         mock_project_dir.return_value.__enter__.return_value = None
 
         mock_console = Mock()
-        mock_handler_fns["get_console"].return_value = mock_console
+        mock_console_class.return_value = mock_console
         mock_handler_fns["get_server_logs"].return_value = "some-logs", "some-errors"
 
         # Execute
@@ -513,43 +535,44 @@ class TestServerLogsCmd(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_server_handler_class.assert_called_once()
         mock_handler_fns["get_server_logs"].assert_called_once_with(service="default", extra=[])
-        mock_handler_fns["get_console"].assert_called()
         mock_console.print.assert_called()
         mock_console.rule.assert_called()
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_print_the_valid_services_when_passed_an_invalid_service(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
         mock_project_dir.return_value.__enter__.return_value = None
 
-        mock_handler_fns["get_server_logs"].side_effect = InvalidServiceError(
-            "Invalid service, use one of ['jupyter', 'traefik']"
-        )
+        mock_handler_fns["get_server_logs"].side_effect = InvalidServiceError("invalid-service", ["jupyter", "traefik"])
 
         # Set up the console mock
         mock_console = Mock()
-        mock_handler_fns["get_console"].return_value = mock_console
+        mock_console_class.return_value = mock_console
 
         # Execute
         runner = CliRunner()
         result = runner.invoke(servers_app, ["logs", "--service", "invalid_service"])
 
         # Assert
-        self.assertEqual(result.exit_code, 0)
-        mock_console.print.assert_called_once()
-        mock_call = mock_console.print.mock_calls[0]
-        self.assertTrue("Invalid service" in mock_call[1][0])
-        self.assertTrue("red" in mock_call[2]["style"])
+        self.assertEqual(result.exit_code, 1)
+        # Error decorator calls print twice: once for error, once for available services
+        self.assertEqual(mock_console.print.call_count, 2)
+        # First call is the error message
+        first_call = mock_console.print.mock_calls[0]
+        self.assertTrue("Invalid service" in first_call[1][0])
+        self.assertTrue("red" in first_call[2]["style"])
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_prints_placeholder_when_no_logs_are_returned(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
@@ -561,7 +584,7 @@ class TestServerLogsCmd(unittest.TestCase):
 
         # Set up the console mock
         mock_console = Mock()
-        mock_handler_fns["get_console"].return_value = mock_console
+        mock_console_class.return_value = mock_console
         mock_handler_fns["get_server_logs"].return_value = "", ""
 
         # Execute
@@ -612,19 +635,23 @@ class TestServerExecCmd(unittest.TestCase):
             "get_console": mock_get_console,
         }
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_help_includes_exec_command(self, mock_project_dir: Mock, mock_server_handler_class: Mock) -> None:
+    def test_help_includes_exec_command(
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+    ) -> None:
         runner = CliRunner()
         result = runner.invoke(servers_app, ["--help"])
 
         self.assertEqual(result.exit_code, 0)
         self.assertTrue("exec" in result.stdout, "exec command should appear in help")
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_instantiates_handler_and_calls_exec_command(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
@@ -632,7 +659,7 @@ class TestServerExecCmd(unittest.TestCase):
         mock_project_dir.return_value.__enter__.return_value = None
 
         mock_console = Mock()
-        mock_handler_fns["get_console"].return_value = mock_console
+        mock_console_class.return_value = mock_console
 
         # Execute
         runner = CliRunner()
@@ -642,11 +669,13 @@ class TestServerExecCmd(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_server_handler_class.assert_called_once()
         mock_handler_fns["exec_command"].assert_called_once_with(service="jupyter", command_args=["pwd"])
-        mock_handler_fns["get_console"].assert_called_once()
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_passes_command_args_to_handler(self, mock_project_dir: Mock, mock_server_handler_class: Mock) -> None:
+    def test_passes_command_args_to_handler(
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+    ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
@@ -660,15 +689,18 @@ class TestServerExecCmd(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_handler_fns["exec_command"].assert_called_once_with(service="jupyter", command_args=["ls", "-la"])
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_prints_stdout_and_stderr(self, mock_project_dir: Mock, mock_server_handler_class: Mock) -> None:
+    def test_prints_stdout_and_stderr(
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+    ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
 
         mock_console = Mock()
-        mock_handler_fns["get_console"].return_value = mock_console
+        mock_console_class.return_value = mock_console
         mock_handler_fns["exec_command"].return_value = ("test stdout", "test stderr", 0)
         mock_project_dir.return_value.__enter__.return_value = None
 
@@ -683,9 +715,12 @@ class TestServerExecCmd(unittest.TestCase):
         self.assertTrue(any("test stdout" in call for call in print_calls))
         self.assertTrue(any("test stderr" in call for call in print_calls))
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_exits_with_underlying_error_code(self, mock_project_dir: Mock, mock_server_handler_class: Mock) -> None:
+    def test_exits_with_underlying_error_code(
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+    ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
@@ -715,20 +750,21 @@ class TestServerExecCmd(unittest.TestCase):
         mock_console_class.assert_called_once()
         mock_console.print.assert_called()
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_prints_error_when_invalid_service(self, mock_project_dir: Mock, mock_server_handler_class: Mock) -> None:
+    def test_prints_error_when_invalid_service(
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+    ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
         mock_project_dir.return_value.__enter__.return_value = None
 
-        mock_handler_fns["exec_command"].side_effect = InvalidServiceError(
-            "Invalid service, use one of ['jupyter', 'traefik']"
-        )
+        mock_handler_fns["exec_command"].side_effect = InvalidServiceError("invalid-service", ["jupyter", "traefik"])
 
         mock_console = Mock()
-        mock_handler_fns["get_console"].return_value = mock_console
+        mock_console_class.return_value = mock_console
 
         # Execute
         runner = CliRunner()
@@ -736,10 +772,12 @@ class TestServerExecCmd(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 1)
-        mock_console.print.assert_called_once()
-        mock_call = mock_console.print.mock_calls[0]
-        self.assertTrue("Invalid service" in mock_call[1][0])
-        self.assertTrue("red" in mock_call[2]["style"])
+        # Error decorator calls print twice: once for error, once for available services
+        self.assertEqual(mock_console.print.call_count, 2)
+        # First call is the error message
+        first_call = mock_console.print.mock_calls[0]
+        self.assertTrue("Invalid service" in first_call[1][0])
+        self.assertTrue("red" in first_call[2]["style"])
 
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -778,19 +816,23 @@ class TestServerConnectCmd(unittest.TestCase):
             "get_console": mock_get_console,
         }
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_help_includes_connect_command(self, mock_project_dir: Mock, mock_server_handler_class: Mock) -> None:
+    def test_help_includes_connect_command(
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+    ) -> None:
         runner = CliRunner()
         result = runner.invoke(servers_app, ["--help"])
 
         self.assertEqual(result.exit_code, 0)
         self.assertTrue("connect" in result.stdout, "connect command should appear in help")
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_instantiates_handler_and_calls_connect(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
@@ -798,7 +840,7 @@ class TestServerConnectCmd(unittest.TestCase):
         mock_project_dir.return_value.__enter__.return_value = None
 
         mock_console = Mock()
-        mock_handler_fns["get_console"].return_value = mock_console
+        mock_console_class.return_value = mock_console
 
         # Execute
         runner = CliRunner()
@@ -808,11 +850,13 @@ class TestServerConnectCmd(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_server_handler_class.assert_called_once()
         mock_handler_fns["connect"].assert_called_once_with(service="jupyter")
-        mock_handler_fns["get_console"].assert_called_once()
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_defaults_to_default_service(self, mock_project_dir: Mock, mock_server_handler_class: Mock) -> None:
+    def test_defaults_to_default_service(
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+    ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
@@ -826,20 +870,21 @@ class TestServerConnectCmd(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_handler_fns["connect"].assert_called_once_with(service="default")
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_prints_error_when_invalid_service(self, mock_project_dir: Mock, mock_server_handler_class: Mock) -> None:
+    def test_prints_error_when_invalid_service(
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+    ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
         mock_project_dir.return_value.__enter__.return_value = None
 
-        mock_handler_fns["connect"].side_effect = InvalidServiceError(
-            "Invalid service, use one of ['jupyter', 'traefik']"
-        )
+        mock_handler_fns["connect"].side_effect = InvalidServiceError("invalid-service", ["jupyter", "traefik"])
 
         mock_console = Mock()
-        mock_handler_fns["get_console"].return_value = mock_console
+        mock_console_class.return_value = mock_console
 
         # Execute
         runner = CliRunner()
@@ -847,14 +892,19 @@ class TestServerConnectCmd(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 1)
-        mock_console.print.assert_called_once()
-        mock_call = mock_console.print.mock_calls[0]
-        self.assertTrue("Invalid service" in mock_call[1][0])
-        self.assertTrue("red" in mock_call[2]["style"])
+        # Error decorator calls print twice: once for error, once for available services
+        self.assertEqual(mock_console.print.call_count, 2)
+        # First call is the error message
+        first_call = mock_console.print.mock_calls[0]
+        self.assertTrue("Invalid service" in first_call[1][0])
+        self.assertTrue("red" in first_call[2]["style"])
 
+    @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_raises_when_handler_connect_raises(self, mock_project_dir: Mock, mock_server_handler_class: Mock) -> None:
+    def test_raises_when_handler_connect_raises(
+        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+    ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler

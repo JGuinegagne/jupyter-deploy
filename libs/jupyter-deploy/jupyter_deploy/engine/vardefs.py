@@ -1,7 +1,6 @@
 from collections.abc import Callable
 from typing import Any, Generic, TypeVar, get_args
 
-import typer
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from jupyter_deploy import str_utils
@@ -32,8 +31,15 @@ class TemplateVariableDefinition(BaseModel, Generic[T]):
         separator = " " if len(header) > 0 and len(default_marker) else ""
         return f"{header}{separator}{default_marker}"
 
-    def get_validator_callback(self) -> Callable | None:
-        """Return a validator to be passed as callback attribute of the typer.Option()."""
+    def get_validator_callback(self, validation_error_class: type[Exception]) -> Callable | None:
+        """Return a validator to be passed as callback attribute.
+
+        Example use: for typer.Option() callback.
+
+        Args:
+            validation_error_class: Exception class to raise on validation failure.
+                CLI layer should pass typer.BadParameter.
+        """
         return None
 
     def validate_value(self, value: Any) -> T:
@@ -132,30 +138,30 @@ class ListMapStrTemplateVariableDefinition(TemplateVariableDefinition[list[dict[
         )
         return f"{trimmed_description}\n{hint}"
 
-    def get_validator_callback(self) -> Callable | None:
+    def get_validator_callback(self, validation_error_class: type[Exception]) -> Callable | None:
         def cb(entries: list[str] | None) -> list[str] | None:
             if not entries:
                 return []
 
             for idx, entry in enumerate(entries):
                 if not entry:
-                    raise typer.BadParameter(f"Empty value at index {idx}")
+                    raise validation_error_class(f"Empty value at index {idx}")
 
                 key_value_pairs = entry.split(",")
                 if not key_value_pairs:
-                    raise typer.BadParameter(f"Value at index {idx} must have at least one key=value")
+                    raise validation_error_class(f"Value at index {idx} must have at least one key=value")
                 for key_idx, key_value_pair in enumerate(key_value_pairs):
                     if not isinstance(key_value_pair, str):
                         continue
                     key_value_parts = key_value_pair.split("=")
 
                     if len(key_value_parts) != 2 or not key_value_parts[0] or not key_value_parts[1]:
-                        raise typer.BadParameter(
+                        raise validation_error_class(
                             f"Invalid key=value pair for entry {idx} at index {key_idx}, must be of the form key=val"
                         )
 
                     if not isinstance(key_value_parts[0], str) or not isinstance(key_value_parts[1], str):
-                        raise typer.BadParameter(
+                        raise validation_error_class(
                             f"Invalid key=value pair for entry {idx} at index {key_idx}, "
                             f"both key and value must be non-empty string"
                         )
@@ -201,17 +207,17 @@ class DictStrTemplateVariableDefinition(TemplateVariableDefinition[dict[str, str
         hint = f"Pass the key=value pairs separately; e.g. --{cli_name} <key1=val1> --{cli_name} <key2=val2>"
         return f"{trimmed_description}\n{hint}"
 
-    def get_validator_callback(self) -> Callable | None:
+    def get_validator_callback(self, validation_error_class: type[Exception]) -> Callable | None:
         def cb(entries: list[str] | None) -> list[str] | None:
             if not entries:
                 return []
 
             for idx, v in enumerate(entries):
                 if not v:
-                    raise typer.BadParameter(f"Empty value at index {idx}, must be of the form key=val")
+                    raise validation_error_class(f"Empty value at index {idx}, must be of the form key=val")
                 parts = v.split("=")
                 if len(parts) != 2 or not parts[0] or not parts[1]:
-                    raise typer.BadParameter(f"Invalid value at index {idx}, must be of the form key=val")
+                    raise validation_error_class(f"Invalid value at index {idx}, must be of the form key=val")
             return entries
 
         return cb
