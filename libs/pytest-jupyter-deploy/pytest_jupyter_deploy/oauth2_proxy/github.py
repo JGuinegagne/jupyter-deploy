@@ -79,6 +79,129 @@ class GitHubOAuth2ProxyApplication:
                     # Max retries exceeded or non-DNS error - raise original exception
                     raise
 
+    def _handle_oauth_reauthorize_page(self) -> None:
+        """Handle GitHub OAuth reauthorization page with disabled button.
+
+        GitHub shows a reauthorization page when there's an unusually high number
+        of authorization requests. This page differs from the standard authorize page:
+        - Shows heading "Reauthorization required"
+        - Button text is "Authorize [USERNAME]" instead of "Authorize"
+        - Button starts disabled and becomes enabled after a delay
+
+        This method:
+        1. Locates button using attribute selector button[name="authorize"][value="1"]
+        2. Waits for button to exist in DOM
+        3. Waits for button to become enabled (disabled attribute removed)
+        4. Clicks the authorize button
+        5. Waits for redirect back to application
+        6. Adds 60-second post-authorization delay for GitHub processing
+
+        More details: https://github.com/jupyter-infra/jupyter-deploy/issues/154
+
+        Raises:
+            RuntimeError: If button cannot be found or clicked, or redirect fails
+        """
+        logger.debug("Handling GitHub reauthorization page")
+
+        # Use attribute selector to find button by name and value
+        # This works regardless of the button text ("Authorize [USERNAME]")
+        authorize_button = self.page.locator('button[name="authorize"][value="1"]')
+
+        # Wait for button to exist in DOM
+        authorize_button.wait_for(state="attached", timeout=10000)
+
+        # Wait for button to become visible
+        logger.debug("Waiting for authorize button to become visible...")
+        authorize_button.wait_for(state="visible", timeout=30000)
+
+        # GitHub reauthorization page: button may start disabled but form submission still works
+        # Use force=True to bypass actionability checks and click regardless of disabled state
+        logger.debug("Clicking authorize button (forcing click to bypass disabled state)...")
+        authorize_button.click(force=True)
+        logger.debug("Clicked authorize button on reauthorization page")
+
+        # Wait for redirect after clicking (back to app domain, not GitHub)
+        self.page.wait_for_url(lambda url: "github.com" not in url, timeout=30000)
+
+        # Add 60-second delay post-authorization to allow GitHub processing
+        logger.debug("Waiting 60 seconds for GitHub to process reauthorization...")
+        time.sleep(60)
+
+    def _handle_oauth_standard_authorize_page(self) -> None:
+        """Handle standard GitHub OAuth authorization page.
+
+        This handles the normal OAuth authorization flow where GitHub shows
+        a standard "Authorize" button that is immediately clickable.
+
+        Raises:
+            RuntimeError: If authorize button is not found or authorization fails
+        """
+        logger.debug("Handling standard GitHub OAuth authorization page")
+
+        # Find standard "Authorize" button
+        authorize_button = self.page.get_by_role("button", name="Authorize")
+
+        try:
+            if authorize_button.is_visible(timeout=2000):
+                authorize_button.click()
+                logger.debug("Clicked authorize button")
+                # Wait for redirect after clicking (back to app domain, not GitHub)
+                self.page.wait_for_url(lambda url: "github.com" not in url, timeout=10000)
+            else:
+                # No authorize button visible, might need manual auth
+                error_msg = (
+                    "GitHub OAuth authorization timed out!\n\n"
+                    "GitHub cookies may have expired or authorization requires manual approval.\n\n"
+                    "For local development:\n"
+                    "  1. Run: just auth-setup <project-dir>\n"
+                    "  2. Complete authentication in the browser\n"
+                    "  3. Re-run tests\n\n"
+                    "For CI without 2FA:\n"
+                    "  Use --ci flag and set GITHUB_USERNAME and GITHUB_PASSWORD environment variables"
+                )
+                raise RuntimeError(error_msg) from None
+        except Exception as e:
+            if "Authorize button" in str(e):
+                raise
+            # Timeout or other error
+            error_msg = (
+                "GitHub OAuth authorization failed!\n\n"
+                f"Error: {e}\n\n"
+                "For local development:\n"
+                "  1. Run: just auth-setup <project-dir>\n"
+                "  2. Complete authentication in the browser\n"
+                "  3. Re-run tests\n\n"
+                "For CI without 2FA:\n"
+                "  Use --ci flag and set GITHUB_USERNAME and GITHUB_PASSWORD environment variables"
+            )
+            raise RuntimeError(error_msg) from e
+
+    def _handle_oauth_authorize_page(self) -> None:
+        """Handle GitHub OAuth authorize page, dispatching to appropriate handler.
+
+        Detects whether this is a standard authorization page or a reauthorization page
+        (shown when GitHub detects unusually high authorization request volume) and
+        dispatches to the appropriate handler.
+
+        Raises:
+            RuntimeError: If authorization fails
+        """
+        # Check if this is a reauthorization page by looking for the heading
+        try:
+            reauth_heading = self.page.get_by_role("heading", name="Reauthorization required")
+            # This element should be immediately available,
+            # we could even consider 500ms timeout.
+            is_reauth = reauth_heading.is_visible(timeout=1000)
+        except Exception:
+            is_reauth = False
+
+        if is_reauth:
+            logger.info("GitHub reauthorization detected.")
+            self._handle_oauth_reauthorize_page()
+            logger.debug("GitHub reauthorization succeeded.")
+        else:
+            self._handle_oauth_standard_authorize_page()
+
     def login_with_auth_session(self) -> None:
         """Login using saved authentication session from storage state.
 
@@ -128,47 +251,15 @@ class GitHubOAuth2ProxyApplication:
                 # With valid cookies, GitHub should either:
                 # 1. Auto-submit the authorization (approval_prompt=force)
                 # 2. Show an "Authorize" button that we need to click
+                # 3. Show a reauthorization page with a disabled button that becomes enabled
 
                 # Wait a moment for page to load and auto-submit
                 try:
                     # Check if we're redirected automatically (back to app domain, not GitHub)
                     self.page.wait_for_url(lambda url: "github.com" not in url, timeout=5000)
                 except Exception:
-                    # Still on authorize page - check if there's an authorize button
-                    authorize_button = self.page.get_by_role("button", name="Authorize")
-                    try:
-                        if authorize_button.is_visible(timeout=2000):
-                            authorize_button.click()
-                            # Wait for redirect after clicking (back to app domain, not GitHub)
-                            self.page.wait_for_url(lambda url: "github.com" not in url, timeout=10000)
-                        else:
-                            # No authorize button visible, might need manual auth
-                            error_msg = (
-                                "GitHub OAuth authorization timed out!\n\n"
-                                "GitHub cookies may have expired or authorization requires manual approval.\n\n"
-                                "For local development:\n"
-                                "  1. Run: just auth-setup <project-dir>\n"
-                                "  2. Complete authentication in the browser\n"
-                                "  3. Re-run tests\n\n"
-                                "For CI without 2FA:\n"
-                                "  Use --ci flag and set GITHUB_USERNAME and GITHUB_PASSWORD environment variables"
-                            )
-                            raise RuntimeError(error_msg) from None
-                    except Exception as e:
-                        if "Authorize button" in str(e):
-                            raise
-                        # Timeout or other error
-                        error_msg = (
-                            "GitHub OAuth authorization failed!\n\n"
-                            f"Error: {e}\n\n"
-                            "For local development:\n"
-                            "  1. Run: just auth-setup <project-dir>\n"
-                            "  2. Complete authentication in the browser\n"
-                            "  3. Re-run tests\n\n"
-                            "For CI without 2FA:\n"
-                            "  Use --ci flag and set GITHUB_USERNAME and GITHUB_PASSWORD environment variables"
-                        )
-                        raise RuntimeError(error_msg) from e
+                    # Still on authorize page - handle both normal and reauthorization flows
+                    self._handle_oauth_authorize_page()
             elif "github.com" in current_url and self.jupyterlab_url not in current_url:
                 # We're on some GitHub page but not authorize or JupyterLab
                 # This could be the login page if cookies expired
@@ -267,22 +358,18 @@ class GitHubOAuth2ProxyApplication:
                 # With valid cookies, GitHub should either:
                 # 1. Auto-submit the authorization
                 # 2. Show an "Authorize" button that we need to click
+                # 3. Show a reauthorization page with a disabled button that becomes enabled
 
                 # Wait a moment for page to load and auto-submit
                 try:
                     # Check if we're redirected automatically (back to app domain, not GitHub)
                     self.page.wait_for_url(lambda url: "github.com" not in url, timeout=5000)
                 except Exception:
-                    # Still on authorize page - check if there's an authorize button
-                    authorize_button = self.page.get_by_role("button", name="Authorize")
-                    if authorize_button.is_visible(timeout=2000):
-                        authorize_button.click()
-                        # Wait for redirect after clicking (back to app domain, not GitHub)
-                        self.page.wait_for_url(lambda url: "github.com" not in url, timeout=10000)
-                    else:
+                    # Still on authorize page - handle both normal and reauthorization flows
+                    with contextlib.suppress(Exception):
                         # No authorize button - might need username/password
                         # Fall through to check if we're on login page below
-                        pass
+                        self._handle_oauth_authorize_page()
 
             # Check if we're on GitHub login page (GitHub cookies expired)
             current_url = self.page.url

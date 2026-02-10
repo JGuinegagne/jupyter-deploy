@@ -1,5 +1,9 @@
 """E2E tests for organization and team-level access control."""
 
+import subprocess
+
+import pytest
+from pytest_jupyter_deploy.cli import JDCliError
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
 from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
 from pytest_jupyter_deploy.plugin import skip_if_testvars_not_set
@@ -287,9 +291,15 @@ def test_disallow_to_unset_org_when_no_user_allowlisted(
     # Clear all users
     e2e_deployment.ensure_no_users_allowlisted()
 
-    # Attempt to unset the organization
-    result = e2e_deployment.cli.run_command(["jupyter-deploy", "organization", "unset"])
-    assert "At least one user or an organization must remain specified." in result.stdout
+    # Attempt to unset the organization - should fail with validation error
+    with pytest.raises(JDCliError) as exc_info:
+        e2e_deployment.cli.run_command(["jupyter-deploy", "organization", "unset"])
+
+    # Extract the underlying CalledProcessError and verify error message
+    assert exc_info.value.__cause__ is not None
+    assert isinstance(exc_info.value.__cause__, subprocess.CalledProcessError)
+    cause = exc_info.value.__cause__
+    assert "At least one user or an organization must remain specified." in cause.stdout
 
     # Verify get organization still shows logged org
     allowlisted_org = e2e_deployment.get_allowlisted_org()

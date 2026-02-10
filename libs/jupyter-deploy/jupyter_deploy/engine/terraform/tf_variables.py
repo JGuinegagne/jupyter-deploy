@@ -109,22 +109,28 @@ class TerraformVariablesHandler(EngineVariablesHandler):
 
         return filtered_tfvars_file_path
 
-    def reset_recorded_variables(self) -> None:
-        super().reset_recorded_variables()
+    def reset_recorded_variables(self) -> bool:
+        """Reset recorded variables and delete the tfvars file.
+
+        Returns:
+            bool: True if any files were deleted, False otherwise
+        """
+        parent_deleted = super().reset_recorded_variables()
 
         path = self.get_recorded_variables_filepath()
-        deleted = fs_utils.delete_file_if_exists(path)
+        tfvars_deleted = fs_utils.delete_file_if_exists(path)
 
-        if deleted:
-            console = self.get_console()
-            console.print(f":wastebasket: Deleted previously recorded inputs at: {path.name}")
+        return parent_deleted or tfvars_deleted
 
-    def reset_recorded_secrets(self) -> None:
-        super().reset_recorded_secrets()
+    def reset_recorded_secrets(self) -> bool:
+        """Reset recorded secrets and delete the tfvars file.
+
+        Returns:
+            bool: True if any files were deleted, False otherwise
+        """
+        parent_deleted = super().reset_recorded_secrets()
 
         path = self.get_recorded_secrets_filepath()
-        deleted = fs_utils.delete_file_if_exists(path)
+        tfvars_deleted = fs_utils.delete_file_if_exists(path)
 
-        if deleted:
-            console = self.get_console()
-            console.print(f":wastebasket: Deleted previously recorded secrets at: {path.name}")
+        return parent_deleted or tfvars_deleted

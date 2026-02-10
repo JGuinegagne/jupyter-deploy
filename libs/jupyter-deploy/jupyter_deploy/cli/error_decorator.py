@@ -25,12 +25,15 @@ from jupyter_deploy.exceptions import (
     LogCleanupError,
     LogNotFoundError,
     ManifestNotFoundError,
+    OpenWebBrowserError,
     OutputNotFoundError,
     ReadConfigurationError,
     ReadManifestError,
     SupervisedExecutionError,
     ToolRequiredError,
     UnreachableHostError,
+    UrlNotAvailableError,
+    UrlNotSecureError,
     VariableNotFoundError,
     WriteConfigurationError,
 )
@@ -164,6 +167,27 @@ def handle_cli_errors(console: Console) -> Generator[None, None, None]:
     except (VariableNotFoundError, OutputNotFoundError) as e:
         console.print(f":x: {e}", style="bold red")
         # check if next steps provided, if so print them
+        raise typer.Exit(code=1) from None
+
+    except UrlNotAvailableError as e:
+        console.print(f":x: {e}", style="bold red")
+        console.line()
+        console.print("Make sure you have configured and deployed your project.")
+        console.print(":bulb: To configure the project, run: [bold cyan]jd config[/]")
+        console.print(":bulb: To deploy it, run: [bold cyan]jd up[/]")
+        raise typer.Exit(code=1) from None
+
+    except UrlNotSecureError as e:
+        console.print(f":x: {e}", style="bold red")
+        console.line()
+        console.print("Only HTTPS URLs are allowed for security reasons.", style="red")
+        raise typer.Exit(code=1) from None
+
+    except OpenWebBrowserError as e:
+        console.print(f":x: {e}", style="bold red")
+        console.line()
+        console.print(f"URL: [bold cyan]{e.url}[/]")
+        console.print(":bulb: Copy the URL and open it manually in your browser.")
         raise typer.Exit(code=1) from None
 
     except (ReadConfigurationError, WriteConfigurationError) as e:

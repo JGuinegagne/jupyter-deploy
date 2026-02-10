@@ -493,29 +493,23 @@ class TestResetRecordedVariables(unittest.TestCase):
         mock_parent_reset.assert_called_once()
         mock_delete_file.assert_called_once_with(project_path / "engine" / "jdinputs.auto.tfvars")
 
-    @patch("rich.console.Console")
     @patch("jupyter_deploy.engine.engine_variables.EngineVariablesHandler.reset_recorded_variables")
     @patch("jupyter_deploy.fs_utils.delete_file_if_exists")
-    def test_calls_console_and_print_on_actual_deletion(
-        self, mock_delete_file: Mock, mock_parent_reset: Mock, mock_console_cls: Mock
-    ) -> None:
+    def test_returns_true_on_actual_deletion(self, mock_delete_file: Mock, mock_parent_reset: Mock) -> None:
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
         handler = TerraformVariablesHandler(project_path=project_path, project_manifest=manifest)
         mock_delete_file.return_value = True  # File was deleted
-        mock_console = Mock()
-        mock_console_cls.return_value = mock_console
+        mock_parent_reset.return_value = False  # Parent didn't delete anything
 
         # Execute
-        handler.reset_recorded_variables()
+        result = handler.reset_recorded_variables()
 
         # Assert
         mock_parent_reset.assert_called_once()
         mock_delete_file.assert_called_once()
-        mock_console.print.assert_called_once()
-        # Check that the console message contains the filename
-        self.assertIn("jdinputs.auto.tfvars", mock_console.print.call_args[0][0])
+        self.assertTrue(result, "Should return True when file was deleted")
 
     @patch("jupyter_deploy.engine.engine_variables.EngineVariablesHandler.reset_recorded_variables")
     @patch("jupyter_deploy.fs_utils.delete_file_if_exists")
@@ -553,29 +547,23 @@ class TestResetRecordedSecrets(unittest.TestCase):
         mock_parent_reset.assert_called_once()
         mock_delete_file.assert_called_once_with(project_path / "engine" / "jdinputs.secrets.auto.tfvars")
 
-    @patch("rich.console.Console")
     @patch("jupyter_deploy.engine.engine_variables.EngineVariablesHandler.reset_recorded_secrets")
     @patch("jupyter_deploy.fs_utils.delete_file_if_exists")
-    def test_calls_console_and_print_on_actual_deletion(
-        self, mock_delete_file: Mock, mock_parent_reset: Mock, mock_console_cls: Mock
-    ) -> None:
+    def test_returns_true_on_actual_deletion(self, mock_delete_file: Mock, mock_parent_reset: Mock) -> None:
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
         handler = TerraformVariablesHandler(project_path=project_path, project_manifest=manifest)
         mock_delete_file.return_value = True  # File was deleted
-        mock_console = Mock()
-        mock_console_cls.return_value = mock_console
+        mock_parent_reset.return_value = False  # Parent didn't delete anything
 
         # Execute
-        handler.reset_recorded_secrets()
+        result = handler.reset_recorded_secrets()
 
         # Assert
         mock_parent_reset.assert_called_once()
         mock_delete_file.assert_called_once()
-        mock_console.print.assert_called_once()
-        # Check that the console message contains the filename
-        self.assertIn("jdinputs.secrets.auto.tfvars", mock_console.print.call_args[0][0])
+        self.assertTrue(result, "Should return True when file was deleted")
 
     @patch("jupyter_deploy.engine.engine_variables.EngineVariablesHandler.reset_recorded_secrets")
     @patch("jupyter_deploy.fs_utils.delete_file_if_exists")

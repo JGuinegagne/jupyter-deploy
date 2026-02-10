@@ -1,5 +1,9 @@
 """E2E tests for user-level access control."""
 
+import subprocess
+
+import pytest
+from pytest_jupyter_deploy.cli import JDCliError
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
 from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
 from pytest_jupyter_deploy.plugin import skip_if_testvars_not_set
@@ -186,9 +190,15 @@ def test_disallow_to_remove_all_users_when_no_org_allowlisted(
     # Clear organization and teams
     e2e_deployment.ensure_no_org_nor_teams_allowlisted()
 
-    # Attempt to remove the user
-    result = e2e_deployment.cli.run_command(["jupyter-deploy", "users", "remove", logged_user])
-    assert "At least one user or an organization must remain specified." in result.stdout
+    # Attempt to remove the user - should fail with validation error
+    with pytest.raises(JDCliError) as exc_info:
+        e2e_deployment.cli.run_command(["jupyter-deploy", "users", "remove", logged_user])
+
+    # Extract the underlying CalledProcessError and verify error message
+    assert exc_info.value.__cause__ is not None
+    assert isinstance(exc_info.value.__cause__, subprocess.CalledProcessError)
+    cause = exc_info.value.__cause__
+    assert "At least one user or an organization must remain specified." in cause.stdout
 
     # Verify list users still shows the user
     users = e2e_deployment.get_allowlisted_users()

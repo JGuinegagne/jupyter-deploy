@@ -1,9 +1,8 @@
 from pathlib import Path
 
-from rich import console as rich_console
-
 from jupyter_deploy.engine import outdefs
 from jupyter_deploy.engine.engine_outputs import EngineOutputsHandler
+from jupyter_deploy.exceptions import UrlNotAvailableError
 from jupyter_deploy.manifest import JupyterDeployManifest
 
 
@@ -20,41 +19,26 @@ class EngineOpenHandler:
         self.project_path = project_path
         self.project_manifest = project_manifest
         self.output_handler = output_handler
-        self._console: rich_console.Console | None = None
-
-    def get_console(self) -> rich_console.Console:
-        """Return the instance's rich console."""
-        if self._console:
-            return self._console
-        self._console = rich_console.Console()
-        return self._console
 
     def get_url(self) -> str:
-        """Return the URL to access the notebook app, or the empty string if it cannot be resolved."""
+        """Return the URL to access the notebook app.
+
+        Returns:
+            str: The URL to access the notebook app
+
+        Raises:
+            UrlNotAvailableError: If URL cannot be retrieved or is empty
+            ValueError: If the 'open_url' output is malformed in the manifest
+            NotImplementedError: If the 'open_url' output type is not implemented
+            TypeError: If the 'open_url' output has incorrect type
+            KeyError: If the 'open_url' output is not defined in the manifest
+        """
         try:
             url_outdef = self.output_handler.get_declared_output_def("open_url", outdefs.StrTemplateOutputDefinition)
-        except (ValueError, NotImplementedError, TypeError) as e:
-            console = self.get_console()
-            console.print(
-                f":x: Could not retrieve the declared value 'open_url' in the manifest. Error details: {e}",
-                style="red",
-            )
-            return ""
-        except KeyError as _:
-            console = self.get_console()
-            console.print(":warning: URL not available.", style="yellow")
-            console.print("This is normal if you have not deployed the project.", style="yellow")
-            console.line()
-            console.print("Run [bold cyan]jd config[/] then [bold cyan]jd up[/].")
-            return ""
+        except KeyError:
+            raise UrlNotAvailableError("URL not available. Run 'jd config' then 'jd up'.") from None
 
         if not url_outdef.value:
-            console = self.get_console()
-            console.print(
-                ":x: Could not get the resolved output value for 'open_url'. "
-                "Have you run `jd up` from the project directory?",
-                style="red",
-            )
-            return ""
+            raise UrlNotAvailableError("URL not resolved. Run 'jd up' from the project directory.")
 
         return url_outdef.value

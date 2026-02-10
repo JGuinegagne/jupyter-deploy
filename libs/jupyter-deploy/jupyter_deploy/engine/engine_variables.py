@@ -193,8 +193,12 @@ class EngineVariablesHandler(ABC):
         )
         self._variables_config = new_variables_config
 
-    def reset_recorded_variables(self) -> None:
-        """Reset non-sensitive variables to their original values."""
+    def reset_recorded_variables(self) -> bool:
+        """Reset non-sensitive variables to their original values.
+
+        Returns:
+            bool: False (this method modifies config but doesn't delete files)
+        """
         new_variables_config = JupyterDeployVariablesConfigV1(
             schema_version=1,
             required={k: None for k in self.variables_config.required},
@@ -211,9 +215,14 @@ class EngineVariablesHandler(ABC):
             comments=VARIABLES_CONFIG_V1_COMMENTS,
         )
         self._variables_config = new_variables_config
+        return False
 
-    def reset_recorded_secrets(self) -> None:
-        """Reset sensitive variables to their original values."""
+    def reset_recorded_secrets(self) -> bool:
+        """Reset sensitive variables to their original values.
+
+        Returns:
+            bool: False (this method modifies config but doesn't delete files)
+        """
         variables_config = self.variables_config
         new_variables_config = JupyterDeployVariablesConfigV1(
             schema_version=1,
@@ -231,3 +240,4 @@ class EngineVariablesHandler(ABC):
             comments=VARIABLES_CONFIG_V1_COMMENTS,
         )
         self._variables_config = new_variables_config
+        return False
