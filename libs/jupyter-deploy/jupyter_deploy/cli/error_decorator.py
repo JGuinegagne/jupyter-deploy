@@ -9,6 +9,7 @@ from rich.console import Console
 from jupyter_deploy.exceptions import (
     ConfigurationError,
     DownAutoApproveRequiredError,
+    HostCommandInstructionError,
     IncompatibleHostStateError,
     InstructionNotFoundError,
     InteractiveSessionError,
@@ -19,8 +20,10 @@ from jupyter_deploy.exceptions import (
     InvalidPresetError,
     InvalidProjectPathError,
     InvalidServiceError,
+    InvalidVariablesDotYamlError,
     JupyterDeployError,
     LogCleanupError,
+    LogNotFoundError,
     ManifestNotFoundError,
     OutputNotFoundError,
     ReadConfigurationError,
@@ -111,6 +114,31 @@ def handle_cli_errors(console: Console) -> Generator[None, None, None]:
         if e.hint:
             console.line()
             console.print(f":bulb: {e.hint}")
+        raise typer.Exit(code=1) from None
+
+    except HostCommandInstructionError as e:
+        console.print(f":x: {e}", style="bold red")
+        if e.stdout:
+            console.rule("stdout")
+            console.print(e.stdout)
+            if not e.stderr:
+                console.rule()
+        if e.stderr:
+            console.rule("stderr")
+            console.print(e.stderr)
+            console.rule()
+        raise typer.Exit(code=e.retcode) from None
+
+    except InvalidVariablesDotYamlError as e:
+        console.print(f":x: {e}", style="bold red")
+        console.line()
+        console.print(":bulb: Check your variables.yaml file for syntax errors")
+        raise typer.Exit(code=1) from None
+
+    except LogNotFoundError as e:
+        console.print(f":x: {e}", style="bold red")
+        console.line()
+        console.print(":bulb: Use [bold cyan]jd history list[/] to see available logs")
         raise typer.Exit(code=1) from None
 
     except (

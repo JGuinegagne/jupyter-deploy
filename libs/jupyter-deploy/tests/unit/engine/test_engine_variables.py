@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from jupyter_deploy import constants
 from jupyter_deploy.engine.engine_variables import EngineVariablesHandler
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
-from jupyter_deploy.exceptions import InvalidVariableError
+from jupyter_deploy.exceptions import InvalidVariablesDotYamlError
 from jupyter_deploy.variables_config import (
     VARIABLES_CONFIG_V1_COMMENTS,
     VARIABLES_CONFIG_V1_KEYS_ORDER,
@@ -136,8 +136,8 @@ class TestVariablesConfigProperty(unittest.TestCase):
         manifest = Mock()
         handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
 
-        # Mock retrieve to raise InvalidVariableError
-        mock_retrieve.side_effect = InvalidVariableError("Invalid variables config")
+        # Mock retrieve to raise InvalidVariablesDotYamlError
+        mock_retrieve.side_effect = InvalidVariablesDotYamlError("Invalid variables config")
 
         # Access the property
         result = handler.variables_config

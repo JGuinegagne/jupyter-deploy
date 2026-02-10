@@ -41,15 +41,15 @@ class ManifestNotADictError(InvalidManifestError, ValueError):
     pass
 
 
+class InvalidVariablesDotYamlError(JupyterDeployError, ValueError):
+    """Raised when variables.yaml file is invalid or malformed."""
+
+    pass
+
+
 # ============================================================================
 # Variable and configuration errors
 # ============================================================================
-
-
-class InvalidVariableError(JupyterDeployError, ValueError):
-    """Raised when variable validation fails."""
-
-    pass
 
 
 class VariableNotFoundError(JupyterDeployError, KeyError):
@@ -292,7 +292,7 @@ class DownAutoApproveRequiredError(JupyterDeployError, ValueError):
 # ============================================================================
 
 
-class LogNotFound(JupyterDeployError, ValueError):
+class LogNotFoundError(JupyterDeployError, ValueError):
     """Raised when a command execution log cannot be found."""
 
     pass

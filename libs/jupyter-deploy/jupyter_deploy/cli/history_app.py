@@ -10,10 +10,7 @@ from rich.table import Table
 from jupyter_deploy import cmd_utils
 from jupyter_deploy.cli.error_decorator import handle_cli_errors
 from jupyter_deploy.enum import HistoryEnabledCommandType
-from jupyter_deploy.handlers.command_history_handler import (
-    CommandHistoryHandler,
-    LogNotFound,
-)
+from jupyter_deploy.handlers.command_history_handler import CommandHistoryHandler
 
 history_app = typer.Typer(
     help=("View and manage logs emitted by the infrastructure-as-code engine within jupyter-deploy commands."),
@@ -143,24 +140,20 @@ def show(
             log_descriptor = maybe_log_descriptor
 
         # Display log content
-        try:
-            if lines or skip:
-                # Tail/pagination mode - use get_log_lines with bounded memory
-                max_lines = lines or 1000  # Default to 1000 when skip is used without -l
-                log_lines = handler.get_log_lines(log_descriptor, max_lines=max_lines, skip=skip)
-                for line in log_lines:
-                    # use raw print as the engine may add formatting
-                    # end="" because line already includes \n from file
-                    print(line, end="")
-            else:
-                # Default streaming mode - memory-efficient iterator for entire log
-                for line in handler.stream_log_lines(log_descriptor):
-                    # use raw print as the engine may add formatting
-                    # end="" because line already includes \n from file
-                    print(line, end="")
-        except LogNotFound as e:
-            console.print(f":x: Failed to read log content: {e}", style="red")
-            raise typer.Exit(code=1) from None
+        if lines or skip:
+            # Tail/pagination mode - use get_log_lines with bounded memory
+            max_lines = lines or 1000  # Default to 1000 when skip is used without -l
+            log_lines = handler.get_log_lines(log_descriptor, max_lines=max_lines, skip=skip)
+            for line in log_lines:
+                # use raw print as the engine may add formatting
+                # end="" because line already includes \n from file
+                print(line, end="")
+        else:
+            # Default streaming mode - memory-efficient iterator for entire log
+            for line in handler.stream_log_lines(log_descriptor):
+                # use raw print as the engine may add formatting
+                # end="" because line already includes \n from file
+                print(line, end="")
 
 
 @history_app.command()

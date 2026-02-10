@@ -9,7 +9,7 @@ from yaml.scanner import ScannerError
 from jupyter_deploy import constants, fs_utils, manifest, variables_config
 from jupyter_deploy.exceptions import (
     InvalidManifestError,
-    InvalidVariableError,
+    InvalidVariablesDotYamlError,
     ManifestNotADictError,
     ManifestNotFoundError,
     ReadManifestError,
@@ -112,6 +112,8 @@ def retrieve_variables_config(variables_config_path: Path) -> variables_config.J
         content = yaml.safe_load(variables_manifest_file)
 
     if not isinstance(content, dict):
-        raise InvalidVariableError("Invalid variables config file: jupyter-deploy variables config is not a dict.")
+        raise InvalidVariablesDotYamlError(
+            "Invalid variables config file: jupyter-deploy variables config is not a dict."
+        )
 
     return variables_config.JupyterDeployVariablesConfig(**content)

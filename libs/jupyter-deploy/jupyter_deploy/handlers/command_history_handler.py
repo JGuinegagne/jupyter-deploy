@@ -12,7 +12,7 @@ from jupyter_deploy.cmd_history import (
 )
 from jupyter_deploy.constants import HISTORY_DIR
 from jupyter_deploy.enum import HistoryEnabledCommandType
-from jupyter_deploy.exceptions import LogCleanupError, LogNotFound
+from jupyter_deploy.exceptions import LogCleanupError, LogNotFoundError
 from jupyter_deploy.fs_utils import list_files_sorted
 
 
@@ -134,7 +134,7 @@ class CommandHistoryHandler:
             max_lines=1000, skip=1000 → Lines [-2000:-1000]
 
         Raises:
-            LogNotFound: If the log file does not exist
+            LogNotFoundError: If the log file does not exist
             NotImplementedError: If the log type is not supported
         """
         if isinstance(log_descriptor, LogFileDescriptor):
@@ -148,7 +148,7 @@ class CommandHistoryHandler:
                     # Return the first max_lines (skipping the last `skip` lines)
                     return all_lines[:max_lines] if skip > 0 else all_lines
             except FileNotFoundError as e:
-                raise LogNotFound(f"Log file not found: {log_descriptor.path}") from e
+                raise LogNotFoundError(f"Log file not found: {log_descriptor.path}") from e
         else:
             raise NotImplementedError(f"Unknown log type: {log_descriptor.__class__}")
 
@@ -156,7 +156,7 @@ class CommandHistoryHandler:
         """Return iterator yielding log lines (with newlines).
 
         Raises:
-            LogNotFound: If the log file does not exist
+            LogNotFoundError: If the log file does not exist
             NotImplementedError: If the log type is not supported
         """
         if isinstance(log_descriptor, LogFileDescriptor):
@@ -164,7 +164,7 @@ class CommandHistoryHandler:
                 with open(log_descriptor.path) as f:
                     yield from f
             except FileNotFoundError as e:
-                raise LogNotFound(f"Log file not found: {log_descriptor.path}") from e
+                raise LogNotFoundError(f"Log file not found: {log_descriptor.path}") from e
         else:
             raise NotImplementedError(f"Unknown log type: {log_descriptor.__class__}")
 

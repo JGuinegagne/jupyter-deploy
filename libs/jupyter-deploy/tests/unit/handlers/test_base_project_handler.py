@@ -9,7 +9,7 @@ from jupyter_deploy.constants import MANIFEST_FILENAME
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.exceptions import (
     InvalidManifestError,
-    InvalidVariableError,
+    InvalidVariablesDotYamlError,
     ManifestNotADictError,
     ManifestNotFoundError,
     ReadManifestError,
@@ -407,7 +407,7 @@ class TestRetrieveVariablesConfig(unittest.TestCase):
         mock_yaml_load.return_value = ["item1", "item2"]  # Not a dict
 
         # Execute and Assert
-        with self.assertRaises(InvalidVariableError):
+        with self.assertRaises(InvalidVariablesDotYamlError):
             retrieve_variables_config(variables_config_path)
 
     @patch("jupyter_deploy.fs_utils.file_exists")

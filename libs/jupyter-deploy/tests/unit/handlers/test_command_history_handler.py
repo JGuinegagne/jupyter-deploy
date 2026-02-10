@@ -8,11 +8,8 @@ from unittest.mock import Mock, mock_open, patch
 from jupyter_deploy.cmd_history import LogFileDescriptor, LogFilesCleanupResult
 from jupyter_deploy.constants import HISTORY_DIR
 from jupyter_deploy.enum import HistoryEnabledCommandType
-from jupyter_deploy.handlers.command_history_handler import (
-    CommandHistoryHandler,
-    LogCleanupError,
-    LogNotFound,
-)
+from jupyter_deploy.exceptions import LogCleanupError, LogNotFoundError
+from jupyter_deploy.handlers.command_history_handler import CommandHistoryHandler
 
 
 class TestCommandHistoryHandler(unittest.TestCase):
@@ -165,7 +162,7 @@ class TestCommandHistoryHandler(unittest.TestCase):
             self.assertEqual(result.timestamp, up_log.timestamp)
 
     def test_get_log_lines_raises_for_missing_file(self) -> None:
-        """Test that get_log_lines raises LogNotFound when file doesn't exist."""
+        """Test that get_log_lines raises LogNotFoundError when file doesn't exist."""
         log_descriptor = LogFileDescriptor(
             id="config/20260129-143022.log",
             command="config",
@@ -173,7 +170,7 @@ class TestCommandHistoryHandler(unittest.TestCase):
             path=Path("/nonexistent/file.log"),
         )
 
-        with self.assertRaises(LogNotFound):
+        with self.assertRaises(LogNotFoundError):
             self.handler.get_log_lines(log_descriptor)
 
     def test_get_log_lines_returns_all_lines(self) -> None:
@@ -249,7 +246,7 @@ class TestCommandHistoryHandler(unittest.TestCase):
             self.assertEqual(result, ["Line 1\n", "Line 2\n", "Line 3\n"])
 
     def test_stream_log_lines_raises_for_missing_file(self) -> None:
-        """Test that stream_log_lines raises LogNotFound when file doesn't exist."""
+        """Test that stream_log_lines raises LogNotFoundError when file doesn't exist."""
         log_descriptor = LogFileDescriptor(
             id="config/20260129-143022.log",
             command="config",
@@ -257,7 +254,7 @@ class TestCommandHistoryHandler(unittest.TestCase):
             path=Path("/nonexistent/file.log"),
         )
 
-        with self.assertRaises(LogNotFound):
+        with self.assertRaises(LogNotFoundError):
             list(self.handler.stream_log_lines(log_descriptor))
 
     @patch("jupyter_deploy.handlers.command_history_handler.list_files_sorted")

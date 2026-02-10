@@ -16,10 +16,10 @@ from jupyter_deploy.exceptions import (
     InvalidManifestError,
     InvalidPresetError,
     InvalidServiceError,
-    InvalidVariableError,
+    InvalidVariablesDotYamlError,
     JupyterDeployError,
     LogCleanupError,
-    LogNotFound,
+    LogNotFoundError,
     ManifestNotADictError,
     ManifestNotFoundError,
     OutputNotFoundError,
@@ -83,8 +83,8 @@ class TestVariableErrors(unittest.TestCase):
     """Test cases for variable and configuration exceptions."""
 
     def test_invalid_variables_error(self) -> None:
-        """Test InvalidVariableError creation and inheritance."""
-        error = InvalidVariableError("Invalid variable value")
+        """Test InvalidVariablesDotYamlError creation and inheritance."""
+        error = InvalidVariablesDotYamlError("Invalid variables.yaml file")
         self.assertIsInstance(error, JupyterDeployError)
         self.assertIsInstance(error, ValueError)
 
@@ -305,8 +305,8 @@ class TestHistoryErrors(unittest.TestCase):
     """Test cases for history and logging exceptions."""
 
     def test_log_not_found(self) -> None:
-        """Test LogNotFound creation and inheritance."""
-        error = LogNotFound("Log file not found")
+        """Test LogNotFoundError creation and inheritance."""
+        error = LogNotFoundError("Log file not found")
         self.assertIsInstance(error, JupyterDeployError)
         self.assertIsInstance(error, ValueError)
 

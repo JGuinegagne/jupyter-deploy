@@ -220,6 +220,10 @@ def exec(
             console.print(stderr)
             console.rule()
 
+        # Note: the command runner SHOULD raise a HostCommandInstructionError instead of returning
+        # a non-zero error code. Such HostCommandInstructionError would be caught and handled by
+        # the error context manager so that users do not see a long, unhelpful stack trace.
+        # However, just in case the instruction runner setup is incorrect, handle it here as well.
         if returncode != 0:
             raise typer.Exit(code=returncode)
 
