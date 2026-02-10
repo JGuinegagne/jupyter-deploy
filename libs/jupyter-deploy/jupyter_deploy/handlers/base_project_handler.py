@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import typer
 import yaml
 from pydantic import ValidationError
 from rich import console as rich_console
@@ -8,11 +7,14 @@ from yaml.parser import ParserError
 from yaml.scanner import ScannerError
 
 from jupyter_deploy import constants, fs_utils, manifest, variables_config
+from jupyter_deploy.exceptions import (
+    InvalidManifestError,
+    InvalidVariablesDotYamlError,
+    ManifestNotADictError,
+    ManifestNotFoundError,
+    ReadManifestError,
+)
 from jupyter_deploy.handlers.command_history_handler import CommandHistoryHandler
-
-
-class NotADictError(ValueError):
-    pass
 
 
 class BaseProjectHandler:
@@ -23,65 +25,19 @@ class BaseProjectHandler:
     """
 
     def __init__(self) -> None:
-        """Attempts to identify the engine associated with the project."""
+        """Attempts to identify the engine associated with the project.
+
+        Raises:
+            ManifestNotFoundError: If project manifest not found
+            ReadManifestError: If manifest cannot be read due to I/O error
+            InvalidManifestError: If manifest cannot be parsed or validated
+        """
         self._console: rich_console.Console | None = None
         self.project_path = Path.cwd()
         self.command_history_handler = CommandHistoryHandler(self.project_path)
         manifest_path = self.project_path / constants.MANIFEST_FILENAME
 
-        try:
-            project_manifest = retrieve_project_manifest(manifest_path)
-        except FileNotFoundError as e:
-            console = self.get_console()
-            console.print(":x: The path does not correspond to a jupyter-deploy project.", style="bold red")
-            console.line()
-            console.print("Reason: could not find the jupyter-deploy manifest file.", style="red")
-            console.print(f"Expected manifest file location: {manifest_path.absolute()}", style="red")
-            console.line()
-            console.print(
-                "Change your working directory to a jupyter-deploy project or create one with [bold]jd init PATH[/].",
-                style="red",
-            )
-            raise typer.Exit(1) from e
-        except OSError as e:
-            console = self.get_console()
-            console.print(":x: Could not access the jupyter-deploy manifest.", style="bold red")
-            console.line()
-            console.print("Reason: OS error when reading the jupyter-deploy manifest file.", style="red")
-            console.print(f"Manifest file location: {manifest_path.absolute()}", style="red")
-            console.line()
-            console.print(str(e))
-            console.line()
-            console.print("Verify your file system permissions and try again.", style="red")
-            raise typer.Exit(1) from e
-        except NotADictError as e:
-            console = self.get_console()
-            console.print(":x: The jupyter-deploy manifest is invalid.", style="bold red")
-            console.line()
-            console.print("Reason: expected the jupyter-deploy manifest file to parse as dict.", style="red")
-            console.print(f"Attempted to read manifest file at: {manifest_path.absolute()}", style="red")
-            raise typer.Exit(1) from e
-        except (ParserError, ScannerError) as e:
-            console = self.get_console()
-            console.print(":x: The jupyter-deploy manifest is invalid.", style="bold red")
-            console.line()
-            console.print("Reason: cannot parse the jupyter-deploy manifest content as YAML.", style="red")
-            console.print(f"Attempted to read manifest file at: {manifest_path.absolute()}", style="red")
-            console.line()
-            console.print(str(e))
-            raise typer.Exit(1) from e
-        except ValidationError as e:
-            console = self.get_console()
-            console.print(":x: The jupyter-deploy manifest is invalid.", style="bold red")
-            console.line()
-            console.print("Reason: the manifest file does not conform to the expected schema.", style="red")
-            console.print(f"Attempted to read manifest file at: {manifest_path.absolute()}", style="red")
-            console.line()
-            console.print("Details:", style="red")
-            for err in e.errors():
-                console.print(err)
-            raise typer.Exit(1) from e
-
+        project_manifest = retrieve_project_manifest(manifest_path)
         self.engine = project_manifest.get_engine()
         self.project_manifest = project_manifest
 
@@ -94,17 +50,34 @@ class BaseProjectHandler:
 
 
 def retrieve_project_manifest(manifest_path: Path) -> manifest.JupyterDeployManifest:
-    """Read the manifest file on disk, parse, validate and return it."""
-    if not fs_utils.file_exists(manifest_path):
-        raise FileNotFoundError("Missing jupyter-deploy manifest.")
+    """Read the manifest file on disk, parse, validate and return it.
 
-    with open(manifest_path) as manifest_file:
-        content = yaml.safe_load(manifest_file)
+    Raises:
+        ManifestNotFoundError: If manifest file not found
+        ReadManifestError: If manifest file cannot be read due to I/O error
+        InvalidManifestError: If manifest cannot be parsed or validated
+    """
+    if not fs_utils.file_exists(manifest_path):
+        raise ManifestNotFoundError(f"Could not find manifest file at: {manifest_path.absolute()}")
+
+    try:
+        with open(manifest_path) as manifest_file:
+            content = yaml.safe_load(manifest_file)
+    except OSError as e:
+        raise ReadManifestError(f"Cannot access manifest file at: {manifest_path.absolute()}. {e}") from e
+    except (ParserError, ScannerError) as e:
+        raise InvalidManifestError(f"Cannot parse manifest as YAML: {manifest_path.absolute()}. {e}") from e
 
     if not isinstance(content, dict):
-        raise NotADictError("Invalid manifest: jupyter-deploy manifest is not a dict.")
+        raise ManifestNotADictError(f"Manifest file must be a YAML dictionary: {manifest_path.absolute()}")
 
-    return manifest.JupyterDeployManifest(**content)
+    try:
+        return manifest.JupyterDeployManifest(**content)
+    except ValidationError as e:
+        error_details = "; ".join([f"{err['loc'][0]}: {err['msg']}" for err in e.errors()])
+        raise InvalidManifestError(
+            f"Manifest validation failed: {manifest_path.absolute()}. Errors: {error_details}"
+        ) from e
 
 
 def retrieve_project_manifest_if_available(project_path: Path) -> manifest.JupyterDeployManifest | None:
@@ -116,10 +89,14 @@ def retrieve_project_manifest_if_available(project_path: Path) -> manifest.Jupyt
     manifest_path = project_path / constants.MANIFEST_FILENAME
     try:
         return retrieve_project_manifest(manifest_path)
-    except FileNotFoundError:
+    except ManifestNotFoundError:
         # Silently return None when manifest doesn't exist (expected in some contexts)
         return None
-    except (NotADictError, ValidationError) as e:
+    except ReadManifestError as e:
+        # Print errors for I/O issues (indicates actual problems)
+        print(e)
+        return None
+    except InvalidManifestError as e:
         # Print errors for malformed manifests (indicates actual problems)
         print(e)
         return None
@@ -135,6 +112,8 @@ def retrieve_variables_config(variables_config_path: Path) -> variables_config.J
         content = yaml.safe_load(variables_manifest_file)
 
     if not isinstance(content, dict):
-        raise NotADictError("Invalid variables config file: jupyter-deploy variables config is not a dict.")
+        raise InvalidVariablesDotYamlError(
+            "Invalid variables config file: jupyter-deploy variables config is not a dict."
+        )
 
     return variables_config.JupyterDeployVariablesConfig(**content)

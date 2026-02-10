@@ -7,6 +7,7 @@ from rich import console as rich_console
 
 from jupyter_deploy import constants, fs_utils
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
+from jupyter_deploy.exceptions import InvalidVariablesDotYamlError
 from jupyter_deploy.handlers import base_project_handler
 from jupyter_deploy.manifest import JupyterDeployManifest
 from jupyter_deploy.variables_config import (
@@ -72,7 +73,7 @@ class EngineVariablesHandler(ABC):
             reset_variables_config = self._get_reset_variables_config()
             self._variables_config = reset_variables_config
             return self._variables_config
-        except base_project_handler.NotADictError:
+        except InvalidVariablesDotYamlError:
             # the user has corrupted their variables.yaml, reset to a fallback
             console = self.get_console()
             console.rule("Invalid variables.yaml", style="red")

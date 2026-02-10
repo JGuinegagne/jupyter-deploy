@@ -6,6 +6,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
+from jupyter_deploy.exceptions import InvalidProjectPathError
 from jupyter_deploy.prompt_handler import PromptHandler
 
 
@@ -204,9 +205,9 @@ def project_dir(dir: str | None) -> Generator:
     target_path = Path(dir)
 
     if not target_path.exists():
-        raise ValueError(f"Target path not found: {target_path}")
+        raise InvalidProjectPathError(f"Target path not found: {target_path}")
     elif not target_path.is_dir():
-        raise ValueError(f"Target path is not a directory: {target_path}")
+        raise InvalidProjectPathError(f"Target path is not a directory: {target_path}")
 
     try:
         os.chdir(target_path)

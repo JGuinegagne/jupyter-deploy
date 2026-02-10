@@ -7,8 +7,15 @@ from rich import console as rich_console
 from jupyter_deploy import cmd_utils, verify_utils
 from jupyter_deploy.api.aws.ssm import ssm_command, ssm_session
 from jupyter_deploy.enum import JupyterDeployTool
+from jupyter_deploy.exceptions import (
+    HostCommandInstructionError,
+    InstructionNotFoundError,
+    InteractiveSessionError,
+    InteractiveSessionTimeoutError,
+    UnreachableHostError,
+)
 from jupyter_deploy.manifest import JupyterDeployRequirementV1
-from jupyter_deploy.provider.instruction_runner import InstructionRunner, InterruptInstructionError
+from jupyter_deploy.provider.instruction_runner import InstructionRunner
 from jupyter_deploy.provider.resolved_argdefs import (
     IntResolvedInstructionArgument,
     ListStrResolvedInstructionArgument,
@@ -48,8 +55,12 @@ class AwsSsmRunner(InstructionRunner):
         instance_id: str,
         console: rich_console.Console,
         silent_success: bool = True,
-    ) -> bool:
-        """Call SSM API, write messages to console, return True if connected."""
+    ) -> None:
+        """Call SSM API and verify instance is accessible.
+
+        Raises:
+            UnreachableHostError: If SSM agent is not reachable
+        """
 
         instance_info_response = ssm_session.describe_instance_information(self.client, instance_id=instance_id)
         ping_status = instance_info_response.get("PingStatus")
@@ -57,23 +68,18 @@ class AwsSsmRunner(InstructionRunner):
         if ping_status == "Online":
             if not silent_success:
                 console.print(f":white_check_mark: SSM agent running on instance '{instance_id}'.")
-            return True
+            return
         elif ping_status == "ConnectionLost":
             last_ping_date = instance_info_response.get("LastPingDateTime", "unknown")
-            console.print(
-                f":x: SSM agent connection to instance [bold]{instance_id}[/] was lost, last ping: {last_ping_date}",
-                style="red",
+            raise UnreachableHostError(
+                f"SSM agent connection to instance '{instance_id}' was lost, last ping: {last_ping_date}"
             )
-            return False
         elif ping_status == "Inactive":
-            console.print(
-                f":x: SSM agent on instance [bold]{instance_id}[/] is not running or could not establish connection.",
-                style="red",
+            raise UnreachableHostError(
+                f"SSM agent on instance '{instance_id}' is not running or could not establish connection"
             )
-            return False
         else:
-            console.print(f":x: Missing ping status for instance [bold]{instance_id}[/].", style="red")
-            return False
+            raise UnreachableHostError(f"Missing ping status for instance '{instance_id}'")
 
     def _send_cmd_to_one_instance_and_wait_sync(
         self,
@@ -103,9 +109,7 @@ class AwsSsmRunner(InstructionRunner):
                 parameters[n] = [v.value]
 
         # verify SSM agent connection status
-        if not self._verify_ec2_instance_accessible(instance_id=instance_id_arg.value, console=console):
-            # the verify_utils prints the error and remediation steps
-            raise InterruptInstructionError
+        self._verify_ec2_instance_accessible(instance_id=instance_id_arg.value, console=console)
 
         # provide information to the user
         info = f"Executing SSM document '{doc_name_arg.value}' on instance '{instance_id_arg.value}'"
@@ -128,16 +132,12 @@ class AwsSsmRunner(InstructionRunner):
         command_response_code = response.get("ResponseCode", 0)
 
         if command_status == "Failed":
-            console.print(f":x: command {doc_name_arg.value} failed.", style="red")
-            console.line()
-            if command_stderr:
-                console.print("StandardErrorContent:", style="red")
-                console.line()
-                console.print(command_stderr, style="red")
-            if command_stdout:
-                console.print("StandardOutputContent:", style="red")
-                console.line()
-                console.print(command_stdout, style="red")
+            raise HostCommandInstructionError(
+                message=f"Command '{doc_name_arg.value}' failed",
+                retcode=command_response_code,
+                stdout=command_stdout,
+                stderr=command_stderr,
+            )
 
         return {
             "Status": StrResolvedInstructionResult(result_name="Status", value=command_status),
@@ -171,8 +171,7 @@ class AwsSsmRunner(InstructionRunner):
         commands_arg = require_arg(resolved_arguments, "commands", ListStrResolvedInstructionArgument)
 
         # verify SSM agent connection status
-        if not self._verify_ec2_instance_accessible(instance_id=instance_id_arg.value, console=console):
-            raise InterruptInstructionError
+        self._verify_ec2_instance_accessible(instance_id=instance_id_arg.value, console=console)
 
         # provide information to the user
         console.print(f"Executing command on instance '{instance_id_arg.value}'...")
@@ -191,16 +190,12 @@ class AwsSsmRunner(InstructionRunner):
         command_response_code = response.get("ResponseCode", 0)
 
         if command_status == "Failed":
-            console.print(":x: command execution failed.", style="red")
-            console.line()
-            if command_stderr:
-                console.print("StandardErrorContent:", style="red")
-                console.line()
-                console.print(command_stderr, style="red")
-            if command_stdout:
-                console.print("StandardOutputContent:", style="red")
-                console.line()
-                console.print(command_stdout, style="red")
+            raise HostCommandInstructionError(
+                message="Command execution failed",
+                retcode=command_response_code,
+                stdout=command_stdout,
+                stderr=command_stderr,
+            )
 
         return {
             "Status": StrResolvedInstructionResult(result_name="Status", value=command_status),
@@ -228,34 +223,15 @@ class AwsSsmRunner(InstructionRunner):
             raise TypeError(f"Expected StrResolvedInstructionArgument for document_name, got {type(document_name_arg)}")
 
         # verify installation
-        console.rule()
-        try:
-            verify_utils.verify_tools_installation(
-                [
-                    JupyterDeployRequirementV1(name=JupyterDeployTool.AWS_CLI.value),
-                    JupyterDeployRequirementV1(name=JupyterDeployTool.AWS_SSM_PLUGIN),
-                ]
-            )
-        except verify_utils.ToolRequiredError as e:
-            console.print(f":x: {e}", style="red")
-            console.line()
-            if e.error_msg:
-                console.print(f"Error: {e.error_msg}", style="red")
-                console.line()
-            if e.installation_url:
-                console.print(f"Refer to the installation guide: {e.installation_url}")
-            raise InterruptInstructionError from None
-        console.rule()
-
-        # verify that the SSM agent status on the instance
-        ssm_agent_connected = self._verify_ec2_instance_accessible(
-            instance_id=target_id_arg.value, console=console, silent_success=False
+        verify_utils.verify_tools_installation(
+            [
+                JupyterDeployRequirementV1(name=JupyterDeployTool.AWS_CLI.value),
+                JupyterDeployRequirementV1(name=JupyterDeployTool.AWS_SSM_PLUGIN),
+            ]
         )
 
-        if not ssm_agent_connected:
-            # verify method writes to console
-            console.rule()
-            raise InterruptInstructionError
+        # verify that the SSM agent status on the instance
+        self._verify_ec2_instance_accessible(instance_id=target_id_arg.value, console=console, silent_success=False)
 
         # provide information to the user
         console.print(f"Starting SSM session with target '{target_id_arg.value}'.")
@@ -285,10 +261,9 @@ class AwsSsmRunner(InstructionRunner):
 
         if session_shell_retcode:
             # the user would see the errors pipe to their terminal
-            raise InterruptInstructionError
+            raise InteractiveSessionError("SSM session failed")
         elif session_shell_timedout:
-            console.print(":x: sub-shell to SSM session timed out.", style="red")
-            raise InterruptInstructionError
+            raise InteractiveSessionTimeoutError("SSM session timed out")
 
         return {}
 
@@ -314,4 +289,4 @@ class AwsSsmRunner(InstructionRunner):
                 console=console,
             )
 
-        raise NotImplementedError(f"No execution implementation for command: aws.ssm.{instruction_name}")
+        raise InstructionNotFoundError(f"No execution implementation for command: aws.ssm.{instruction_name}")

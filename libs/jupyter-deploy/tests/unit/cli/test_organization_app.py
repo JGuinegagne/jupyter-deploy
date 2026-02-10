@@ -220,19 +220,20 @@ class TestOrganizationGetCmd(unittest.TestCase):
         mock_organization_handler_class.assert_called_once()
         mock_handler_fns["get_organization"].assert_called_once()
 
+    @patch("jupyter_deploy.cli.organization_app.Console")
     @patch("jupyter_deploy.handlers.access.organization_handler.OrganizationHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_uses_handler_console_to_print_organization(
-        self, mock_project_dir: Mock, mock_organization_handler_class: Mock
+        self, mock_project_dir: Mock, mock_organization_handler_class: Mock, mock_console_class: Mock
     ) -> None:
         """Test that get command uses the handler's console to print the organization."""
         # Setup
         mock_organization_handler, mock_handler_fns = self.get_mock_organization_handler()
         mock_organization_handler_class.return_value = mock_organization_handler
+        mock_project_dir.return_value.__enter__.return_value = None
 
         mock_console = Mock()
-        mock_handler_fns["get_console"].return_value = mock_console
-        mock_project_dir.return_value.__enter__.return_value = None
+        mock_console_class.return_value = mock_console
 
         # Execute
         runner = CliRunner()
@@ -244,18 +245,21 @@ class TestOrganizationGetCmd(unittest.TestCase):
         mock_call = mock_console.print.mock_calls[0]
         self.assertTrue("test-org" in str(mock_call))
 
+    @patch("jupyter_deploy.cli.organization_app.Console")
     @patch("jupyter_deploy.handlers.access.organization_handler.OrganizationHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_handles_no_organization(self, mock_project_dir: Mock, mock_organization_handler_class: Mock) -> None:
+    def test_handles_no_organization(
+        self, mock_project_dir: Mock, mock_organization_handler_class: Mock, mock_console_class: Mock
+    ) -> None:
         """Test that get command handles the case when no organization is allowlisted."""
         # Setup
         mock_organization_handler, mock_handler_fns = self.get_mock_organization_handler()
         mock_organization_handler_class.return_value = mock_organization_handler
         mock_handler_fns["get_organization"].return_value = ""
+        mock_project_dir.return_value.__enter__.return_value = None
 
         mock_console = Mock()
-        mock_handler_fns["get_console"].return_value = mock_console
-        mock_project_dir.return_value.__enter__.return_value = None
+        mock_console_class.return_value = mock_console
 
         # Execute
         runner = CliRunner()

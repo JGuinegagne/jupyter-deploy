@@ -2,17 +2,8 @@ from collections.abc import Callable
 
 from jupyter_deploy import cmd_utils
 from jupyter_deploy.enum import JupyterDeployTool
+from jupyter_deploy.exceptions import ToolRequiredError
 from jupyter_deploy.manifest import JupyterDeployRequirementV1
-
-
-class ToolRequiredError(RuntimeError):
-    """Raised when a required tool is not installed or has an incorrect version."""
-
-    def __init__(self, tool_name: str, installation_url: str | None = None, error_msg: str | None = None) -> None:
-        self.tool_name = tool_name
-        self.installation_url = installation_url
-        self.error_msg = error_msg
-        super().__init__(f"This operation requires {tool_name} to be installed in your system.")
 
 
 def _check_installation(tool_name: str, installation_url: str | None = None) -> None:

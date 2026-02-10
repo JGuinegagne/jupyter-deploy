@@ -3,10 +3,9 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.engine.supervised_execution import ExecutionError
 from jupyter_deploy.engine.terraform.tf_enums import TerraformSequenceId
 from jupyter_deploy.engine.terraform.tf_up import TerraformUpHandler
-from jupyter_deploy.handlers.command_history_handler import LogCleanupError
+from jupyter_deploy.exceptions import LogCleanupError, SupervisedExecutionError
 
 
 class TestTerraformUpHandler(unittest.TestCase):
@@ -84,7 +83,7 @@ class TestTerraformUpHandler(unittest.TestCase):
         mock_executor.execute.return_value = 1
         mock_create_executor.return_value = mock_executor
 
-        with self.assertRaises(ExecutionError) as context:
+        with self.assertRaises(SupervisedExecutionError) as context:
             handler.apply(path)
 
         self.assertEqual(context.exception.retcode, 1)
@@ -192,7 +191,7 @@ class TestTerraformUpHandler(unittest.TestCase):
         )
 
         # Act & Assert
-        with self.assertRaises(ExecutionError) as context:
+        with self.assertRaises(SupervisedExecutionError) as context:
             handler.apply(path)
 
         self.assertEqual(context.exception.retcode, 1)
@@ -257,7 +256,7 @@ class TestTerraformUpHandler(unittest.TestCase):
         )
 
         # Act & Assert - should raise ExecutionError
-        with self.assertRaises(ExecutionError):
+        with self.assertRaises(SupervisedExecutionError):
             handler.apply(path)
 
         # Assert - clear_logs should NOT be called on failure

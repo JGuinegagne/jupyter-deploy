@@ -9,7 +9,7 @@ from typer.testing import CliRunner
 
 from jupyter_deploy.cli.history_app import history_app
 from jupyter_deploy.cmd_history import LogFileDescriptor, LogFilesCleanupResult
-from jupyter_deploy.handlers.command_history_handler import LogNotFound
+from jupyter_deploy.exceptions import LogNotFoundError
 
 runner = CliRunner()
 
@@ -295,7 +295,7 @@ class TestHistoryShowCommand(unittest.TestCase):
     def test_show_handles_log_not_found_exception(
         self, mock_cwd: Mock, mock_handler_class: Mock, mock_project_dir: Mock
     ) -> None:
-        """Test that show command handles LogNotFound exception gracefully."""
+        """Test that show command handles LogNotFoundError via error decorator."""
         mock_cwd.return_value = Path("/fake/project")
 
         log_descriptor = LogFileDescriptor(
@@ -307,13 +307,15 @@ class TestHistoryShowCommand(unittest.TestCase):
 
         mock_handler, mock_methods = get_mock_history_handler()
         mock_methods["list_logs"].return_value = [log_descriptor]
-        mock_methods["stream_log_lines"].side_effect = LogNotFound("Log file not found")
+        mock_methods["stream_log_lines"].side_effect = LogNotFoundError("Log file not found")
         mock_handler_class.return_value = mock_handler
 
         result = runner.invoke(history_app, ["show", "config"])
 
         self.assertEqual(result.exit_code, 1)
-        self.assertIn("Failed to read log content", result.stdout)
+        # Error decorator displays the error and hint
+        self.assertIn("Log file not found", result.stdout)
+        self.assertIn("jd history list", result.stdout)
         mock_methods["stream_log_lines"].assert_called_once_with(log_descriptor)
 
     @patch("jupyter_deploy.cli.history_app.cmd_utils.project_dir")

@@ -4,8 +4,7 @@ from unittest.mock import ANY, Mock, patch
 from typer.testing import CliRunner
 
 from jupyter_deploy.cli.app import runner as app_runner
-from jupyter_deploy.engine.supervised_execution import ExecutionError
-from jupyter_deploy.handlers.command_history_handler import LogCleanupError
+from jupyter_deploy.exceptions import InvalidPresetError, LogCleanupError, SupervisedExecutionError
 
 
 class TestConfigCommand(unittest.TestCase):
@@ -165,11 +164,9 @@ class TestConfigCommand(unittest.TestCase):
 
     @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
     def test_config_stops_if_validate_raises_invalid_preset(self, mock_config_handler: Mock) -> None:
-        from jupyter_deploy.handlers.project.config_handler import InvalidPreset
-
         mock_config_handler_instance, mock_config_fns = self.get_mock_config_handler()
         mock_config_handler.return_value = mock_config_handler_instance
-        mock_config_fns["validate_preset"].side_effect = InvalidPreset("all", ["base", "none"])
+        mock_config_fns["validate_preset"].side_effect = InvalidPresetError("all", ["base", "none"])
 
         # Act
         runner = CliRunner()
@@ -217,7 +214,7 @@ class TestConfigCommand(unittest.TestCase):
     def test_config_stops_if_configure_raises_execution_error(self, mock_config_handler: Mock) -> None:
         mock_config_handler_instance, mock_config_fns = self.get_mock_config_handler()
         mock_config_handler.return_value = mock_config_handler_instance
-        mock_config_fns["configure"].side_effect = ExecutionError(
+        mock_config_fns["configure"].side_effect = SupervisedExecutionError(
             command="config", retcode=1, message="Configuration failed"
         )
 

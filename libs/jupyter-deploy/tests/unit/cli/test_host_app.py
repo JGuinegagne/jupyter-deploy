@@ -60,20 +60,20 @@ class TestHostStatusCommand(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_host_handler_class.assert_called_once()
         mock_handler_fns["get_host_status"].assert_called_once()
-        mock_handler_fns["get_console"].assert_called_once()
 
+    @patch("jupyter_deploy.cli.host_app.Console")
     @patch("jupyter_deploy.handlers.resource.host_handler.HostHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_uses_handler_console_to_print_status_response(
-        self, mock_project_dir: Mock, mock_host_handler_class: Mock
+        self, mock_project_dir: Mock, mock_host_handler_class: Mock, mock_console_class: Mock
     ) -> None:
         # Setup
         mock_host_handler, mock_handler_fns = self.get_mock_host_handler()
         mock_host_handler_class.return_value = mock_host_handler
+        mock_project_dir.return_value.__enter__.return_value = None
 
         mock_console = Mock()
-        mock_handler_fns["get_console"].return_value = mock_console
-        mock_project_dir.return_value.__enter__.return_value = None
+        mock_console_class.return_value = mock_console
 
         # Execute
         runner = CliRunner()
@@ -424,7 +424,6 @@ class TestHostExecCommand(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_host_handler_class.assert_called_once()
         mock_handler_fns["exec_command"].assert_called_once_with(["df", "-h"])
-        mock_handler_fns["get_console"].assert_called_once()
 
     @patch("jupyter_deploy.handlers.resource.host_handler.HostHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -442,17 +441,20 @@ class TestHostExecCommand(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_handler_fns["exec_command"].assert_called_once_with(["echo", "hello world"])
 
+    @patch("jupyter_deploy.cli.host_app.Console")
     @patch("jupyter_deploy.handlers.resource.host_handler.HostHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_prints_stdout_and_stderr(self, mock_project_dir: Mock, mock_host_handler_class: Mock) -> None:
+    def test_prints_stdout_and_stderr(
+        self, mock_project_dir: Mock, mock_host_handler_class: Mock, mock_console_class: Mock
+    ) -> None:
         # Setup
         mock_host_handler, mock_handler_fns = self.get_mock_host_handler()
         mock_host_handler_class.return_value = mock_host_handler
+        mock_project_dir.return_value.__enter__.return_value = None
 
         mock_console = Mock()
-        mock_handler_fns["get_console"].return_value = mock_console
+        mock_console_class.return_value = mock_console
         mock_handler_fns["exec_command"].return_value = ("test stdout", "test stderr", 0)
-        mock_project_dir.return_value.__enter__.return_value = None
 
         # Execute
         runner = CliRunner()

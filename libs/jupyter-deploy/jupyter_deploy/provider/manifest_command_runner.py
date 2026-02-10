@@ -1,17 +1,13 @@
 from typing import Any, TypeVar, get_origin
 
-# we should remove this import
-# the instruction runner should NOT depend on the CLI because
-# the CLI should just be one way to run these instructions.
-import typer
 from rich import console as rich_console
 
 from jupyter_deploy import transform_utils
 from jupyter_deploy.engine.engine_outputs import EngineOutputsHandler
 from jupyter_deploy.engine.engine_variables import EngineVariablesHandler
 from jupyter_deploy.enum import InstructionArgumentSource, ResultSource, UpdateSource
+from jupyter_deploy.exceptions import InvalidInstructionArgumentError, InvalidInstructionResultError
 from jupyter_deploy.manifest import JupyterDeployCommandV1
-from jupyter_deploy.provider.instruction_runner import InterruptInstructionError
 from jupyter_deploy.provider.instruction_runner_factory import InstructionRunnerFactory
 from jupyter_deploy.provider.resolved_argdefs import (
     ResolvedInstructionArgument,
@@ -73,21 +69,16 @@ class ManifestCommandRunner:
                         paramdefs=cli_paramdefs, arg_name=arg_name, source_key=source_key
                     )
                 else:
-                    raise NotImplementedError(f"Argument source is not handled: {arg_source_type}")
+                    raise InvalidInstructionArgumentError(f"Argument source is not handled: {arg_source_type}")
 
-            try:
-                instruction_results = runner.execute_instruction(
-                    instruction_name=api_name,
-                    resolved_arguments=resolved_argdefs,
-                    console=self._console,
-                )
-                for instruction_result_name, instruction_result_def in instruction_results.items():
-                    indexed_result_name = f"[{instruction_idx}].{instruction_result_name}"
-                    resolved_resultdefs[indexed_result_name] = instruction_result_def
-            except InterruptInstructionError:
-                typer.Abort()
-                self._resolved_resultdefs = resolved_resultdefs
-                return False, resolved_resultdefs
+            instruction_results = runner.execute_instruction(
+                instruction_name=api_name,
+                resolved_arguments=resolved_argdefs,
+                console=self._console,
+            )
+            for instruction_result_name, instruction_result_def in instruction_results.items():
+                indexed_result_name = f"[{instruction_idx}].{instruction_result_name}"
+                resolved_resultdefs[indexed_result_name] = instruction_result_def
 
         self._resolved_resultdefs = resolved_resultdefs
         return True, resolved_resultdefs
@@ -105,9 +96,11 @@ class ManifestCommandRunner:
         transform_fn = transform_utils.get_transform_fn(transform_type)
 
         if source_type != ResultSource.INSTRUCTION_RESULT:
-            raise NotImplementedError("Invalid type: update only support results from instructions.")
+            raise InvalidInstructionResultError("Invalid type: update only support results from instructions")
         if source_key not in self._resolved_resultdefs:
-            raise KeyError(f"Source-key '{source_key}' not found in result defs for variable: {result_name}.")
+            raise InvalidInstructionResultError(
+                f"Source-key '{source_key}' not found in result defs for variable: {result_name}"
+            )
         result_def = self._resolved_resultdefs[source_key]
 
         value = transform_fn(result_def.value)
@@ -129,7 +122,7 @@ class ManifestCommandRunner:
         """
         try:
             return self.get_result_value(cmd_def, result_name, expect_type)
-        except (StopIteration, KeyError):
+        except (StopIteration, InvalidInstructionResultError):
             return fallback
 
     def update_variables(self, cmd_def: JupyterDeployCommandV1) -> None:
@@ -146,9 +139,11 @@ class ManifestCommandRunner:
             source_key = update.source_key
 
             if source_type != UpdateSource.INSTRUCTION_RESULT:
-                raise NotImplementedError("Invalid type: update only support results from instructions")
+                raise InvalidInstructionResultError("Invalid type: update only support results from instructions")
             if source_key not in self._resolved_resultdefs:
-                raise KeyError(f"Source-key '{source_key}' not found in result defs for variable: {variable_name}")
+                raise InvalidInstructionResultError(
+                    f"Source-key '{source_key}' not found in result defs for variable: {variable_name}"
+                )
             result_def = self._resolved_resultdefs[source_key]
 
             transform_type = update.get_transform_type()

@@ -2,6 +2,7 @@ from enum import Enum
 
 from rich import console as rich_console
 
+from jupyter_deploy.exceptions import InstructionNotFoundError
 from jupyter_deploy.provider.aws.aws_ec2_runner import AwsEc2Runner
 from jupyter_deploy.provider.aws.aws_ssm_runner import AwsSsmRunner
 from jupyter_deploy.provider.instruction_runner import InstructionRunner
@@ -55,7 +56,7 @@ class AwsApiRunner(InstructionRunner):
             self.service_runners[service_name] = service_runner
             return service_runner
 
-        raise NotImplementedError(f"Unrecognized AWS service name: {service_name}")
+        raise InstructionNotFoundError(f"Unrecognized AWS service name: '{service_name}'")
 
     def execute_instruction(
         self,

@@ -4,6 +4,7 @@ import typer
 from rich.console import Console
 
 from jupyter_deploy import cmd_utils
+from jupyter_deploy.cli.error_decorator import handle_cli_errors
 from jupyter_deploy.handlers.resource import host_handler
 
 host_app = typer.Typer(
@@ -24,9 +25,9 @@ def status(
     Run either from a jupyter-deploy project directory that you created with `jd init`;
     or pass a --path PATH to such a directory.
     """
-    with cmd_utils.project_dir(project_dir):
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         handler = host_handler.HostHandler()
-        console = handler.get_console()
         status = handler.get_host_status()
 
         console.print(f"Jupyter host status: [bold cyan]{status}[/]")
@@ -44,7 +45,8 @@ def stop(
     Run either from a jupyter-deploy project directory that you created with `jd init`;
     or pass a --path PATH to such a directory.
     """
-    with cmd_utils.project_dir(project_dir):
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         handler = host_handler.HostHandler()
         handler.stop_host()
 
@@ -61,7 +63,8 @@ def start(
     Run either from a jupyter-deploy project directory that you created with `jd init`;
     or pass a --path PATH to such a directory.
     """
-    with cmd_utils.project_dir(project_dir):
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         handler = host_handler.HostHandler()
         handler.start_host()
 
@@ -78,7 +81,8 @@ def restart(
     Run either from a jupyter-deploy project directory that you created with `jd init`;
     or pass a --path PATH to such a directory.
     """
-    with cmd_utils.project_dir(project_dir):
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         handler = host_handler.HostHandler()
         handler.restart_host()
 
@@ -95,7 +99,8 @@ def connect(
     Run either from a jupyter-deploy project directory that you created with `jd init`;
     or pass a --path PATH to such a directory.
     """
-    with cmd_utils.project_dir(project_dir):
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         handler = host_handler.HostHandler()
         handler.connect()
 
@@ -121,17 +126,15 @@ def exec(
     """
     # Arguments after -- are in ctx.args
     command_args = ctx.args
+    console = Console()
 
     if not command_args:
-        console = Console()
         console.print(":x: No command provided. Pass a command after '--'", style="red")
         console.print("Example: jd host exec -- df -h", style="red")
         raise typer.Exit(code=1)
 
-    with cmd_utils.project_dir(project_dir):
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         handler = host_handler.HostHandler()
-        console = handler.get_console()
-
         stdout, stderr, returncode = handler.exec_command(command_args)
 
         if stdout:
@@ -145,5 +148,9 @@ def exec(
             console.print(stderr)
             console.rule()
 
+        # Note: the command runner SHOULD raise a HostCommandInstructionError instead of returning
+        # a non-zero error code. Such HostCommandInstructionError would be caught and handled by
+        # the error context manager so that users do not see a long, unhelpful stack trace.
+        # However, just in case the instruction runner setup is incorrect, handle it here as well.
         if returncode != 0:
             raise typer.Exit(code=returncode)

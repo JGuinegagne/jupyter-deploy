@@ -4,12 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.enum import InstructionArgumentSource, ResultSource, TransformType, UpdateSource, ValueSource
-
-
-class InvalidServiceError(ValueError):
-    """Special error class to indicate an invalid service name."""
-
-    pass
+from jupyter_deploy.exceptions import InvalidServiceError
 
 
 class JupyterDeployTemplateV1(BaseModel):
@@ -282,7 +277,7 @@ class JupyterDeployManifestV1(BaseModel):
         elif svc == "all" and allow_all:
             return "all"
 
-        raise InvalidServiceError(f"Invalid service, use one of {services}")
+        raise InvalidServiceError(svc, services)
 
     def has_command(self, cmd_name: str) -> bool:
         """Return true if the manifest defines the command, false otherwise."""

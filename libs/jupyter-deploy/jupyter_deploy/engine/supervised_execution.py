@@ -164,19 +164,3 @@ class TerminalHandler(Protocol):
             lines: Error context lines to display
         """
         ...
-
-
-class ExecutionError(Exception):
-    """Exception raised when a supervised command execution fails.
-
-    Attributes:
-        command: The command that failed (e.g., "config", "up", "down")
-        retcode: The non-zero return code from the failed command
-        message: Human-readable error message
-    """
-
-    def __init__(self, command: str, retcode: int, message: str):
-        self.command = command
-        self.retcode = retcode
-        self.message = message
-        super().__init__(message)

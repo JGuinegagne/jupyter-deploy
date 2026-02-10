@@ -5,8 +5,8 @@ from rich.console import Console
 
 from jupyter_deploy.api.aws.ec2 import ec2_instance
 from jupyter_deploy.api.aws.ec2.ec2_instance import Ec2InstanceState
+from jupyter_deploy.exceptions import IncompatibleHostStateError, InstructionNotFoundError
 from jupyter_deploy.provider.aws.aws_ec2_runner import AwsEc2Instruction, AwsEc2Runner
-from jupyter_deploy.provider.instruction_runner import InterruptInstructionError
 from jupyter_deploy.provider.resolved_argdefs import ResolvedInstructionArgument, StrResolvedInstructionArgument
 
 
@@ -30,7 +30,7 @@ class TestAwsEc2Runner(unittest.TestCase):
         console = Mock(spec=Console)
 
         # Execute & Assert
-        with self.assertRaises(NotImplementedError) as context:
+        with self.assertRaises(InstructionNotFoundError) as context:
             runner.execute_instruction(
                 instruction_name="non-existent-instruction", resolved_arguments={}, console=console
             )
@@ -120,12 +120,11 @@ class TestStartInstance(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"instance_id": instance_id_arg}
 
         # Execute & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(IncompatibleHostStateError):
             runner._start_instance(resolved_arguments=resolved_args, console=console)
 
         mock_describe_instance_status.assert_called_once()
         mock_start_instance.assert_not_called()
-        console.print.assert_called()
 
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.describe_instance_status")
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.start_instance")
@@ -142,12 +141,11 @@ class TestStartInstance(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"instance_id": instance_id_arg}
 
         # Execute & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(IncompatibleHostStateError):
             runner._start_instance(resolved_arguments=resolved_args, console=console)
 
         mock_describe_instance_status.assert_called_once()
         mock_start_instance.assert_not_called()
-        console.print.assert_called()
 
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.describe_instance_status")
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.start_instance")
@@ -164,7 +162,7 @@ class TestStartInstance(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"instance_id": instance_id_arg}
 
         # Execute & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(IncompatibleHostStateError):
             runner._start_instance(resolved_arguments=resolved_args, console=console)
 
         mock_describe_instance_status.assert_called_once()
@@ -187,7 +185,7 @@ class TestStartInstance(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"instance_id": instance_id_arg}
 
         # Execute & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(IncompatibleHostStateError):
             runner._start_instance(resolved_arguments=resolved_args, console=console)
 
         mock_describe_instance_status.assert_called_once()
@@ -210,7 +208,7 @@ class TestStartInstance(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"instance_id": instance_id_arg}
 
         # Execute & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(IncompatibleHostStateError):
             runner._start_instance(resolved_arguments=resolved_args, console=console)
 
         mock_describe_instance_status.assert_called_once()
@@ -260,12 +258,11 @@ class TestStopInstance(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"instance_id": instance_id_arg}
 
         # Execute & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(IncompatibleHostStateError):
             runner._stop_instance(resolved_arguments=resolved_args, console=console)
 
         mock_describe_instance_status.assert_called_once()
         mock_stop_instance.assert_not_called()
-        console.print.assert_called()
 
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.describe_instance_status")
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.stop_instance")
@@ -282,12 +279,11 @@ class TestStopInstance(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"instance_id": instance_id_arg}
 
         # Execute & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(IncompatibleHostStateError):
             runner._stop_instance(resolved_arguments=resolved_args, console=console)
 
         mock_describe_instance_status.assert_called_once()
         mock_stop_instance.assert_not_called()
-        console.print.assert_called()
 
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.describe_instance_status")
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.stop_instance")
@@ -304,12 +300,11 @@ class TestStopInstance(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"instance_id": instance_id_arg}
 
         # Execute & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(IncompatibleHostStateError):
             runner._stop_instance(resolved_arguments=resolved_args, console=console)
 
         mock_describe_instance_status.assert_called_once()
         mock_stop_instance.assert_not_called()
-        console.print.assert_called()
 
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.describe_instance_status")
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.stop_instance")
@@ -328,12 +323,11 @@ class TestStopInstance(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"instance_id": instance_id_arg}
 
         # Execute & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(IncompatibleHostStateError):
             runner._stop_instance(resolved_arguments=resolved_args, console=console)
 
         mock_describe_instance_status.assert_called_once()
         mock_stop_instance.assert_not_called()
-        console.print.assert_called()
 
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.describe_instance_status")
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.stop_instance")
@@ -350,12 +344,11 @@ class TestStopInstance(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"instance_id": instance_id_arg}
 
         # Execute & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(IncompatibleHostStateError):
             runner._stop_instance(resolved_arguments=resolved_args, console=console)
 
         mock_describe_instance_status.assert_called_once()
         mock_stop_instance.assert_not_called()
-        console.print.assert_called()
 
 
 class TestRebootInstance(unittest.TestCase):
@@ -399,12 +392,11 @@ class TestRebootInstance(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"instance_id": instance_id_arg}
 
         # Execute & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(IncompatibleHostStateError):
             runner._reboot_instance(resolved_arguments=resolved_args, console=console)
 
         mock_describe_instance_status.assert_called_once()
         mock_restart_instance.assert_not_called()
-        console.print.assert_called()
 
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.describe_instance_status")
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.restart_instance")
@@ -423,12 +415,11 @@ class TestRebootInstance(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"instance_id": instance_id_arg}
 
         # Execute & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(IncompatibleHostStateError):
             runner._reboot_instance(resolved_arguments=resolved_args, console=console)
 
         mock_describe_instance_status.assert_called_once()
         mock_restart_instance.assert_not_called()
-        console.print.assert_called()
 
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.describe_instance_status")
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.restart_instance")
@@ -445,12 +436,11 @@ class TestRebootInstance(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"instance_id": instance_id_arg}
 
         # Execute & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(IncompatibleHostStateError):
             runner._reboot_instance(resolved_arguments=resolved_args, console=console)
 
         mock_describe_instance_status.assert_called_once()
         mock_restart_instance.assert_not_called()
-        console.print.assert_called()
 
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.describe_instance_status")
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.restart_instance")
@@ -469,12 +459,11 @@ class TestRebootInstance(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"instance_id": instance_id_arg}
 
         # Execute & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(IncompatibleHostStateError):
             runner._reboot_instance(resolved_arguments=resolved_args, console=console)
 
         mock_describe_instance_status.assert_called_once()
         mock_restart_instance.assert_not_called()
-        console.print.assert_called()
 
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.describe_instance_status")
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.restart_instance")
@@ -493,12 +482,11 @@ class TestRebootInstance(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"instance_id": instance_id_arg}
 
         # Execute & Assert
-        with self.assertRaises(InterruptInstructionError):
+        with self.assertRaises(IncompatibleHostStateError):
             runner._reboot_instance(resolved_arguments=resolved_args, console=console)
 
         mock_describe_instance_status.assert_called_once()
         mock_restart_instance.assert_not_called()
-        console.print.assert_called()
 
 
 class TestWaitForState(unittest.TestCase):
@@ -641,7 +629,7 @@ class TestExecuteInstructions(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {}
 
         # Execute & Assert
-        with self.assertRaises(NotImplementedError) as context:
+        with self.assertRaises(InstructionNotFoundError) as context:
             runner.execute_instruction(
                 instruction_name="unknown-instruction", resolved_arguments=resolved_args, console=console
             )

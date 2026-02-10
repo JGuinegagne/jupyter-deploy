@@ -288,19 +288,20 @@ class TestTeamListCmd(unittest.TestCase):
         mock_teams_handler_class.assert_called_once()
         mock_handler_fns["list_teams"].assert_called_once()
 
+    @patch("jupyter_deploy.cli.teams_app.Console")
     @patch("jupyter_deploy.handlers.access.team_handler.TeamsHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_uses_handler_console_to_print_teams_list(
-        self, mock_project_dir: Mock, mock_teams_handler_class: Mock
+        self, mock_project_dir: Mock, mock_teams_handler_class: Mock, mock_console_class: Mock
     ) -> None:
         """Test that list command uses the handler's console to print the list."""
         # Setup
         mock_teams_handler, mock_handler_fns = self.get_mock_teams_handler()
         mock_teams_handler_class.return_value = mock_teams_handler
+        mock_project_dir.return_value.__enter__.return_value = None
 
         mock_console = Mock()
-        mock_handler_fns["get_console"].return_value = mock_console
-        mock_project_dir.return_value.__enter__.return_value = None
+        mock_console_class.return_value = mock_console
 
         # Execute
         runner = CliRunner()
@@ -312,18 +313,21 @@ class TestTeamListCmd(unittest.TestCase):
         mock_call = mock_console.print.mock_calls[0]
         self.assertTrue("team1, team2" in str(mock_call))
 
+    @patch("jupyter_deploy.cli.teams_app.Console")
     @patch("jupyter_deploy.handlers.access.team_handler.TeamsHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_handles_no_teams(self, mock_project_dir: Mock, mock_teams_handler_class: Mock) -> None:
+    def test_handles_no_teams(
+        self, mock_project_dir: Mock, mock_teams_handler_class: Mock, mock_console_class: Mock
+    ) -> None:
         """Test that list command handles the case when no teams are allowlisted."""
         # Setup
         mock_teams_handler, mock_handler_fns = self.get_mock_teams_handler()
         mock_teams_handler_class.return_value = mock_teams_handler
         mock_handler_fns["list_teams"].return_value = []
+        mock_project_dir.return_value.__enter__.return_value = None
 
         mock_console = Mock()
-        mock_handler_fns["get_console"].return_value = mock_console
-        mock_project_dir.return_value.__enter__.return_value = None
+        mock_console_class.return_value = mock_console
 
         # Execute
         runner = CliRunner()

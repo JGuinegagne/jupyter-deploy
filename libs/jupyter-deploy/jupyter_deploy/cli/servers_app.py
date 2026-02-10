@@ -4,8 +4,8 @@ import typer
 from rich.console import Console
 
 from jupyter_deploy import cmd_utils
+from jupyter_deploy.cli.error_decorator import handle_cli_errors
 from jupyter_deploy.handlers.resource import server_handler
-from jupyter_deploy.manifest import InvalidServiceError
 
 servers_app = typer.Typer(
     help=("""Interact with the services running your Jupyter app."""),
@@ -27,9 +27,9 @@ def status(
     Run either from a jupyter-deploy project directory that you created with `jd init`;
     or pass a --path PATH to such a directory.
     """
-    with cmd_utils.project_dir(project_dir):
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         handler = server_handler.ServerHandler()
-        console = handler.get_console()
         server_status = handler.get_server_status()
 
         console.print(f"Jupyter server status: [bold cyan]{server_status}[/]")
@@ -52,15 +52,10 @@ def start(
     Run either from a jupyter-deploy project directory that you created with `jd init`;
     or pass a --path PATH to such a directory.
     """
-    with cmd_utils.project_dir(project_dir):
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         handler = server_handler.ServerHandler()
-        console = handler.get_console()
-
-        try:
-            handler.start_server(service)
-        except InvalidServiceError as e:
-            console.print(f":x: {e}", style="red")
-            return
+        handler.start_server(service)
 
         if service == "all":
             console.print("Started the Jupyter server and all the sidecars.", style="bold green")
@@ -85,15 +80,10 @@ def stop(
     Run either from a jupyter-deploy project directory that you created with `jd init`;
     or pass a --path PATH to such a directory.
     """
-    with cmd_utils.project_dir(project_dir):
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         handler = server_handler.ServerHandler()
-        console = handler.get_console()
-
-        try:
-            handler.stop_server(service)
-        except InvalidServiceError as e:
-            console.print(f":x: {e}", style="red")
-            return
+        handler.stop_server(service)
 
         if service == "all":
             console.print("Stopped the Jupyter server and all the sidecars.", style="bold green")
@@ -118,15 +108,10 @@ def restart(
     Run either from a jupyter-deploy project directory that you created with `jd init`;
     or pass a --path PATH to such a directory.
     """
-    with cmd_utils.project_dir(project_dir):
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         handler = server_handler.ServerHandler()
-        console = handler.get_console()
-
-        try:
-            handler.restart_server(service)
-        except InvalidServiceError as e:
-            console.print(f":x: {e}", style="red")
-            return
+        handler.restart_server(service)
 
         if service == "all":
             console.print("Restarted the Jupyter server and all the sidecars.", style="bold green")
@@ -164,15 +149,10 @@ def logs(
     # Arguments after -- are in ctx.args
     extra = ctx.args
 
-    with cmd_utils.project_dir(project_dir):
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         handler = server_handler.ServerHandler()
-        console = handler.get_console()
-
-        try:
-            logs, err_logs = handler.get_server_logs(service=service, extra=extra)
-        except InvalidServiceError as e:
-            console.print(f":x: {e}", style="red")
-            return
+        logs, err_logs = handler.get_server_logs(service=service, extra=extra)
 
         if logs:
             console.rule("stdout")
@@ -224,15 +204,10 @@ def exec(
         console.print("Example: jd server exec -s SERVICE -- pwd", style="red")
         raise typer.Exit(code=1)
 
-    with cmd_utils.project_dir(project_dir):
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         handler = server_handler.ServerHandler()
-        console = handler.get_console()
-
-        try:
-            stdout, stderr, returncode = handler.exec_command(service=service, command_args=command_args)
-        except InvalidServiceError as e:
-            console.print(f":x: {e}", style="red")
-            raise typer.Exit(code=1) from e
+        stdout, stderr, returncode = handler.exec_command(service=service, command_args=command_args)
 
         if stdout:
             console.rule("stdout")
@@ -245,6 +220,10 @@ def exec(
             console.print(stderr)
             console.rule()
 
+        # Note: the command runner SHOULD raise a HostCommandInstructionError instead of returning
+        # a non-zero error code. Such HostCommandInstructionError would be caught and handled by
+        # the error context manager so that users do not see a long, unhelpful stack trace.
+        # However, just in case the instruction runner setup is incorrect, handle it here as well.
         if returncode != 0:
             raise typer.Exit(code=returncode)
 
@@ -273,12 +252,7 @@ def connect(
     Note: you may not be able to connect to all services;
     some containers do not have any shell installed.
     """
-    with cmd_utils.project_dir(project_dir):
+    console = Console()
+    with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         handler = server_handler.ServerHandler()
-        console = handler.get_console()
-
-        try:
-            handler.connect(service=service)
-        except InvalidServiceError as e:
-            console.print(f":x: {e}", style="red")
-            raise typer.Exit(code=1) from e
+        handler.connect(service=service)
