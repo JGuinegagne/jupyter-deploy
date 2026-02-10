@@ -110,6 +110,28 @@ class InvalidProjectPathError(JupyterDeployError, ValueError):
     pass
 
 
+class UrlNotAvailableError(JupyterDeployError, ValueError):
+    """Raised when URL is not available or empty."""
+
+    pass
+
+
+class UrlNotSecureError(JupyterDeployError, ValueError):
+    """Raised when URL is not HTTPS."""
+
+    def __init__(self, message: str, url: str) -> None:
+        self.url = url
+        super().__init__(message)
+
+
+class OpenWebBrowserError(JupyterDeployError, RuntimeError):
+    """Raised when opening URL in web browser fails."""
+
+    def __init__(self, message: str, url: str) -> None:
+        self.url = url
+        super().__init__(message)
+
+
 class ConfigurationError(JupyterDeployError, RuntimeError):
     """Base exception for configuration errors."""
 

@@ -7,6 +7,7 @@ from typing import Annotated
 import typer
 from jupyter_core.application import JupyterApp
 from rich.console import Console
+from rich.table import Table
 
 from jupyter_deploy import cmd_utils
 from jupyter_deploy.cli.error_decorator import handle_cli_errors
@@ -20,7 +21,7 @@ from jupyter_deploy.cli.users_app import users_app
 from jupyter_deploy.cli.variables_decorator import with_project_variables
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
-from jupyter_deploy.exceptions import LogCleanupError
+from jupyter_deploy.exceptions import LogCleanupError, OpenWebBrowserError
 from jupyter_deploy.handlers.init_handler import InitHandler
 from jupyter_deploy.handlers.project import config_handler
 from jupyter_deploy.handlers.project.down_handler import DownHandler
@@ -445,7 +446,57 @@ def open(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         handler = OpenHandler()
-        handler.open()
+        url = None
+        browser_failed = False
+
+        try:
+            url = handler.open()
+            console.print(f"\nOpening Jupyter app at: {url}", style="green")
+        except OpenWebBrowserError as e:
+            # Browser failed to open, but we still want to show URL and help
+            url = e.url
+            browser_failed = True
+            console.print(f":x: {e}", style="bold red")
+        finally:
+            # Show troubleshooting help based on available commands in manifest
+            manifest = handler.project_manifest
+            has_host_status = manifest.has_command("host.status")
+            has_server_status = manifest.has_command("server.status")
+            has_host_restart = manifest.has_command("host.restart")
+            has_host_start = manifest.has_command("host.start")
+            has_server_restart = manifest.has_command("server.restart")
+            has_server_start = manifest.has_command("server.start")
+            has_host_connect = manifest.has_command("host.connect")
+
+            if has_host_status or has_server_status or has_host_connect:
+                console.line()
+                console.print("[bold]Having trouble?[/]")
+
+                if has_host_status:
+                    console.print(":mag: verify that your host is running: [bold cyan]jd host status[/]")
+                    if has_host_restart:
+                        console.print(":wrench: try restarting it: [bold cyan]jd host restart[/]")
+                    elif has_host_start:
+                        console.print(":wrench: if it is not, try starting it: [bold cyan]jd host start[/]")
+
+                if has_server_status:
+                    if has_host_status:
+                        console.line()
+                    console.print(":mag: verify that your server is running: [bold cyan]jd server status[/]")
+                    if has_server_restart:
+                        console.print(":wrench: try restarting it: [bold cyan]jd server restart[/]")
+                    elif has_server_start:
+                        console.print(":wrench: try starting it: [bold cyan]jd server start[/]")
+
+                if has_host_connect:
+                    if has_host_status or has_host_status:
+                        console.line()
+                    console.print(":bulb: or connect to your host (when running): [bold cyan]jd host connect[/]")
+                console.line()
+
+        # Exit with error code if browser failed
+        if browser_failed:
+            raise typer.Exit(code=1)
 
 
 @runner.app.command()
@@ -534,37 +585,69 @@ def show(
 
         # Handle single variable query
         if variable:
-            handler.show_single_variable(variable, show_description=description, plain_text=text)
+            var_value, var_description = handler.get_variable_str_value_and_description(variable)
+            display_text = var_description if description else var_value
+            if text:
+                console.print(display_text)
+            else:
+                console.print(f"[bold cyan]{display_text}[/]")
             return
 
         # Handle single output query
         if output:
-            handler.show_single_output(output, show_description=description, plain_text=text)
+            out_value, out_description = handler.get_output_str_value_and_description(output)
+            display_text = out_description if description else out_value
+            if text:
+                console.print(display_text)
+            else:
+                console.print(f"[bold cyan]{display_text}[/]")
             return
 
         # Handle template queries
         if template_name:
-            handler.show_template_name(plain_text=text)
+            result = handler.get_template_name()
+            if text:
+                console.print(result)
+            else:
+                console.print(f"[bold cyan]{result}[/]")
             return
 
         if template_version:
-            handler.show_template_version(plain_text=text)
+            result = handler.get_template_version()
+            if text:
+                console.print(result)
+            else:
+                console.print(f"[bold cyan]{result}[/]")
             return
 
         if template_engine:
-            handler.show_template_engine(plain_text=text)
+            result = handler.get_template_engine()
+            if text:
+                console.print(result)
+            else:
+                console.print(f"[bold cyan]{result}[/]")
             return
 
         # Handle list mode with --variables or --outputs (list names only)
         if list_names:
             if variables and not info and not outputs:
-                handler.list_variable_names(plain_text=text)
+                names = handler.list_variable_names()
+                if text:
+                    console.print(",".join(names))
+                else:
+                    for name in names:
+                        console.print(f"[bold cyan]{name}[/]")
                 return
             if outputs and not info and not variables:
-                handler.list_output_names(plain_text=text)
+                names = handler.list_output_names()
+                if text:
+                    console.print(",".join(names))
+                else:
+                    for name in names:
+                        console.print(f"[bold cyan]{name}[/]")
                 return
 
-        # Handle normal display mode
+        # Handle normal display mode - get all data and format in CLI
         if not info and not outputs and not variables:
             show_info = True
             show_outputs = True
@@ -574,7 +657,72 @@ def show(
             show_outputs = outputs
             show_variables = variables
 
-        handler.show_project_info(show_info=show_info, show_outputs=show_outputs, show_variables=show_variables)
+        # Display basic info
+        if show_info:
+            console.line()
+            console.print("Jupyter Deploy Project Information", style="bold cyan")
+            console.line()
+
+            info_table = Table(show_header=True, header_style="bold magenta")
+            info_table.add_column("Property", style="cyan", no_wrap=True)
+            info_table.add_column("Value", style="white")
+
+            info_table.add_row("Project Path", str(handler.project_path))
+            info_table.add_row("Engine", handler.get_template_engine())
+            info_table.add_row("Template Name", handler.get_template_name())
+            info_table.add_row("Template Version", handler.get_template_version())
+
+            console.print(info_table)
+            console.line()
+
+        # Display variables
+        if show_variables:
+            all_variables = handler.get_full_variables()
+
+            console.line()
+            console.print("Project Variables", style="bold cyan")
+            console.line()
+
+            variables_table = Table(show_header=True, header_style="bold magenta")
+            variables_table.add_column("Variable Name", style="cyan", no_wrap=True)
+            variables_table.add_column("Assigned Value", style="white")
+            variables_table.add_column("Description", style="dim")
+
+            for var_name, var_def in all_variables.items():
+                var_desc = var_def.get_cli_description()
+                if not var_def.sensitive:
+                    assigned_value = str(var_def.assigned_value) if hasattr(var_def, "assigned_value") else None
+                else:
+                    assigned_value = "****"
+                variables_table.add_row(var_name, assigned_value, var_desc)
+
+            console.print(variables_table)
+
+        # Display outputs
+        if show_outputs:
+            all_outputs = handler.get_full_outputs()
+
+            if not all_outputs:
+                console.line()
+                console.print(":warning: No outputs available.", style="yellow")
+                console.print("This is normal if the project has not been deployed yet.", style="yellow")
+                console.line()
+            else:
+                console.line()
+                console.print("Project Outputs", style="bold cyan")
+                console.line()
+
+                output_table = Table(show_header=True, header_style="bold magenta")
+                output_table.add_column("Output Name", style="cyan", no_wrap=True)
+                output_table.add_column("Value", style="white")
+                output_table.add_column("Description", style="dim")
+
+                for out_name, out_def in all_outputs.items():
+                    out_desc = getattr(out_def, "description", "") or "No description"
+                    out_val = str(out_def.value) if hasattr(out_def, "value") and out_def.value is not None else "N/A"
+                    output_table.add_row(out_name, out_val, out_desc)
+
+                console.print(output_table)
 
 
 class JupyterDeployApp(JupyterApp):
