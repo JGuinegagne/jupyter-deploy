@@ -48,13 +48,21 @@ class EngineConfigHandler(ABC):
         pass
 
     @abstractmethod
-    def reset_recorded_variables(self) -> None:
-        """Delete the file in the project dir where the previous inputs were recorded."""
+    def reset_recorded_variables(self) -> bool:
+        """Delete the file in the project dir where the previous inputs were recorded.
+
+        Returns:
+            bool: True if files were deleted, False otherwise
+        """
         pass
 
     @abstractmethod
-    def reset_recorded_secrets(self) -> None:
-        """Delete the file in the project dir where the previous secrets were recorded."""
+    def reset_recorded_secrets(self) -> bool:
+        """Delete the file in the project dir where the previous secrets were recorded.
+
+        Returns:
+            bool: True if files were deleted, False otherwise
+        """
         pass
 
     @abstractmethod

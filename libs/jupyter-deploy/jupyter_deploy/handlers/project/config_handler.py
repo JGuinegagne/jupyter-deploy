@@ -71,13 +71,21 @@ class ConfigHandler(BaseProjectHandler):
         """
         return expected_preset_name is None or expected_preset_name == self.preset_name
 
-    def reset_recorded_variables(self) -> None:
-        """Delete the file in the project dir where the previous inputs were recorded."""
-        self._handler.reset_recorded_variables()
+    def reset_recorded_variables(self) -> bool:
+        """Delete the file in the project dir where the previous inputs were recorded.
 
-    def reset_recorded_secrets(self) -> None:
-        """Delete the file in the project dir where the secrets were recorded."""
-        self._handler.reset_recorded_secrets()
+        Returns:
+            bool: True if files were deleted, False otherwise
+        """
+        return self._handler.reset_recorded_variables()
+
+    def reset_recorded_secrets(self) -> bool:
+        """Delete the file in the project dir where the secrets were recorded.
+
+        Returns:
+            bool: True if files were deleted, False otherwise
+        """
+        return self._handler.reset_recorded_secrets()
 
     def configure(
         self, variable_overrides: dict[str, TemplateVariableDefinition] | None = None

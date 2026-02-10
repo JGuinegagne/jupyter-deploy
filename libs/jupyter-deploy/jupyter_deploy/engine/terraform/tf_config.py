@@ -95,11 +95,11 @@ class TerraformConfigHandler(EngineConfigHandler):
         presets.extend([n[len("defaults-") : -len(".tfvars")] for n in matching_filenames])
         return sorted(presets)
 
-    def reset_recorded_variables(self) -> None:
-        self.variables_handler.reset_recorded_variables()
+    def reset_recorded_variables(self) -> bool:
+        return self.variables_handler.reset_recorded_variables()
 
-    def reset_recorded_secrets(self) -> None:
-        self.variables_handler.reset_recorded_secrets()
+    def reset_recorded_secrets(self) -> bool:
+        return self.variables_handler.reset_recorded_secrets()
 
     def configure(
         self, preset_name: str | None = None, variable_overrides: dict[str, TemplateVariableDefinition] | None = None

@@ -252,8 +252,14 @@ def config(
         if reset:
             if verbose:
                 console.rule("[bold]jupyter-deploy:[/] resetting recorded variables and secrets")
-            handler.reset_recorded_variables()
-            handler.reset_recorded_secrets()
+            vars_deleted = handler.reset_recorded_variables()
+            secrets_deleted = handler.reset_recorded_secrets()
+
+            if verbose:
+                if vars_deleted:
+                    console.print(":wastebasket: Deleted previously recorded inputs", style="dim")
+                if secrets_deleted:
+                    console.print(":wastebasket: Deleted previously recorded secrets", style="dim")
 
         if run_verify:
             handler.verify_requirements()
