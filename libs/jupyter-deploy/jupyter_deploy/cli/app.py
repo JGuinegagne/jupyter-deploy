@@ -21,7 +21,7 @@ from jupyter_deploy.cli.users_app import users_app
 from jupyter_deploy.cli.variables_decorator import with_project_variables
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
-from jupyter_deploy.exceptions import LogCleanupError, OpenWebBrowserError
+from jupyter_deploy.exceptions import LogCleanupError, OpenWebBrowserError, UrlNotAvailableError
 from jupyter_deploy.handlers.init_handler import InitHandler
 from jupyter_deploy.handlers.project import config_handler
 from jupyter_deploy.handlers.project.down_handler import DownHandler
@@ -448,51 +448,57 @@ def open(
         handler = OpenHandler()
         url = None
         browser_failed = False
+        url_unavailable = False
 
         try:
             url = handler.open()
             console.print(f"\nOpening Jupyter app at: {url}", style="green")
+        except UrlNotAvailableError as e:
+            # URL not available - show helpful message but don't fail (project not deployed)
+            console.print(f":x: {e}", style="bold red")
+            console.line()
+            console.print("Make sure you have configured and deployed your project.")
+            console.print(":bulb: To configure the project, run: [bold cyan]jd config[/]")
+            console.print(":bulb: To deploy it, run: [bold cyan]jd up[/]")
+            url_unavailable = True
         except OpenWebBrowserError as e:
             # Browser failed to open, but we still want to show URL and help
             url = e.url
             browser_failed = True
             console.print(f":x: {e}", style="bold red")
         finally:
-            # Show troubleshooting help based on available commands in manifest
-            manifest = handler.project_manifest
-            has_host_status = manifest.has_command("host.status")
-            has_server_status = manifest.has_command("server.status")
-            has_host_restart = manifest.has_command("host.restart")
-            has_host_start = manifest.has_command("host.start")
-            has_server_restart = manifest.has_command("server.restart")
-            has_server_start = manifest.has_command("server.start")
-            has_host_connect = manifest.has_command("host.connect")
+            # Show troubleshooting help based on available commands in manifest (only if URL was available)
+            if not url_unavailable:
+                manifest = handler.project_manifest
+                has_host_status = manifest.has_command("host.status")
+                has_server_status = manifest.has_command("server.status")
+                has_host_restart = manifest.has_command("host.restart")
+                has_host_start = manifest.has_command("host.start")
+                has_server_restart = manifest.has_command("server.restart")
+                has_server_start = manifest.has_command("server.start")
+                has_host_connect = manifest.has_command("host.connect")
 
-            if has_host_status or has_server_status or has_host_connect:
-                console.line()
-                console.print("[bold]Having trouble?[/]")
+                if has_host_status or has_server_status or has_host_connect:
+                    console.line()
+                    console.print("[bold]Having trouble?[/]")
 
-                if has_host_status:
-                    console.print(":mag: verify that your host is running: [bold cyan]jd host status[/]")
-                    if has_host_restart:
-                        console.print(":wrench: try restarting it: [bold cyan]jd host restart[/]")
-                    elif has_host_start:
-                        console.print(":wrench: if it is not, try starting it: [bold cyan]jd host start[/]")
-
-                if has_server_status:
                     if has_host_status:
-                        console.line()
-                    console.print(":mag: verify that your server is running: [bold cyan]jd server status[/]")
-                    if has_server_restart:
-                        console.print(":wrench: try restarting it: [bold cyan]jd server restart[/]")
-                    elif has_server_start:
-                        console.print(":wrench: try starting it: [bold cyan]jd server start[/]")
+                        console.print(":mag: verify that your host is running: [bold cyan]jd host status[/]")
+                        if has_host_restart:
+                            console.print(":wrench: try restarting it: [bold cyan]jd host restart[/]")
+                        elif has_host_start:
+                            console.print(":wrench: not running? Try starting it: [bold cyan]jd host start[/]")
 
-                if has_host_connect:
-                    if has_host_status or has_host_status:
-                        console.line()
-                    console.print(":bulb: or connect to your host (when running): [bold cyan]jd host connect[/]")
-                console.line()
+                    if has_server_status:
+                        console.print(":mag: verify that your server is running: [bold cyan]jd server status[/]")
+                        if has_server_restart:
+                            console.print(":wrench: try restarting it: [bold cyan]jd server restart[/]")
+                        elif has_server_start:
+                            console.print(":wrench: not running? Try starting it: [bold cyan]jd server start[/]")
+
+                    if has_host_connect:
+                        console.print(":bulb: or connect to your host (when running): [bold cyan]jd host connect[/]")
+                    console.line()
 
         # Exit with error code if browser failed
         if browser_failed:
