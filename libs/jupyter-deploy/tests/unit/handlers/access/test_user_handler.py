@@ -86,7 +86,9 @@ class TestUsersHandler(unittest.TestCase):
 
         mock_retrieve_manifest.assert_called_once()
         mock_tf_outputs_handler.assert_called_once_with(project_path=path, project_manifest=mock_manifest)
-        mock_tf_variables_handler.assert_called_once_with(project_path=path, project_manifest=mock_manifest)
+        mock_tf_variables_handler.assert_called_once_with(
+            project_path=path, project_manifest=mock_manifest, terminal_handler=None
+        )
         self.assertEqual(handler._output_handler, mock_output_handler)
         self.assertEqual(handler.engine, EngineType.TERRAFORM)
 
@@ -242,8 +244,6 @@ class TestUsersHandler(unittest.TestCase):
         mock_cmd_runner, mock_cmd_runner_fns = self.get_mock_manifest_cmd_runner_and_fns()
         mock_cmd_runner_class.return_value = mock_cmd_runner
 
-        mock_console = mock_console_class.return_value
-
         # Execute
         handler = UsersHandler()
         handler.add_users(["user1", "user2"])
@@ -251,7 +251,7 @@ class TestUsersHandler(unittest.TestCase):
         # Verify
         mock_manifest_fns["get_command"].assert_called_once_with("users.add")
         mock_cmd_runner_class.assert_called_once_with(
-            console=mock_console,
+            terminal_handler=None,
             output_handler=mock_output_handler,
             variable_handler=mock_variable_handler,
         )
@@ -293,8 +293,6 @@ class TestUsersHandler(unittest.TestCase):
         mock_cmd_runner, mock_cmd_runner_fns = self.get_mock_manifest_cmd_runner_and_fns()
         mock_cmd_runner_class.return_value = mock_cmd_runner
 
-        mock_console = mock_console_class.return_value
-
         # Execute
         handler = UsersHandler()
         handler.remove_users(["user1", "user2"])
@@ -302,7 +300,7 @@ class TestUsersHandler(unittest.TestCase):
         # Verify
         mock_manifest_fns["get_command"].assert_called_once_with("users.remove")
         mock_cmd_runner_class.assert_called_once_with(
-            console=mock_console,
+            terminal_handler=None,
             output_handler=mock_output_handler,
             variable_handler=mock_variable_handler,
         )
@@ -344,8 +342,6 @@ class TestUsersHandler(unittest.TestCase):
         mock_cmd_runner, mock_cmd_runner_fns = self.get_mock_manifest_cmd_runner_and_fns()
         mock_cmd_runner_class.return_value = mock_cmd_runner
 
-        mock_console = mock_console_class.return_value
-
         # Execute
         handler = UsersHandler()
         handler.set_users(["user1", "user2"])
@@ -353,7 +349,7 @@ class TestUsersHandler(unittest.TestCase):
         # Verify
         mock_manifest_fns["get_command"].assert_called_once_with("users.set")
         mock_cmd_runner_class.assert_called_once_with(
-            console=mock_console,
+            terminal_handler=None,
             output_handler=mock_output_handler,
             variable_handler=mock_variable_handler,
         )
@@ -396,8 +392,6 @@ class TestUsersHandler(unittest.TestCase):
         mock_cmd_runner_class.return_value = mock_cmd_runner
         mock_cmd_runner_fns["get_result_value"].return_value = ["user1", "user2", "user3"]
 
-        mock_console = mock_console_class.return_value
-
         # Execute
         handler = UsersHandler()
         result = handler.list_users()
@@ -406,7 +400,7 @@ class TestUsersHandler(unittest.TestCase):
         self.assertEqual(result, ["user1", "user2", "user3"])
         mock_manifest_fns["get_command"].assert_called_once_with("users.list")
         mock_cmd_runner_class.assert_called_once_with(
-            console=mock_console,
+            terminal_handler=None,
             output_handler=mock_output_handler,
             variable_handler=mock_variable_handler,
         )

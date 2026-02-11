@@ -5,6 +5,7 @@ from rich.console import Console
 
 from jupyter_deploy import cmd_utils
 from jupyter_deploy.cli.error_decorator import handle_cli_errors
+from jupyter_deploy.cli.simple_display import SimpleDisplayManager
 from jupyter_deploy.handlers.access import organization_handler
 
 organization_app = typer.Typer(
@@ -28,8 +29,11 @@ def set(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = organization_handler.OrganizationHandler()
-        handler.set_organization(organization)
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = organization_handler.OrganizationHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Setting organization..."):
+            handler.set_organization(organization)
 
 
 @organization_app.command()
@@ -46,8 +50,11 @@ def unset(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = organization_handler.OrganizationHandler()
-        handler.unset_organization()
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = organization_handler.OrganizationHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Removing organization..."):
+            handler.unset_organization()
 
 
 @organization_app.command()
@@ -64,8 +71,11 @@ def get(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = organization_handler.OrganizationHandler()
-        organization = handler.get_organization()
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = organization_handler.OrganizationHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Fetching organization..."):
+            organization = handler.get_organization()
 
         if organization:
             console.print(f"Allowlisted organization: [bold cyan]{organization}[/]")

@@ -10,7 +10,7 @@ class DownHandler(BaseProjectHandler):
 
     def __init__(self, terminal_handler: TerminalHandler | None = None) -> None:
         """Base class to manage the down command of a jupyter-deploy project."""
-        super().__init__()
+        super().__init__(terminal_handler=terminal_handler)
 
         if self.engine == EngineType.TERRAFORM:
             self._handler = tf_down.TerraformDownHandler(

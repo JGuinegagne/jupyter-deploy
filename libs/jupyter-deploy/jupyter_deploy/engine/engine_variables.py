@@ -3,9 +3,9 @@ from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
-from rich import console as rich_console
 
 from jupyter_deploy import constants, fs_utils
+from jupyter_deploy.engine.supervised_execution import TerminalHandler
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
 from jupyter_deploy.exceptions import InvalidVariablesDotYamlError
 from jupyter_deploy.handlers import base_project_handler
@@ -19,19 +19,23 @@ from jupyter_deploy.variables_config import (
 
 
 class EngineVariablesHandler(ABC):
-    def __init__(self, project_path: Path, project_manifest: JupyterDeployManifest) -> None:
-        """Instantiate the base handler for the decorator."""
+    def __init__(
+        self,
+        project_path: Path,
+        project_manifest: JupyterDeployManifest,
+        terminal_handler: TerminalHandler | None = None,
+    ) -> None:
+        """Instantiate the base handler for the decorator.
+
+        Args:
+            project_path: Path to the project directory
+            project_manifest: The project manifest
+            terminal_handler: Optional terminal handler for status updates
+        """
         self.project_path = project_path
         self.project_manifest = project_manifest
+        self.terminal_handler = terminal_handler
         self._variables_config: JupyterDeployVariablesConfig | None = None
-        self._console: rich_console.Console | None = None
-
-    def get_console(self) -> rich_console.Console:
-        """Return the instance's rich console."""
-        if self._console:
-            return self._console
-        self._console = rich_console.Console()
-        return self._console
 
     def get_variables_config_path(self) -> Path:
         return self.project_path / constants.VARIABLES_FILENAME
@@ -63,34 +67,24 @@ class EngineVariablesHandler(ABC):
             return variables_config
         except FileNotFoundError:
             # the user has deleted their variables.yaml, reset it to a fallback
-            console = self.get_console()
-            console.rule("Invalid variables.yaml", style="red")
-            console.print(
-                f":warning: variables config not found at: {variables_config_path.absolute()}", style="yellow"
-            )
-            console.line()
-            console.rule(style="red")
+            if self.terminal_handler:
+                self.terminal_handler.warning(
+                    f"Variables config not found at: {variables_config_path.absolute()}, resetting to defaults"
+                )
             reset_variables_config = self._get_reset_variables_config()
             self._variables_config = reset_variables_config
             return self._variables_config
         except InvalidVariablesDotYamlError:
             # the user has corrupted their variables.yaml, reset to a fallback
-            console = self.get_console()
-            console.rule("Invalid variables.yaml", style="red")
-            console.print(":warning: variables config was not a dict, resetting...", style="yellow")
-            console.line()
-            console.rule(style="red")
+            if self.terminal_handler:
+                self.terminal_handler.warning("Variables config was not a dict, resetting to defaults")
             reset_variables_config = self._get_reset_variables_config()
             self._variables_config = reset_variables_config
             return self._variables_config
         except ValidationError as e:
-            # the user has corrupted their variables.yaml, reset to a fallback;
-            console = self.get_console()
-            console.rule("Invalid variables.yaml")
-            console.print(":warning: variables config is invalid, resetting...", style="yellow")
-            console.line()
-            console.print(e, style="red")
-            console.rule(style="red")
+            # the user has corrupted their variables.yaml, reset to a fallback
+            if self.terminal_handler:
+                self.terminal_handler.warning(f"Variables config is invalid, resetting to defaults: {e}")
             reset_variables_config = self._get_reset_variables_config()
             self._variables_config = reset_variables_config
             return self._variables_config

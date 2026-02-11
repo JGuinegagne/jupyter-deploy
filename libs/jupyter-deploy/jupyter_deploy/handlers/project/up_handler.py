@@ -12,7 +12,7 @@ class UpHandler(BaseProjectHandler):
 
     def __init__(self, terminal_handler: TerminalHandler | None = None) -> None:
         """Base class to manage the up command of a jupyter-deploy project."""
-        super().__init__()
+        super().__init__(terminal_handler=terminal_handler)
 
         if self.engine == EngineType.TERRAFORM:
             self._handler = tf_up.TerraformUpHandler(

@@ -59,7 +59,6 @@ class TerraformDownHandler(EngineDownHandler):
         return fs_utils.file_exists(tfvars_file_path)
 
     def destroy(self, auto_approve: bool = False) -> None:
-        console = rich_console.Console()
         verbose = self.terminal_handler is None
 
         # Create log file using command history handler
@@ -73,6 +72,7 @@ class TerraformDownHandler(EngineDownHandler):
                 raise DownAutoApproveRequiredError(persisting_resources)
 
             if verbose:
+                console = rich_console.Console()
                 console.print("Running dry-run to detach resources from terraform state...")
             dryrun_rm_cmd = TF_RM_FROM_STATE_CMD.copy()
             dryrun_rm_cmd.append("--dry-run")
@@ -80,18 +80,30 @@ class TerraformDownHandler(EngineDownHandler):
             try:
                 cmd_utils.run_cmd_and_capture_output(dryrun_rm_cmd, exec_dir=self.engine_dir_path)
             except CalledProcessError as e:
-                console.print(":x: Error performing dry-run of removing resources from Terraform state.", style="red")
-                console.print(f"Details: {e}", style="red")
-                console.line()
+                if verbose:
+                    console = rich_console.Console()
+                    console.print(
+                        ":x: Error performing dry-run of removing resources from Terraform state.", style="red"
+                    )
+                    console.print(f"Details: {e}", style="red")
+                    console.line()
+                if self.terminal_handler:
+                    self.terminal_handler.warning(
+                        "Error performing dry-run of removing resources from Terraform state."
+                    )
                 return
             if verbose:
+                console = rich_console.Console()
                 console.print("Dry-run succeeded.")
                 console.rule()
 
             # otherwise, remove the resources from the state using supervised execution
             if verbose:
+                console = rich_console.Console()
                 console.print("Removing persisting resources from the Terraform state...")
                 console.line()
+            if self.terminal_handler:
+                self.terminal_handler.info("Removing persisting resources from the Terraform state...")
 
             rm_cmd = TF_RM_FROM_STATE_CMD.copy()
             rm_cmd.extend([pr for pr in persisting_resources])
@@ -123,8 +135,11 @@ class TerraformDownHandler(EngineDownHandler):
                 )
 
             if verbose:
+                console = rich_console.Console()
                 console.print("Removed the persisting resources from the Terraform state.", style="green")
                 console.rule()
+            if self.terminal_handler:
+                self.terminal_handler.success("Removed the persisting resources from the Terraform state.")
 
         # second: run terraform destroy with supervised execution
         destroy_cmd = TF_DESTROY_CMD.copy()

@@ -208,11 +208,10 @@ class TestPollInstanceStatus(unittest.TestCase):
     def test_waits_before_polling(self, mock_describe_instance_status: Mock, mock_sleep: Mock) -> None:
         # Setup
         mock_ec2_client = Mock()
-        mock_console = Mock()
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "running", "Code": 16}}
 
         # Execute
-        poll_for_instance_status(mock_ec2_client, mock_console, "i-123", Ec2InstanceState.RUNNING, wait_after_seconds=5)
+        poll_for_instance_status(mock_ec2_client, "i-123", Ec2InstanceState.RUNNING, wait_after_seconds=5)
 
         # Verify
         mock_sleep.assert_called_with(5)
@@ -222,11 +221,10 @@ class TestPollInstanceStatus(unittest.TestCase):
     def test_calls_local_describe_status_method(self, mock_describe_instance_status: Mock, mock_sleep: Mock) -> None:
         # Setup
         mock_ec2_client = Mock()
-        mock_console = Mock()
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "running", "Code": 16}}
 
         # Execute
-        poll_for_instance_status(mock_ec2_client, mock_console, "i-123", Ec2InstanceState.RUNNING)
+        poll_for_instance_status(mock_ec2_client, "i-123", Ec2InstanceState.RUNNING)
 
         # Verify
         mock_sleep.assert_called_once()
@@ -239,29 +237,26 @@ class TestPollInstanceStatus(unittest.TestCase):
     def test_returns_on_desired_state(self, mock_describe_instance_status: Mock, mock_sleep: Mock) -> None:
         # Setup
         mock_ec2_client = Mock()
-        mock_console = Mock()
         instance_status = {"InstanceState": {"Name": "running", "Code": 16}}
         mock_describe_instance_status.return_value = instance_status
 
         # Execute
-        result = poll_for_instance_status(mock_ec2_client, mock_console, "i-123", Ec2InstanceState.RUNNING)
+        result = poll_for_instance_status(mock_ec2_client, "i-123", Ec2InstanceState.RUNNING)
 
         # Verify
         self.assertEqual(result, instance_status)
         mock_sleep.assert_called_once()
-        mock_console.print.assert_called_with("Instance reached desired state: 'running'")
 
     @patch("time.sleep")
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.describe_instance_status")
     def test_raises_on_incorrect_terminal_state(self, mock_describe_instance_status: Mock, mock_sleep: Mock) -> None:
         # Setup
         mock_ec2_client = Mock()
-        mock_console = Mock()
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "stopped", "Code": 80}}
 
         # Execute & Assert
         with self.assertRaises(ValueError) as context:
-            poll_for_instance_status(mock_ec2_client, mock_console, "i-123", Ec2InstanceState.RUNNING)
+            poll_for_instance_status(mock_ec2_client, "i-123", Ec2InstanceState.RUNNING)
 
         mock_sleep.assert_called_once()
         self.assertIn("Unexpected terminal state", str(context.exception))
@@ -272,7 +267,6 @@ class TestPollInstanceStatus(unittest.TestCase):
     def test_raises_on_timeout(self, mock_describe_instance_status: Mock, mock_sleep: Mock, mock_time: Mock) -> None:
         # Setup
         mock_ec2_client = Mock()
-        mock_console = Mock()
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "pending", "Code": 0}}
 
         # Simulate timeout by incrementing time
@@ -282,7 +276,6 @@ class TestPollInstanceStatus(unittest.TestCase):
         with self.assertRaises(TimeoutError) as context:
             poll_for_instance_status(
                 mock_ec2_client,
-                mock_console,
                 "i-123",
                 Ec2InstanceState.RUNNING,
                 timeout_seconds=10,  # Less than the time difference (100)
@@ -299,7 +292,6 @@ class TestPollInstanceStatus(unittest.TestCase):
     ) -> None:
         # Setup
         mock_ec2_client = Mock()
-        mock_console = Mock()
 
         # First call returns pending, second call returns running
         mock_describe_instance_status.side_effect = [
@@ -313,7 +305,6 @@ class TestPollInstanceStatus(unittest.TestCase):
         # Execute
         result = poll_for_instance_status(
             mock_ec2_client,
-            mock_console,
             "i-123",
             Ec2InstanceState.RUNNING,
             timeout_seconds=100,
@@ -325,12 +316,6 @@ class TestPollInstanceStatus(unittest.TestCase):
         # The sleep is called for initial wait_after_seconds (default 2) and poll_interval_seconds
         self.assertEqual(mock_sleep.call_count, 2)
         mock_sleep.assert_has_calls([call(2), call(2)])
-        mock_console.print.assert_has_calls(
-            [
-                call("Instance state is 'pending', waiting for 'running'..."),
-                call("Instance reached desired state: 'running'"),
-            ]
-        )
         self.assertEqual(result["InstanceState"]["Name"], "running")
 
 

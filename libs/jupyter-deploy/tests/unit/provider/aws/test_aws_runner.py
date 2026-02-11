@@ -1,8 +1,6 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from rich.console import Console
-
 from jupyter_deploy.exceptions import InstructionNotFoundError
 from jupyter_deploy.provider.aws.aws_runner import AwsApiRunner, AwsService
 from jupyter_deploy.provider.resolved_argdefs import ResolvedInstructionArgument
@@ -30,18 +28,17 @@ class TestAwsApiRunner(unittest.TestCase):
         mock_ssm_runner.execute_instruction.return_value = expected_result
 
         runner = AwsApiRunner(region_name="us-west-2")
-        console = Mock(spec=Console)
         resolved_args: dict[str, ResolvedInstructionArgument] = {"arg1": Mock(spec=ResolvedInstructionArgument)}
 
         # Execute
         result = runner.execute_instruction(
-            instruction_name="aws.ssm.command", resolved_arguments=resolved_args, console=console
+            instruction_name="aws.ssm.command", resolved_arguments=resolved_args, terminal_handler=None
         )
 
         # Assert
         mock_ssm_runner_class.assert_called_once_with(region_name="us-west-2")
         mock_ssm_runner.execute_instruction.assert_called_once_with(
-            instruction_name="command", resolved_arguments=resolved_args, console=console
+            instruction_name="command", resolved_arguments=resolved_args, terminal_handler=None
         )
         self.assertEqual(result, expected_result)
 
@@ -55,18 +52,17 @@ class TestAwsApiRunner(unittest.TestCase):
         mock_ec2_runner.execute_instruction.return_value = expected_result
 
         runner = AwsApiRunner(region_name="us-west-2")
-        console = Mock(spec=Console)
         resolved_args: dict[str, ResolvedInstructionArgument] = {"arg1": Mock(spec=ResolvedInstructionArgument)}
 
         # Execute
         result = runner.execute_instruction(
-            instruction_name="aws.ec2.start-instance", resolved_arguments=resolved_args, console=console
+            instruction_name="aws.ec2.start-instance", resolved_arguments=resolved_args, terminal_handler=None
         )
 
         # Assert
         mock_ec2_runner_class.assert_called_once_with(region_name="us-west-2")
         mock_ec2_runner.execute_instruction.assert_called_once_with(
-            instruction_name="start-instance", resolved_arguments=resolved_args, console=console
+            instruction_name="start-instance", resolved_arguments=resolved_args, terminal_handler=None
         )
         self.assertEqual(result, expected_result)
 
@@ -77,17 +73,16 @@ class TestAwsApiRunner(unittest.TestCase):
         mock_ssm_runner_class.return_value = mock_ssm_runner
 
         runner = AwsApiRunner(region_name="us-west-2")
-        console = Mock(spec=Console)
         resolved_args: dict[str, ResolvedInstructionArgument] = {"arg1": Mock(spec=ResolvedInstructionArgument)}
 
         # Execute first instruction
         runner.execute_instruction(
-            instruction_name="aws.ssm.command1", resolved_arguments=resolved_args, console=console
+            instruction_name="aws.ssm.command1", resolved_arguments=resolved_args, terminal_handler=None
         )
 
         # Execute second instruction
         runner.execute_instruction(
-            instruction_name="aws.ssm.command2", resolved_arguments=resolved_args, console=console
+            instruction_name="aws.ssm.command2", resolved_arguments=resolved_args, terminal_handler=None
         )
 
         # Assert
@@ -100,13 +95,12 @@ class TestAwsApiRunner(unittest.TestCase):
     def test_execute_raise_not_implemented_error_on_unmatches_service(self) -> None:
         # Setup
         runner = AwsApiRunner(region_name="us-west-2")
-        console = Mock(spec=Console)
         resolved_args: dict[str, ResolvedInstructionArgument] = {"arg1": Mock(spec=ResolvedInstructionArgument)}
 
         # Execute and Assert
         with self.assertRaises(InstructionNotFoundError) as context:
             runner.execute_instruction(
-                instruction_name="aws.unknown-service.command", resolved_arguments=resolved_args, console=console
+                instruction_name="aws.unknown-service.command", resolved_arguments=resolved_args, terminal_handler=None
             )
 
         self.assertIn("unknown-service", str(context.exception))
@@ -114,7 +108,6 @@ class TestAwsApiRunner(unittest.TestCase):
     def test_execute_raise_value_error_on_invalid_instruction_name(self) -> None:
         # Setup
         runner = AwsApiRunner(region_name="us-west-2")
-        console = Mock(spec=Console)
         resolved_args: dict[str, ResolvedInstructionArgument] = {"arg1": Mock(spec=ResolvedInstructionArgument)}
 
         # Test cases for invalid instruction names
@@ -132,7 +125,7 @@ class TestAwsApiRunner(unittest.TestCase):
                 # Execute and Assert
                 with self.assertRaises(ValueError) as context:
                     runner.execute_instruction(
-                        instruction_name=invalid_instruction, resolved_arguments=resolved_args, console=console
+                        instruction_name=invalid_instruction, resolved_arguments=resolved_args, terminal_handler=None
                     )
 
                 self.assertIn(invalid_instruction, str(context.exception))

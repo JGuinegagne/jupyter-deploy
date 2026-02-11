@@ -14,7 +14,8 @@ from mypy_boto3_ec2.type_defs import (
     StartInstancesRequestTypeDef,
     StopInstancesRequestTypeDef,
 )
-from rich import console as rich_console
+
+from jupyter_deploy.engine.supervised_execution import TerminalHandler
 
 
 class Ec2InstanceState(str, Enum):
@@ -134,14 +135,23 @@ def describe_instance_status(
 
 def poll_for_instance_status(
     ec2_client: EC2Client,
-    console: rich_console.Console,
     instance_id: str,
     desired_state: Ec2InstanceState,
+    terminal_handler: TerminalHandler | None = None,
     timeout_seconds: int = 60,
     wait_after_seconds: int = 2,
     poll_interval_seconds: int = 5,
 ) -> InstanceStatusTypeDef:
     """Synchronously poll EC2:GetInstanceStatus until the instance reaches a terminal state.
+
+    Args:
+        ec2_client: EC2 client to use
+        instance_id: Instance ID to poll
+        desired_state: Desired instance state
+        terminal_handler: Optional terminal handler for status updates
+        timeout_seconds: Timeout in seconds
+        wait_after_seconds: Wait time after first API call
+        poll_interval_seconds: Polling interval in seconds
 
     Raises:
         ValueError if the instance reaches a terminal state that is not the desired state
@@ -158,14 +168,16 @@ def poll_for_instance_status(
         curr_time = time.time()
 
         if state == desired_state:
-            console.print(f"Instance reached desired state: '{desired_state.value}'")
+            if terminal_handler:
+                terminal_handler.success(f"Instance reached desired state: '{desired_state.value}'")
             return response
         elif state.is_terminal():
             raise ValueError(f"Unexpected terminal state for instance '{instance_id}': '{state.value}'")
         elif curr_time - start_time > timeout_seconds:
             raise TimeoutError(f"Timed out polling state of instance '{instance_id}', end state '{state.value}'")
         else:
-            console.print(f"Instance state is '{state.value}', waiting for '{desired_state.value}'...")
+            if terminal_handler:
+                terminal_handler.info(f"Polling status of instance '{instance_id}', current state: '{state.value}'...")
             time.sleep(poll_interval_seconds)
 
 

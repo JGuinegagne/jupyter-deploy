@@ -1,7 +1,7 @@
 """Core types and protocols for supervised execution with progress tracking."""
 
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @dataclass
@@ -113,13 +113,15 @@ class TerminalHandler(Protocol):
     """Protocol for terminal interaction during supervised execution.
 
     This unified protocol handles all terminal display concerns:
-    progress updates, live logs, and interactive prompts. It allows
-    the CLI layer to implement Rich-based display without creating
-    a dependency from the engine layer.
+    - Progress updates with progress bars (for process-wrapping commands)
+    - Live log boxes (for process output)
+    - Interactive prompts (for user input)
+    - Status messages (info/warning/success) displayed above progress/logs
+    - Simple spinners (for SDK-style commands without progress bars)
     """
 
     def on_progress(self, progress: ExecutionProgress) -> None:
-        """Called when progress is made.
+        """Called when progress is made (for operations with progress bars).
 
         Args:
             progress: The current execution progress state
@@ -162,5 +164,71 @@ class TerminalHandler(Protocol):
 
         Args:
             lines: Error context lines to display
+        """
+        ...
+
+    def info(self, message: str) -> None:
+        """Display informational message above progress bar/logs.
+
+        Persists at top of display (max 3 messages).
+        Only shown if verbose mode is enabled.
+
+        Args:
+            message: The informational message to display
+        """
+        ...
+
+    def warning(self, message: str) -> None:
+        """Display warning message above progress bar/logs.
+
+        Persists at top of display (max 3 messages).
+        Always shown regardless of verbose mode.
+
+        Args:
+            message: The warning message to display
+        """
+        ...
+
+    def success(self, message: str) -> None:
+        """Display success message above progress bar/logs.
+
+        Persists at top of display (max 3 messages).
+        Always shown (e.g., check marks for completed operations).
+
+        Args:
+            message: The success message to display
+        """
+        ...
+
+    def hint(self, message: str) -> None:
+        """Display hint message to help users.
+
+        Shows helpful tips or instructions (e.g., "Type 'exit' to disconnect").
+        Displayed in a dimmed style to distinguish from status messages.
+
+        Args:
+            message: The hint message to display
+        """
+        ...
+
+    def spinner(self, initial_message: str) -> Any:
+        """Context manager for operations with simple spinner (no progress bar).
+
+        Use for SDK-style operations that don't have progress tracking.
+        Returns context manager that yields object with update(message: str) method.
+
+        Args:
+            initial_message: The initial message to display
+
+        Returns:
+            Context manager that yields a spinner with update() method
+        """
+        ...
+
+    def stop_spinning(self) -> None:
+        """Stop the current spinner if one is active.
+
+        This allows stopping the spinner before an operation completes,
+        useful for transitioning to interactive commands that need clean terminal output.
         """
         ...

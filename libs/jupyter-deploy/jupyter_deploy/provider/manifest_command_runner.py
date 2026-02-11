@@ -1,10 +1,9 @@
 from typing import Any, TypeVar, get_origin
 
-from rich import console as rich_console
-
 from jupyter_deploy import transform_utils
 from jupyter_deploy.engine.engine_outputs import EngineOutputsHandler
 from jupyter_deploy.engine.engine_variables import EngineVariablesHandler
+from jupyter_deploy.engine.supervised_execution import TerminalHandler
 from jupyter_deploy.enum import InstructionArgumentSource, ResultSource, UpdateSource
 from jupyter_deploy.exceptions import InvalidInstructionArgumentError, InvalidInstructionResultError
 from jupyter_deploy.manifest import JupyterDeployCommandV1
@@ -26,12 +25,18 @@ class ManifestCommandRunner:
 
     def __init__(
         self,
-        console: rich_console.Console,
+        terminal_handler: TerminalHandler | None,
         output_handler: EngineOutputsHandler,
         variable_handler: EngineVariablesHandler,
     ) -> None:
-        """Instantiate the command runner."""
-        self._console = console
+        """Instantiate the command runner.
+
+        Args:
+            terminal_handler: Optional terminal handler for status updates
+            output_handler: Handler for template outputs
+            variable_handler: Handler for template variables
+        """
+        self._terminal_handler = terminal_handler
         self._output_handler = output_handler
         self._variable_handler = variable_handler
         self._resolved_resultdefs: dict[str, ResolvedInstructionResult] = {}
@@ -74,7 +79,7 @@ class ManifestCommandRunner:
             instruction_results = runner.execute_instruction(
                 instruction_name=api_name,
                 resolved_arguments=resolved_argdefs,
-                console=self._console,
+                terminal_handler=self._terminal_handler,
             )
             for instruction_result_name, instruction_result_def in instruction_results.items():
                 indexed_result_name = f"[{instruction_idx}].{instruction_result_name}"

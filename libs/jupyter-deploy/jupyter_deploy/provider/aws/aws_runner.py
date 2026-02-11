@@ -1,7 +1,6 @@
 from enum import Enum
 
-from rich import console as rich_console
-
+from jupyter_deploy.engine.supervised_execution import TerminalHandler
 from jupyter_deploy.exceptions import InstructionNotFoundError
 from jupyter_deploy.provider.aws.aws_ec2_runner import AwsEc2Runner
 from jupyter_deploy.provider.aws.aws_ssm_runner import AwsSsmRunner
@@ -62,12 +61,12 @@ class AwsApiRunner(InstructionRunner):
         self,
         instruction_name: str,
         resolved_arguments: dict[str, ResolvedInstructionArgument],
-        console: rich_console.Console,
+        terminal_handler: TerminalHandler | None = None,
     ) -> dict[str, ResolvedInstructionResult]:
         service_name, sub_instruction_name = AwsApiRunner._get_service_and_sub_instruction_name(instruction_name)
         service_runner = self._get_service_runner(service_name)
         return service_runner.execute_instruction(
             instruction_name=sub_instruction_name,
             resolved_arguments=resolved_arguments,
-            console=console,
+            terminal_handler=terminal_handler,
         )

@@ -5,6 +5,7 @@ from rich.console import Console
 
 from jupyter_deploy import cmd_utils
 from jupyter_deploy.cli.error_decorator import handle_cli_errors
+from jupyter_deploy.cli.simple_display import SimpleDisplayManager
 from jupyter_deploy.handlers.access import team_handler
 
 teams_app = typer.Typer(
@@ -28,8 +29,11 @@ def add(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = team_handler.TeamsHandler()
-        handler.add_teams(teams)
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = team_handler.TeamsHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Adding teams..."):
+            handler.add_teams(teams)
 
 
 @teams_app.command()
@@ -47,8 +51,11 @@ def remove(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = team_handler.TeamsHandler()
-        handler.remove_teams(teams)
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = team_handler.TeamsHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Removing teams..."):
+            handler.remove_teams(teams)
 
 
 @teams_app.command()
@@ -66,8 +73,11 @@ def set(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = team_handler.TeamsHandler()
-        handler.set_teams(teams)
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = team_handler.TeamsHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Setting teams..."):
+            handler.set_teams(teams)
 
 
 # use a cmd alias because mypy shows an 'valid-type' error if we just call the method 'list'
@@ -85,8 +95,11 @@ def list_teams(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = team_handler.TeamsHandler()
-        teams = handler.list_teams()
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = team_handler.TeamsHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Fetching teams..."):
+            teams = handler.list_teams()
 
         if teams:
             console.print(f"Allowlisted teams: [bold cyan]{', '.join(teams)}[/]")

@@ -13,7 +13,7 @@ class ConfigHandler(BaseProjectHandler):
 
     def __init__(self, output_filename: str | None = None, terminal_handler: TerminalHandler | None = None) -> None:
         """Base class to manage the configuration of a jupyter-deploy project."""
-        super().__init__()
+        super().__init__(terminal_handler=terminal_handler)
         self.preset_name: str | None = None
 
         if self.engine == EngineType.TERRAFORM:

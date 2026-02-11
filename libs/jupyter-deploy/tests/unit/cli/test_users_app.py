@@ -285,11 +285,16 @@ class TestUserListCmd(unittest.TestCase):
         mock_users_handler_class.assert_called_once()
         mock_handler_fns["list_users"].assert_called_once()
 
+    @patch("jupyter_deploy.cli.users_app.SimpleDisplayManager")
     @patch("jupyter_deploy.cli.users_app.Console")
     @patch("jupyter_deploy.handlers.access.user_handler.UsersHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_uses_handler_console_to_print_users_list(
-        self, mock_project_dir: Mock, mock_users_handler_class: Mock, mock_console_class: Mock
+        self,
+        mock_project_dir: Mock,
+        mock_users_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_simple_display_manager_class: Mock,
     ) -> None:
         """Test that list command uses the handler's console to print the list."""
         # Setup
@@ -299,6 +304,13 @@ class TestUserListCmd(unittest.TestCase):
 
         mock_console = Mock()
         mock_console_class.return_value = mock_console
+
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_simple_display_manager = Mock()
+        mock_simple_display_manager.spinner.return_value = mock_spinner
+        mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         # Execute
         runner = CliRunner()
@@ -310,11 +322,16 @@ class TestUserListCmd(unittest.TestCase):
         mock_call = mock_console.print.mock_calls[0]
         self.assertTrue("user1, user2" in str(mock_call))
 
+    @patch("jupyter_deploy.cli.users_app.SimpleDisplayManager")
     @patch("jupyter_deploy.cli.users_app.Console")
     @patch("jupyter_deploy.handlers.access.user_handler.UsersHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_handles_no_users(
-        self, mock_project_dir: Mock, mock_users_handler_class: Mock, mock_console_class: Mock
+        self,
+        mock_project_dir: Mock,
+        mock_users_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_simple_display_manager_class: Mock,
     ) -> None:
         """Test that list command handles the case when no users are allowlisted."""
         # Setup
@@ -325,6 +342,13 @@ class TestUserListCmd(unittest.TestCase):
 
         mock_console = Mock()
         mock_console_class.return_value = mock_console
+
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_simple_display_manager = Mock()
+        mock_simple_display_manager.spinner.return_value = mock_spinner
+        mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         # Execute
         runner = CliRunner()

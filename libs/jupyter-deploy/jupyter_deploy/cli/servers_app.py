@@ -5,6 +5,7 @@ from rich.console import Console
 
 from jupyter_deploy import cmd_utils
 from jupyter_deploy.cli.error_decorator import handle_cli_errors
+from jupyter_deploy.cli.simple_display import SimpleDisplayManager
 from jupyter_deploy.handlers.resource import server_handler
 
 servers_app = typer.Typer(
@@ -29,8 +30,11 @@ def status(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = server_handler.ServerHandler()
-        server_status = handler.get_server_status()
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = server_handler.ServerHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Checking server status..."):
+            server_status = handler.get_server_status()
 
         console.print(f"Jupyter server status: [bold cyan]{server_status}[/]")
 
@@ -54,13 +58,16 @@ def start(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = server_handler.ServerHandler()
-        handler.start_server(service)
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = server_handler.ServerHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Starting server..."):
+            handler.start_server(service)
 
         if service == "all":
-            console.print("Started the Jupyter server and all the sidecars.", style="bold green")
+            simple_display_manager.success("Started the Jupyter server and all the sidecars.")
         else:
-            console.print(f"Started the '{service}' service.", style="bold green")
+            simple_display_manager.success(f"Started the '{service}' service.")
 
 
 @servers_app.command()
@@ -82,13 +89,16 @@ def stop(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = server_handler.ServerHandler()
-        handler.stop_server(service)
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = server_handler.ServerHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Stopping server..."):
+            handler.stop_server(service)
 
         if service == "all":
-            console.print("Stopped the Jupyter server and all the sidecars.", style="bold green")
+            simple_display_manager.success("Stopped the Jupyter server and all the sidecars.")
         else:
-            console.print(f"Stopped the '{service}' service.", style="bold green")
+            simple_display_manager.success(f"Stopped the '{service}' service.")
 
 
 @servers_app.command()
@@ -110,13 +120,16 @@ def restart(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = server_handler.ServerHandler()
-        handler.restart_server(service)
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = server_handler.ServerHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Restarting server..."):
+            handler.restart_server(service)
 
         if service == "all":
-            console.print("Restarted the Jupyter server and all the sidecars.", style="bold green")
+            simple_display_manager.success("Restarted the Jupyter server and all the sidecars.")
         else:
-            console.print(f"Restarted the '{service}' service.", style="bold green")
+            simple_display_manager.success(f"Restarted the '{service}' service.")
 
 
 @servers_app.command(context_settings={"allow_extra_args": True, "allow_interspersed_args": False})
@@ -151,8 +164,11 @@ def logs(
 
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = server_handler.ServerHandler()
-        logs, err_logs = handler.get_server_logs(service=service, extra=extra)
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = server_handler.ServerHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Fetching logs..."):
+            logs, err_logs = handler.get_server_logs(service=service, extra=extra)
 
         if logs:
             console.rule("stdout")
@@ -206,8 +222,11 @@ def exec(
 
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = server_handler.ServerHandler()
-        stdout, stderr, returncode = handler.exec_command(service=service, command_args=command_args)
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = server_handler.ServerHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Executing command..."):
+            stdout, stderr, returncode = handler.exec_command(service=service, command_args=command_args)
 
         if stdout:
             console.rule("stdout")
@@ -254,5 +273,8 @@ def connect(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = server_handler.ServerHandler()
-        handler.connect(service=service)
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = server_handler.ServerHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Connecting to service..."):
+            handler.connect(service=service)

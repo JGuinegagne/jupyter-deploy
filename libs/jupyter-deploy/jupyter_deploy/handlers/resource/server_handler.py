@@ -1,5 +1,6 @@
 from jupyter_deploy.engine.engine_outputs import EngineOutputsHandler
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.engine.supervised_execution import TerminalHandler
 from jupyter_deploy.engine.terraform import tf_outputs, tf_variables
 from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
 from jupyter_deploy.provider import manifest_command_runner as cmd_runner
@@ -11,16 +12,18 @@ class ServerHandler(BaseProjectHandler):
 
     _output_handler: EngineOutputsHandler
 
-    def __init__(self) -> None:
+    def __init__(self, terminal_handler: TerminalHandler | None = None) -> None:
         """Instantiate the Users handler."""
-        super().__init__()
+        super().__init__(terminal_handler=terminal_handler)
 
         if self.engine == EngineType.TERRAFORM:
             self._output_handler = tf_outputs.TerraformOutputsHandler(
                 project_path=self.project_path, project_manifest=self.project_manifest
             )
             self._variable_handler = tf_variables.TerraformVariablesHandler(
-                project_path=self.project_path, project_manifest=self.project_manifest
+                project_path=self.project_path,
+                project_manifest=self.project_manifest,
+                terminal_handler=self.terminal_handler,
             )
         else:
             raise NotImplementedError(f"OutputsHandler implementation not found for engine: {self.engine}")
@@ -28,9 +31,10 @@ class ServerHandler(BaseProjectHandler):
     def get_server_status(self) -> str:
         """Sends an health check to the jupyter server app, return status."""
         command = self.project_manifest.get_command("server.status")
-        console = self.get_console()
         runner = cmd_runner.ManifestCommandRunner(
-            console=console, output_handler=self._output_handler, variable_handler=self._variable_handler
+            terminal_handler=self.terminal_handler,
+            output_handler=self._output_handler,
+            variable_handler=self._variable_handler,
         )
         runner.run_command_sequence(command, cli_paramdefs={})
         return runner.get_result_value(command, "server.status", str)
@@ -39,9 +43,10 @@ class ServerHandler(BaseProjectHandler):
         """Start the jupyter server and optionally all its sidecars."""
         command = self.project_manifest.get_command("server.start")
         validated_service = self.project_manifest.get_validated_service(service, allow_all=True)
-        console = self.get_console()
         runner = cmd_runner.ManifestCommandRunner(
-            console=console, output_handler=self._output_handler, variable_handler=self._variable_handler
+            terminal_handler=self.terminal_handler,
+            output_handler=self._output_handler,
+            variable_handler=self._variable_handler,
         )
         runner.run_command_sequence(
             command,
@@ -55,9 +60,10 @@ class ServerHandler(BaseProjectHandler):
         """Stop the jupyter server and optionally all its sidecars."""
         command = self.project_manifest.get_command("server.stop")
         validated_service = self.project_manifest.get_validated_service(service, allow_all=True)
-        console = self.get_console()
         runner = cmd_runner.ManifestCommandRunner(
-            console=console, output_handler=self._output_handler, variable_handler=self._variable_handler
+            terminal_handler=self.terminal_handler,
+            output_handler=self._output_handler,
+            variable_handler=self._variable_handler,
         )
         runner.run_command_sequence(
             command,
@@ -71,9 +77,10 @@ class ServerHandler(BaseProjectHandler):
         """Restart the jupyter-server and optionally all its sidecars."""
         command = self.project_manifest.get_command("server.restart")
         validated_service = self.project_manifest.get_validated_service(service, allow_all=True)
-        console = self.get_console()
         runner = cmd_runner.ManifestCommandRunner(
-            console=console, output_handler=self._output_handler, variable_handler=self._variable_handler
+            terminal_handler=self.terminal_handler,
+            output_handler=self._output_handler,
+            variable_handler=self._variable_handler,
         )
         runner.run_command_sequence(
             command,
@@ -87,9 +94,10 @@ class ServerHandler(BaseProjectHandler):
         """Sends a logs command to the host for the service, return the stdout, stderr."""
         command = self.project_manifest.get_command("server.logs")
         validated_service = self.project_manifest.get_validated_service(service, allow_all=False)
-        console = self.get_console()
         runner = cmd_runner.ManifestCommandRunner(
-            console=console, output_handler=self._output_handler, variable_handler=self._variable_handler
+            terminal_handler=self.terminal_handler,
+            output_handler=self._output_handler,
+            variable_handler=self._variable_handler,
         )
 
         runner.run_command_sequence(
@@ -107,9 +115,10 @@ class ServerHandler(BaseProjectHandler):
         """Execute a command inside a service container, return the stdout, stderr, and exit code."""
         command = self.project_manifest.get_command("server.exec")
         validated_service = self.project_manifest.get_validated_service(service, allow_all=False)
-        console = self.get_console()
         runner = cmd_runner.ManifestCommandRunner(
-            console=console, output_handler=self._output_handler, variable_handler=self._variable_handler
+            terminal_handler=self.terminal_handler,
+            output_handler=self._output_handler,
+            variable_handler=self._variable_handler,
         )
 
         # Join command arguments into a single command string for docker exec
@@ -131,9 +140,10 @@ class ServerHandler(BaseProjectHandler):
         """Start an interactive shell session inside a service container."""
         command = self.project_manifest.get_command("server.connect")
         validated_service = self.project_manifest.get_validated_service(service, allow_all=False)
-        console = self.get_console()
         runner = cmd_runner.ManifestCommandRunner(
-            console=console, output_handler=self._output_handler, variable_handler=self._variable_handler
+            terminal_handler=self.terminal_handler,
+            output_handler=self._output_handler,
+            variable_handler=self._variable_handler,
         )
 
         runner.run_command_sequence(

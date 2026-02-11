@@ -4,12 +4,15 @@ This module provides the ProgressDisplayManager class that implements
 the TerminalHandler protocol for Rich-based terminal display.
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from rich.console import Console, Group
 from rich.live import Live
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TextColumn
+from rich.text import Text
 
 from jupyter_deploy.engine.supervised_execution import ExecutionProgress, InteractionContext
 
@@ -24,11 +27,17 @@ class ProgressDisplayManager:
       * Hide the live panel with the progress bar and log box
       * Prompt appears below the panel
       * After user responds, press enter, live panel reappears
+    - Status messages (info/warning/success) displayed above progress bar
     """
 
-    def __init__(self) -> None:
-        """Initialize the progress display manager."""
+    def __init__(self, verbose: bool = False) -> None:
+        """Initialize the progress display manager.
+
+        Args:
+            verbose: If True, show info messages; if False, only show warnings/success
+        """
         self.console = Console()
+        self.verbose = verbose
 
         # Rich components
         self._progress: Progress | None = None
@@ -40,6 +49,10 @@ class ProgressDisplayManager:
         self._current_phase_label = ""
         self._is_started = False
         self._in_interaction = False  # Track if we're in an interactive prompt
+
+        # Top-level messages (max 3)
+        self._top_messages: list[tuple[str, str]] = []  # [(message, style), ...]
+        self._max_top_messages = 3
 
     def __enter__(self) -> "ProgressDisplayManager":
         """Enter context manager - start the display."""
@@ -188,14 +201,90 @@ class ProgressDisplayManager:
 
             self.console.rule()
 
+    def info(self, message: str) -> None:
+        """Display info message at top of display (only in verbose mode).
+
+        Args:
+            message: The informational message to display
+        """
+        if self.verbose:
+            self._add_top_message(message)
+
+    def warning(self, message: str) -> None:
+        """Display warning message at top of display (always shown).
+
+        Args:
+            message: The warning message to display
+        """
+        self._add_top_message(f":warning: {message}", style="yellow")
+
+    def success(self, message: str) -> None:
+        """Display success message at top of display (always shown).
+
+        Args:
+            message: The success message to display
+        """
+        self._add_top_message(f":white_check_mark: {message}", style="green")
+
+    def hint(self, message: str) -> None:
+        """Display hint message to help users.
+
+        Shows helpful tips or instructions in a dimmed style.
+
+        Args:
+            message: The hint message to display
+        """
+        self._add_top_message(message, style="dim")
+
+    def _add_top_message(self, message: str, style: str = "") -> None:
+        """Add message to top display, maintaining max limit.
+
+        Args:
+            message: The message to add
+            style: The Rich style to apply
+        """
+        self._top_messages.append((message, style))
+        # Keep only last N messages
+        if len(self._top_messages) > self._max_top_messages:
+            self._top_messages = self._top_messages[-self._max_top_messages :]
+
+        # Update display if active
+        if self._is_started and self._live and not self._in_interaction:
+            self._live.update(self._get_display_panel())
+
+    @contextmanager
+    def spinner(self, initial_message: str) -> Iterator[Any]:
+        """Simple spinner context (no progress bar).
+
+        Args:
+            initial_message: The initial message to display
+
+        Yields:
+            Rich status object with update(message: str) method
+        """
+        with self.console.status(initial_message) as status:
+            yield status
+
+    def stop_spinning(self) -> None:
+        """Stop the current spinner if one is active.
+
+        Not applicable for ProgressDisplayManager (no persistent spinner).
+        This is a no-op to satisfy the TerminalHandler protocol.
+        """
+        pass
+
     def _get_display_panel(self) -> Panel:
-        """Create Rich Panel with progress bar and log box.
+        """Create Rich Panel with top messages, progress bar, and log box.
 
         Returns:
-            Panel containing progress display and log lines
+            Panel containing status messages, progress display, and log lines
         """
-        # Build content: progress bar + log box
+        # Build content: top messages + progress bar + log box
         content_parts: list[Any] = []
+
+        # Add top messages
+        for message, style in self._top_messages:
+            content_parts.append(Text(message, style=style))
 
         if self._progress:
             content_parts.append(self._progress)
