@@ -167,8 +167,13 @@ class SupervisedPhase:
 
     def complete_progress_event(self) -> float:
         """Mark countable event complete, accumulate its reward, return the reward."""
-        self._accumulated_reward += self._reward_per_event
-        return self._reward_per_event
+        # Ensure the actual reward cannot exceed the full reward.
+        # This is necessary because the event count estimate may be too low, in which case
+        # we could report a progress reward higher than the full reward, which would cause the
+        # progress bar to move too fast.
+        actual_reward = min(self._reward_per_event, self.full_reward - self._accumulated_reward)
+        self._accumulated_reward += actual_reward
+        return actual_reward
 
     def complete_subphase(self) -> float:
         """Mark current subphase complete, accumulate its reward, return the reward."""
@@ -178,10 +183,13 @@ class SupervisedPhase:
             return self._accumulated_reward
 
         current_subphase = self.sub_phases[self._current_sub_phase_index]
-        subphase_reward = current_subphase.reward
-        self._accumulated_reward += subphase_reward
+        # Cap subphase reward to remaining budget to prevent over-accumulation.
+        # This can occur when progress events exceed their estimate and exhaust the budget,
+        # or when manifest has misconfigured subphase weights totaling > 100.
+        actual_reward = min(current_subphase.reward, self.full_reward - self._accumulated_reward)
+        self._accumulated_reward += actual_reward
 
-        return subphase_reward
+        return actual_reward
 
     def complete(self) -> float:
         """Mark this phase as complete, return the full reward."""
@@ -245,8 +253,13 @@ class SupervisedDefaultPhase:
 
     def complete_progress_event(self) -> float:
         """Return the accumulated reward up to the point of the latest event."""
-        self._accumulated_reward += self._reward_per_event
-        return self._reward_per_event
+        # Ensure the actual reward cannot exceed the full reward.
+        # This is necessary because the event count estimate may be too low, in which case
+        # we could report a progress reward higher than the full reward, which would cause the
+        # progress bar to move too fast.
+        actual_reward = min(self._reward_per_event, self.full_reward - self._accumulated_reward)
+        self._accumulated_reward += actual_reward
+        return actual_reward
 
     def complete(self) -> float:
         """Complete the default phase, return its full reward."""

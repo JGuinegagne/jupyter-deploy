@@ -278,6 +278,111 @@ class TestSupervisedClassWithSubphases(unittest.TestCase):
         result = self.phase.evaluate_next_subphase("SubPhase 3")
         self.assertFalse(result)
 
+    def test_caps_subphase_reward_when_progress_events_exhaust_budget_first(self) -> None:
+        """Test that subphases cap when progress events already exhausted the budget."""
+        # Setup: Phase with subphases [20, 30] and progress events
+        # This tests the scenario where progress events over-accumulate due to
+        # exceeding estimate, leaving no budget for subphases
+        config = JupyterDeploySupervisedExecutionPhaseV1(
+            enter_pattern=r"Starting",
+            progress_pattern=r"Item complete",
+            progress_events_estimate=2,  # Small estimate to make events over-accumulate
+            label="Phase with Progress and Subphases",
+            weight=50,
+            phases=[
+                JupyterDeploySupervisedExecutionSubPhaseV1(
+                    enter_pattern=r"SubPhase 1",
+                    label="SubPhase 1",
+                    weight=20,
+                ),
+                JupyterDeploySupervisedExecutionSubPhaseV1(
+                    enter_pattern=r"SubPhase 2",
+                    label="SubPhase 2",
+                    weight=30,
+                ),
+            ],
+        )
+        sequence_scale_factor = 0.5
+        phase = SupervisedPhase(config=config, sequence_scale_factor=sequence_scale_factor)
+        phase.is_active = True
+
+        # full_reward = 50 * 0.5 = 25
+        # scale_factor = 0.25
+        # subphases budget (theoretical) = (20 + 30) * 0.25 = 12.5
+        # progress budget (theoretical) = (100 - 50) * 0.25 = 12.5
+        # reward_per_event = 12.5 / 2 = 6.25
+
+        # Simulate 4 progress events (double the estimate of 2)
+        # Each event wants 6.25, capping prevents exceeding full_reward
+        rewards = []
+        for _ in range(4):
+            reward = phase.complete_progress_event()
+            rewards.append(reward)
+
+        # With capping: events cap at full_reward (25), not theoretical progress budget (12.5)
+        # Event 1: 6.25, Event 2: 6.25, Event 3: 6.25, Event 4: 6.25 = 25.0
+        self.assertAlmostEqual(phase._accumulated_reward, 25.0)
+        self.assertAlmostEqual(sum(rewards), 25.0)
+
+        # Now try to complete subphases - budget is exhausted
+        phase.evaluate_next_subphase("SubPhase 1")
+        reward1 = phase.complete_subphase()
+        # SubPhase 1 wants 20 * 0.25 = 5.0, but budget exhausted -> gets 0.0
+        self.assertAlmostEqual(reward1, 0.0)
+        self.assertAlmostEqual(phase._accumulated_reward, 25.0)
+
+        phase.evaluate_next_subphase("SubPhase 2")
+        reward2 = phase.complete_subphase()
+        # SubPhase 2 wants 30 * 0.25 = 7.5, but budget exhausted -> gets 0.0
+        self.assertAlmostEqual(reward2, 0.0)
+
+        # Total should remain at full_reward (25), properly capped
+        self.assertAlmostEqual(phase._accumulated_reward, 25.0)
+
+    def test_caps_subphase_reward_when_subphase_weights_misconfigured(self) -> None:
+        """Test that subphases cap even when manifest has misconfigured weights > 100."""
+        # Setup: Phase with subphases [60, 60] = 120% (misconfigured!)
+        config = JupyterDeploySupervisedExecutionPhaseV1(
+            enter_pattern=r"Starting",
+            label="Misconfigured Phase",
+            weight=50,
+            phases=[
+                JupyterDeploySupervisedExecutionSubPhaseV1(
+                    enter_pattern=r"SubPhase 1",
+                    label="SubPhase 1",
+                    weight=60,
+                ),
+                JupyterDeploySupervisedExecutionSubPhaseV1(
+                    enter_pattern=r"SubPhase 2",
+                    label="SubPhase 2",
+                    weight=60,
+                ),
+            ],
+        )
+        sequence_scale_factor = 0.5
+        phase = SupervisedPhase(config=config, sequence_scale_factor=sequence_scale_factor)
+        phase.is_active = True
+
+        # full_reward = 50 * 0.5 = 25
+        # scale_factor = 0.25
+        # SubPhase 1 wants: 60 * 0.25 = 15
+        # SubPhase 2 wants: 60 * 0.25 = 15
+        # Total desired: 30 (exceeds full_reward of 25!)
+
+        phase.evaluate_next_subphase("SubPhase 1")
+        reward1 = phase.complete_subphase()
+        # SubPhase 1 gets its full 15
+        self.assertAlmostEqual(reward1, 15.0)
+        self.assertAlmostEqual(phase._accumulated_reward, 15.0)
+
+        phase.evaluate_next_subphase("SubPhase 2")
+        reward2 = phase.complete_subphase()
+        # SubPhase 2 wants 15 but only 10 remaining -> should cap at 10
+        self.assertAlmostEqual(reward2, 10.0)
+
+        # Total should cap at full_reward (25), not 30
+        self.assertAlmostEqual(phase._accumulated_reward, 25.0)
+
 
 class TestSupervisedPhaseWithEstimate(unittest.TestCase):
     """Test cases for SupervisedPhase with explicit progress_events_estimate."""
@@ -322,6 +427,29 @@ class TestSupervisedPhaseWithEstimate(unittest.TestCase):
 
         # Should be complete
         self.assertAlmostEqual(self.phase._accumulated_reward, 10)  # 20 * 0.5
+
+    def test_caps_accumulated_reward_when_events_exceed_estimate(self) -> None:
+        """Test that accumulated reward caps at full_reward when observed events exceed estimate."""
+        self.phase.is_active = True
+
+        # Expected: 5 events with estimate of 5 should reach full_reward (10.0)
+        # full_reward = 10.0, reward_per_event = 2.0
+        for i in range(5):
+            reward = self.phase.complete_progress_event()
+            if i < 5:
+                self.assertGreater(reward, 0, f"Event {i + 1} should grant reward")
+
+        # After 5 events, should have accumulated full_reward
+        self.assertAlmostEqual(self.phase._accumulated_reward, 10.0)
+
+        # Now simulate 3 MORE events beyond the estimate (8 total)
+        for i in range(3):
+            reward = self.phase.complete_progress_event()
+            # Should return 0 reward after budget exhausted
+            self.assertAlmostEqual(reward, 0.0, msg=f"Event {i + 6} should grant 0 reward (budget exhausted)")
+
+        # Accumulated should still be capped at full_reward
+        self.assertAlmostEqual(self.phase._accumulated_reward, 10.0)
 
 
 class TestSupervisedPhaseWithDynamicEstimate(unittest.TestCase):
@@ -458,3 +586,24 @@ class TestSupervisedDefaultPhase(unittest.TestCase):
 
         # Should use override (50), not config (10)
         self.assertAlmostEqual(phase._reward_per_event, 2)  # 100 / 50
+
+    def test_caps_accumulated_reward_when_events_exceed_estimate(self) -> None:
+        """Test that accumulated reward caps at full_reward when observed events exceed estimate."""
+        # Setup: estimate of 10 events, full_reward of 50
+        # reward_per_event = 50 / 10 = 5.0
+        for i in range(10):
+            reward = self.phase.complete_progress_event()
+            self.assertGreater(reward, 0, f"Event {i + 1} should grant reward")
+
+        # After 10 events, should have accumulated full_reward
+        self.assertAlmostEqual(self.phase._accumulated_reward, 50.0)
+
+        # Now simulate 5 MORE events beyond the estimate (15 total)
+        # This simulates the bug scenario: terraform refreshes more resources than estimated
+        for i in range(5):
+            reward = self.phase.complete_progress_event()
+            # Should return 0 reward after budget exhausted
+            self.assertAlmostEqual(reward, 0.0, msg=f"Event {i + 11} should grant 0 reward (budget exhausted)")
+
+        # Accumulated should still be capped at full_reward, not exceed it
+        self.assertAlmostEqual(self.phase._accumulated_reward, 50.0)
