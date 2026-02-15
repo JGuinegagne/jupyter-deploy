@@ -88,7 +88,7 @@ class SupervisedPhase:
         self._total_subphase_weight = total_subphase_weight
 
         # Initialize countable events (may be updated in evaluate_enter if capture group is set)
-        events_estimate = self.config.progress_events_estimate or 10
+        events_estimate = self.config.progress_events_estimate or 50
         self._reward_per_event: float = max(self.scale_factor * (100 - total_subphase_weight) / events_estimate, 0.0)
 
         self._current_sub_phase_index: int = -1
@@ -132,7 +132,7 @@ class SupervisedPhase:
                     )
                 except (IndexError, ValueError):
                     # Fall back to default of 10 if extraction fails
-                    self._reward_per_event = max(self.scale_factor * (100 - self._total_subphase_weight) / 10, 0.0)
+                    self._reward_per_event = max(self.scale_factor * (100 - self._total_subphase_weight) / 50, 0.0)
 
             return True
 
@@ -229,7 +229,7 @@ class SupervisedDefaultPhase:
         elif self.config.progress_events_estimate is not None:
             events_estimate = self.config.progress_events_estimate
         else:
-            events_estimate = 10
+            events_estimate = 50
 
         self._reward_per_event: float = self.full_reward / events_estimate
         self._accumulated_reward: float = 0.0

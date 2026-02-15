@@ -90,8 +90,6 @@ class TestTemplateUtils(unittest.TestCase):
         mock_get_templates.side_effect = lambda engine: {"test:template": Path(f"/mock/{engine}/path")}
 
         # Execute
-        from jupyter_deploy.template_utils import TEMPLATE_ENTRY_POINTS
-
         templates = {engine: mock_get_templates(engine) for engine in TEMPLATE_ENTRY_POINTS}
 
         # Assert

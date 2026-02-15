@@ -5,6 +5,7 @@ from typer.testing import CliRunner
 
 from jupyter_deploy.cli.app import runner as app_runner
 from jupyter_deploy.exceptions import InvalidPresetError, LogCleanupError, SupervisedExecutionError
+from jupyter_deploy.verify_utils import ToolRequiredError
 
 
 class TestConfigCommand(unittest.TestCase):
@@ -187,8 +188,6 @@ class TestConfigCommand(unittest.TestCase):
 
     @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
     def test_config_stops_if_verify_requirements_raises(self, mock_config_handler: Mock) -> None:
-        from jupyter_deploy.verify_utils import ToolRequiredError
-
         mock_config_handler_instance, mock_config_fns = self.get_mock_config_handler()
         mock_config_handler.return_value = mock_config_handler_instance
         mock_config_fns["verify"].side_effect = ToolRequiredError("terraform", "https://example.com", "not found")

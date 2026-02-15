@@ -3,8 +3,6 @@
 from pathlib import Path
 from subprocess import CalledProcessError
 
-from rich import console as rich_console
-
 from jupyter_deploy import cmd_utils, fs_utils
 from jupyter_deploy.engine.engine_down import EngineDownHandler
 from jupyter_deploy.engine.supervised_execution import TerminalHandler
@@ -37,7 +35,7 @@ class TerraformDownHandler(EngineDownHandler):
         project_path: Path,
         project_manifest: JupyterDeployManifest,
         command_history_handler: CommandHistoryHandler,
-        terminal_handler: TerminalHandler | None = None,
+        terminal_handler: TerminalHandler,
     ) -> None:
         outputs_handler = tf_outputs.TerraformOutputsHandler(
             project_path=project_path,
@@ -59,8 +57,6 @@ class TerraformDownHandler(EngineDownHandler):
         return fs_utils.file_exists(tfvars_file_path)
 
     def destroy(self, auto_approve: bool = False) -> None:
-        verbose = self.terminal_handler is None
-
         # Create log file using command history handler
         self._log_file = self.command_history_handler.create_log_file(HistoryEnabledCommandType.DOWN)
 
@@ -71,52 +67,35 @@ class TerraformDownHandler(EngineDownHandler):
             if not auto_approve:
                 raise DownAutoApproveRequiredError(persisting_resources)
 
-            if verbose:
-                console = rich_console.Console()
-                console.print("Running dry-run to detach resources from terraform state...")
+            self.terminal_handler.info("Running dry-run to detach resources from terraform state...")
+
             dryrun_rm_cmd = TF_RM_FROM_STATE_CMD.copy()
             dryrun_rm_cmd.append("--dry-run")
             dryrun_rm_cmd.extend([pr for pr in persisting_resources])
             try:
                 cmd_utils.run_cmd_and_capture_output(dryrun_rm_cmd, exec_dir=self.engine_dir_path)
             except CalledProcessError as e:
-                if verbose:
-                    console = rich_console.Console()
-                    console.print(
-                        ":x: Error performing dry-run of removing resources from Terraform state.", style="red"
-                    )
-                    console.print(f"Details: {e}", style="red")
-                    console.line()
-                if self.terminal_handler:
-                    self.terminal_handler.warning(
-                        "Error performing dry-run of removing resources from Terraform state."
-                    )
+                self.terminal_handler.warning("Error performing dry-run of removing resources from Terraform state.")
+                self.terminal_handler.warning(f"Details: {e}")
                 return
-            if verbose:
-                console = rich_console.Console()
-                console.print("Dry-run succeeded.")
-                console.rule()
+
+            self.terminal_handler.success("Dry-run succeeded.")
 
             # otherwise, remove the resources from the state using supervised execution
-            if verbose:
-                console = rich_console.Console()
-                console.print("Removing persisting resources from the Terraform state...")
-                console.line()
-            if self.terminal_handler:
-                self.terminal_handler.info("Removing persisting resources from the Terraform state...")
+            self.terminal_handler.info("Removing persisting resources from the Terraform state...")
 
             rm_cmd = TF_RM_FROM_STATE_CMD.copy()
             rm_cmd.extend([pr for pr in persisting_resources])
 
-            # Choose callback: full featured with progress tracking, or no-op for verbose mode
+            # Choose callback: full featured with progress tracking, or no-op for pass-through mode
             rm_callback: ExecutionCallbackInterface
-            if self.terminal_handler:
+            if self.terminal_handler.is_pass_through():
+                rm_callback = TerraformNoopExecutionCallback()
+            else:
                 rm_callback = TerraformSupervisedExecutionCallback(
                     terminal_handler=self.terminal_handler,
                     sequence_id=TerraformSequenceId.down_rm_state,
                 )
-            else:
-                rm_callback = TerraformNoopExecutionCallback()
 
             rm_executor = tf_supervised_executor_factory.create_terraform_executor(
                 sequence_id=TerraformSequenceId.down_rm_state,
@@ -134,12 +113,7 @@ class TerraformDownHandler(EngineDownHandler):
                     message="Error removing persisting resources from Terraform state.",
                 )
 
-            if verbose:
-                console = rich_console.Console()
-                console.print("Removed the persisting resources from the Terraform state.", style="green")
-                console.rule()
-            if self.terminal_handler:
-                self.terminal_handler.success("Removed the persisting resources from the Terraform state.")
+            self.terminal_handler.success("Removed the persisting resources from the Terraform state.")
 
         # second: run terraform destroy with supervised execution
         destroy_cmd = TF_DESTROY_CMD.copy()
@@ -152,15 +126,15 @@ class TerraformDownHandler(EngineDownHandler):
             destroy_tfvars_path = self._get_destroy_tfvars_file_path()
             destroy_cmd.append(f"-var-file={destroy_tfvars_path.absolute()}")
 
-        # Choose callback: full featured with progress tracking, or no-op for verbose mode
+        # Choose callback: full featured with progress tracking, or no-op for pass-through mode
         destroy_callback: ExecutionCallbackInterface
-        if self.terminal_handler:
+        if self.terminal_handler.is_pass_through():
+            destroy_callback = TerraformNoopExecutionCallback()
+        else:
             destroy_callback = TerraformSupervisedExecutionCallback(
                 terminal_handler=self.terminal_handler,
                 sequence_id=TerraformSequenceId.down_destroy,
             )
-        else:
-            destroy_callback = TerraformNoopExecutionCallback()
 
         # Create executor for terraform destroy
         destroy_executor = tf_supervised_executor_factory.create_terraform_executor(

@@ -1,3 +1,5 @@
+import io
+import sys
 import unittest
 from unittest.mock import Mock
 
@@ -197,9 +199,6 @@ class TestNoopExecutionCallback(unittest.TestCase):
 
     def test_on_log_line_prints_to_stdout(self) -> None:
         """Test that on_log_line prints to stdout in NoopExecutionCallback."""
-        import io
-        import sys
-
         callback = ConcreteNoopCallback()
 
         # Capture stdout

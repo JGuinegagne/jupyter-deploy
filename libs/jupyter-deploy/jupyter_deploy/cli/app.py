@@ -16,6 +16,7 @@ from jupyter_deploy.cli.host_app import host_app
 from jupyter_deploy.cli.organization_app import organization_app
 from jupyter_deploy.cli.progress_display import ProgressDisplayManager
 from jupyter_deploy.cli.servers_app import servers_app
+from jupyter_deploy.cli.simple_display import SimpleDisplayManager
 from jupyter_deploy.cli.teams_app import teams_app
 from jupyter_deploy.cli.users_app import users_app
 from jupyter_deploy.cli.variables_decorator import with_project_variables
@@ -408,11 +409,11 @@ def down(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        # Create progress display manager (or None if verbose mode)
-        progress_display = None if verbose else ProgressDisplayManager()
+        # Create display manager based on mode
+        terminal_handler = SimpleDisplayManager(console, pass_through=True) if verbose else ProgressDisplayManager()
 
         # Pass to handler via protocol
-        handler = DownHandler(terminal_handler=progress_display)
+        handler = DownHandler(terminal_handler=terminal_handler)
 
         # Check for persisting resources and display warning
         persisting_resources = handler.get_persisting_resources()
@@ -424,7 +425,7 @@ def down(
 
         if verbose:
             console.rule("[bold]jupyter-deploy:[/] destroying infrastructure resources")
-        with progress_display or nullcontext():
+        with terminal_handler:
             try:
                 handler.destroy(auto_approve)
             except LogCleanupError as e:

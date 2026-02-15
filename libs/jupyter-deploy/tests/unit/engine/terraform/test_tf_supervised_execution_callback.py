@@ -1,3 +1,5 @@
+import io
+import sys
 import unittest
 from collections import deque
 from unittest.mock import Mock
@@ -734,9 +736,6 @@ class TestTerraformNoopExecutionCallback(unittest.TestCase):
 
     def test_handle_interaction_prints_to_stdout(self) -> None:
         """Test that handle_interaction prints prompt lines to stdout without newline."""
-        import io
-        import sys
-
         callback = TerraformNoopExecutionCallback()
 
         # Capture stdout
@@ -754,9 +753,6 @@ class TestTerraformNoopExecutionCallback(unittest.TestCase):
 
     def test_handle_interaction_adds_trailing_space(self) -> None:
         """Test that handle_interaction adds trailing space if not present."""
-        import io
-        import sys
-
         callback = TerraformNoopExecutionCallback()
 
         # Capture stdout

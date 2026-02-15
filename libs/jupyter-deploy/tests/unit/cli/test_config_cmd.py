@@ -1,11 +1,13 @@
 import functools
+import importlib
 import inspect
-import sys
 import unittest
 from collections.abc import Callable
 from unittest.mock import Mock, patch
 
 from typer.testing import CliRunner
+
+from jupyter_deploy.cli import app as app_module
 
 
 class TestDeployCmdWithDecorator(unittest.TestCase):
@@ -79,15 +81,12 @@ class TestDeployCmdWithDecorator(unittest.TestCase):
         return mock_decorator
 
     def test_config_cmd_calls_passes_on_the_variables(self) -> None:
-        if "jupyter_deploy.cli.app" in sys.modules:
-            del sys.modules["jupyter_deploy.cli.app"]
-
         with patch("jupyter_deploy.cli.variables_decorator.with_project_variables") as mock_decorator_fn:
             mock_variables = {"variable1": Mock()}
             mock_decorator_fn.side_effect = self.get_mock_decorator(mock_variables)
 
-            # Import AFTER patching
-            from jupyter_deploy.cli.app import runner
+            # Reload module AFTER patching to pick up the patched decorator
+            importlib.reload(app_module)
 
             with patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler") as mock_config_handler:
                 mock_config_handler_instance, mock_config_fns = self.get_mock_config_handler()
@@ -95,7 +94,7 @@ class TestDeployCmdWithDecorator(unittest.TestCase):
 
                 # Act - use the runner that has commands registered
                 app_runner = CliRunner()
-                result = app_runner.invoke(runner.app, ["config"])
+                result = app_runner.invoke(app_module.runner.app, ["config"])
 
                 # Verify
                 self.assertEqual(result.exit_code, 0)

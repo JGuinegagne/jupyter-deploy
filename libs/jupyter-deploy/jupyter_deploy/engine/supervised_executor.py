@@ -122,7 +122,7 @@ class SupervisedExecutor:
 
         if retcode == 0:
             # Happy case: complete any remaining progress
-            self._complete_execution(self._last_log_line)
+            self._complete_execution()
         else:
             # Something went wrong: delegate to the execution callback
             # the job of displaying the right error message.
@@ -241,7 +241,7 @@ class SupervisedExecutor:
                     if self._next_declared_phase_index < len(self._declared_phases)
                     else None
                 )
-                self._emit_current_progress(line)
+                self._emit_current_progress()
                 return
 
             # 1.2: Check for next subphase
@@ -249,7 +249,7 @@ class SupervisedExecutor:
                 # Sub-phase transition - emit progress, keep phase active
                 subphase_reward = self._active_declared_phase.complete_subphase()
                 self._accumulated_reward += subphase_reward
-                self._emit_current_progress(line)
+                self._emit_current_progress()
                 return
 
             # 1.3: Check for progress event
@@ -257,7 +257,7 @@ class SupervisedExecutor:
                 # Incremental event detected - emit progress, keep phase active
                 progress_reward = self._active_declared_phase.complete_progress_event()
                 self._accumulated_reward += progress_reward
-                self._emit_current_progress(line)
+                self._emit_current_progress()
                 return
 
         else:
@@ -266,17 +266,17 @@ class SupervisedExecutor:
             if self._next_declared_phase and self._next_declared_phase.evaluate_enter(line):
                 # Enter declared phase (default phase continues to track in background)
                 self._active_declared_phase = self._next_declared_phase
-                self._emit_current_progress(line)
+                self._emit_current_progress()
                 return
 
             # 2.2: Otherwise evaluate default phase progress
             if self._default_phase.evaluate_progress(line):
                 progress_reward = self._default_phase.complete_progress_event()
                 self._accumulated_reward += progress_reward
-                self._emit_current_progress(line)
+                self._emit_current_progress()
                 return
 
-    def _complete_execution(self, line: str) -> None:
+    def _complete_execution(self) -> None:
         """Complete execution and emit 100% progress for this command."""
         # Use last active phase label, or default phase label if none
         label = self._active_declared_phase.label if self._active_declared_phase else self._default_phase.label
@@ -287,14 +287,18 @@ class SupervisedExecutor:
         )
         self._emit_progress(progress)
 
-    def _emit_current_progress(self, line: str) -> None:
+    def _emit_current_progress(self) -> None:
         """Emit a progress update based on current execution state."""
         # Get label and capped percentage
         label = self._active_declared_phase.label if self._active_declared_phase else self._default_phase.label
 
+        # Cap reward at end_reward - 1 to ensure we never reach 100% until subprocess completes
+        # This prevents the progress bar from reaching 100% when event estimates are incorrect
+        capped_reward = min(self._accumulated_reward, self.end_reward - 1)
+
         # Emit progress
         progress = ExecutionProgress(
             label=label,
-            reward=self._accumulated_reward,
+            reward=capped_reward,
         )
         self._emit_progress(progress)

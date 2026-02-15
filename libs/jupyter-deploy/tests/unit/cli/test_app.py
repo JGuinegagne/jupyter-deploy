@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 
 from jupyter_deploy.cli.app import JupyterDeployApp, JupyterDeployCliRunner, main
 from jupyter_deploy.cli.app import runner as app_runner
+from jupyter_deploy.cli.simple_display import SimpleDisplayManager
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.handlers.command_history_handler import LogCleanupError
 
@@ -520,10 +521,10 @@ class TestDownCommand(unittest.TestCase):
 
     @patch("jupyter_deploy.cli.app.DownHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_down_command_with_verbose_uses_no_terminal_handler(
+    def test_down_command_with_verbose_uses_simple_display_manager(
         self, mock_project_ctx_manager: Mock, mock_down_handler_cls: Mock
     ) -> None:
-        """Test that down with --verbose passes None as terminal_handler."""
+        """Test that down with --verbose passes SimpleDisplayManager as terminal_handler."""
         mock_project_ctx_manager.side_effect = TestDownCommand.mock_project_dir
 
         mock_down_handler_instance, _ = self.get_mock_down_handler()
@@ -533,9 +534,9 @@ class TestDownCommand(unittest.TestCase):
         result = runner.invoke(app_runner.app, ["down", "--verbose"])
 
         self.assertEqual(result.exit_code, 0)
-        # terminal_handler should be None when verbose is True
+        # terminal_handler should be SimpleDisplayManager when verbose is True
         call_kwargs = mock_down_handler_cls.call_args.kwargs
-        self.assertIsNone(call_kwargs["terminal_handler"])
+        self.assertIsInstance(call_kwargs["terminal_handler"], SimpleDisplayManager)
 
     @patch("jupyter_deploy.cli.app.DownHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")

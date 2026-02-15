@@ -232,3 +232,11 @@ class TerminalHandler(Protocol):
         useful for transitioning to interactive commands that need clean terminal output.
         """
         ...
+
+    def is_pass_through(self) -> bool:
+        """Return True if in pass-through mode, False if using progress display.
+
+        Pass-through mode means subprocess output streams directly to stdout/stderr
+        without buffering or progress display (verbose mode behavior).
+        """
+        ...

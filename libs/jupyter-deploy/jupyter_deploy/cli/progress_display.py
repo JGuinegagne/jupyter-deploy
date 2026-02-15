@@ -273,6 +273,16 @@ class ProgressDisplayManager:
         """
         pass
 
+    def is_pass_through(self) -> bool:
+        """Check if this handler is in pass-through mode.
+
+        ProgressDisplayManager is never in pass-through mode - it always uses progress display.
+
+        Returns:
+            Always returns False
+        """
+        return False
+
     def _get_display_panel(self) -> Panel:
         """Create Rich Panel with top messages, progress bar, and log box.
 

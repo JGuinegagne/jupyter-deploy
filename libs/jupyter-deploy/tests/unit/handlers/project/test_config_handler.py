@@ -5,6 +5,7 @@ from unittest.mock import ANY, Mock, patch
 from jupyter_deploy.exceptions import InvalidPresetError
 from jupyter_deploy.handlers.project.config_handler import ConfigHandler
 from jupyter_deploy.manifest import JupyterDeployManifestV1
+from jupyter_deploy.verify_utils import ToolRequiredError
 
 
 class TestConfigHandler(unittest.TestCase):
@@ -223,8 +224,6 @@ class TestConfigHandler(unittest.TestCase):
     def test_verify_surfaces_verify_utils_exception(
         self, mock_tf_handler: Mock, mock_retrieve_manifest: Mock, mock_verify: Mock
     ) -> None:
-        from jupyter_deploy.verify_utils import ToolRequiredError
-
         mock_retrieve_manifest.return_value = self.mock_manifest
         tf_mock_handler_instance, _ = self.get_mock_handler_and_fns()
         mock_tf_handler.return_value = tf_mock_handler_instance

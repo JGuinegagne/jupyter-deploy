@@ -8,7 +8,7 @@ from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
 class DownHandler(BaseProjectHandler):
     _handler: EngineDownHandler
 
-    def __init__(self, terminal_handler: TerminalHandler | None = None) -> None:
+    def __init__(self, terminal_handler: TerminalHandler) -> None:
         """Base class to manage the down command of a jupyter-deploy project."""
         super().__init__(terminal_handler=terminal_handler)
 

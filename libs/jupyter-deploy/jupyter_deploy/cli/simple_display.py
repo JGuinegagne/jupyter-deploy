@@ -28,15 +28,25 @@ class SimpleDisplayManager:
     - Warnings/success: Always print immediately and persist (never buffered)
     """
 
-    def __init__(self, console: Console):
+    def __init__(self, console: Console, pass_through: bool = False):
         """Initialize the simple display handler.
 
         Args:
             console: Rich Console instance for output
+            pass_through: If True, subprocess output streams directly to stdout (verbose mode)
         """
         self.console = console
+        self._pass_through = pass_through
         self._in_spinner = False
         self._current_spinner: Status | None = None
+
+    def __enter__(self) -> "SimpleDisplayManager":
+        """Enter context manager - no-op for SimpleDisplayManager."""
+        return self
+
+    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: object) -> None:
+        """Exit context manager - no-op for SimpleDisplayManager."""
+        pass
 
     def info(self, message: str) -> None:
         """Display info message.
@@ -116,6 +126,14 @@ class SimpleDisplayManager:
             self._current_spinner.__exit__(None, None, None)
             self._in_spinner = False
             self._current_spinner = None
+
+    def is_pass_through(self) -> bool:
+        """Check if this handler is in pass-through mode.
+
+        Returns:
+            True if subprocess output streams directly to stdout, False otherwise
+        """
+        return self._pass_through
 
     # Stub implementations for TerminalHandler protocol methods we don't use:
 
