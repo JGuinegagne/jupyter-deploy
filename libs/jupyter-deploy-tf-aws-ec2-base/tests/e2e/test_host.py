@@ -50,8 +50,8 @@ def test_host_connect_whoami(e2e_deployment: EndToEndDeployment) -> None:
 
     # Start an interactive jd host connect session
     with e2e_deployment.cli.spawn_interactive_session("jupyter-deploy host connect") as session:
-        # Wait for the session to start
-        session.expect("Starting SSM session", timeout=10)
+        # Wait for the session to start (AWS SSM output)
+        session.expect("Starting session with SessionId:", timeout=10)
 
         # Send whoami command
         session.sendline("whoami")
