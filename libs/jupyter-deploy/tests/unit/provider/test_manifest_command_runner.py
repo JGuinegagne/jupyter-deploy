@@ -116,7 +116,7 @@ class TestManifestCommandRunner(unittest.TestCase):
         mock_runner.execute_instruction.side_effect = [mock_result_1, mock_result_2]
 
         with patch(
-            "jupyter_deploy.provider.instruction_runner_factory.InstructionRunnerFactory.get_provider_instruction_runner",
+            "jupyter_deploy.provider.manifest_command_runner.InstructionRunnerFactory.get_provider_instruction_runner",
             return_value=mock_runner,
         ):
             runner = ManifestCommandRunner(
@@ -143,7 +143,7 @@ class TestManifestCommandRunner(unittest.TestCase):
         self.assertEqual(runner._output_handler, output_handler_mock)
 
     @patch(
-        "jupyter_deploy.provider.instruction_runner_factory.InstructionRunnerFactory.get_provider_instruction_runner"
+        "jupyter_deploy.provider.manifest_command_runner.InstructionRunnerFactory.get_provider_instruction_runner"
     )
     def test_run_cmd_sequence_should_run_instructions_and_return_result(
         self, mock_get_provider_instruction_runner: Mock
@@ -186,7 +186,7 @@ class TestManifestCommandRunner(unittest.TestCase):
         )
 
     @patch(
-        "jupyter_deploy.provider.instruction_runner_factory.InstructionRunnerFactory.get_provider_instruction_runner"
+        "jupyter_deploy.provider.manifest_command_runner.InstructionRunnerFactory.get_provider_instruction_runner"
     )
     def test_run_cmd_sequence_should_resolve_all_types_of_args(
         self, mock_get_provider_instruction_runner: Mock
@@ -245,7 +245,7 @@ class TestManifestCommandRunner(unittest.TestCase):
         self.assertEqual(second_call_args["resolved_arguments"]["budget"].value, "2000")
 
     @patch(
-        "jupyter_deploy.provider.instruction_runner_factory.InstructionRunnerFactory.get_provider_instruction_runner"
+        "jupyter_deploy.provider.manifest_command_runner.InstructionRunnerFactory.get_provider_instruction_runner"
     )
     def test_run_cmd_sequence_should_call_factory_runner(self, mock_get_provider_instruction_runner: Mock) -> None:
         # Arrange
@@ -279,7 +279,7 @@ class TestManifestCommandRunner(unittest.TestCase):
         self.assertEqual(mock_get_provider_instruction_runner.call_count, 2)
 
     @patch(
-        "jupyter_deploy.provider.instruction_runner_factory.InstructionRunnerFactory.get_provider_instruction_runner"
+        "jupyter_deploy.provider.manifest_command_runner.InstructionRunnerFactory.get_provider_instruction_runner"
     )
     def test_get_result_value_returns_transformed_result(self, mock_get_provider_instruction_runner: Mock) -> None:
         # Arrange
@@ -326,7 +326,7 @@ class TestManifestCommandRunner(unittest.TestCase):
             runner.get_result_value(cmd, "karaoke-winners", int)
 
     @patch(
-        "jupyter_deploy.provider.instruction_runner_factory.InstructionRunnerFactory.get_provider_instruction_runner"
+        "jupyter_deploy.provider.manifest_command_runner.InstructionRunnerFactory.get_provider_instruction_runner"
     )
     def test_get_result_value_raises_error_for_invalid_result(self, mock_get_provider_instruction_runner: Mock) -> None:
         # Arrange
@@ -377,7 +377,7 @@ class TestManifestCommandRunner(unittest.TestCase):
             runner.get_result_value(modified_cmd, "invalid-result", str)
 
     @patch(
-        "jupyter_deploy.provider.instruction_runner_factory.InstructionRunnerFactory.get_provider_instruction_runner"
+        "jupyter_deploy.provider.manifest_command_runner.InstructionRunnerFactory.get_provider_instruction_runner"
     )
     def test_get_result_value_with_fallback_returns_value_specified_in_manifest(
         self, mock_get_provider_instruction_runner: Mock
@@ -416,7 +416,7 @@ class TestManifestCommandRunner(unittest.TestCase):
         self.assertEqual(party, ["Ross", "Rachel", "Monika", "Phoebe", "Joey", "Chandler", "You"])
 
     @patch(
-        "jupyter_deploy.provider.instruction_runner_factory.InstructionRunnerFactory.get_provider_instruction_runner"
+        "jupyter_deploy.provider.manifest_command_runner.InstructionRunnerFactory.get_provider_instruction_runner"
     )
     def test_get_result_value_with_fallback_returns_fallback_when_output_not_specified_in_manifest(
         self, mock_get_provider_instruction_runner: Mock
@@ -459,7 +459,7 @@ class TestManifestCommandRunner(unittest.TestCase):
         self.assertEqual(non_existent_int, 0)
 
     @patch(
-        "jupyter_deploy.provider.instruction_runner_factory.InstructionRunnerFactory.get_provider_instruction_runner"
+        "jupyter_deploy.provider.manifest_command_runner.InstructionRunnerFactory.get_provider_instruction_runner"
     )
     def test_get_result_value_with_fallback_returns_fallback_for_invalid_source_key(
         self, mock_get_provider_instruction_runner: Mock
@@ -507,7 +507,7 @@ class TestManifestCommandRunner(unittest.TestCase):
         self.assertEqual(result, "fallback")
 
     @patch(
-        "jupyter_deploy.provider.instruction_runner_factory.InstructionRunnerFactory.get_provider_instruction_runner"
+        "jupyter_deploy.provider.manifest_command_runner.InstructionRunnerFactory.get_provider_instruction_runner"
     )
     def test_update_variables_correctly_sets_values(self, mock_get_provider_instruction_runner: Mock) -> None:
         # Arrange
@@ -545,7 +545,7 @@ class TestManifestCommandRunner(unittest.TestCase):
         variable_handler_mock.sync_project_variables_config.assert_called_once_with(expected_values)
 
     @patch(
-        "jupyter_deploy.provider.instruction_runner_factory.InstructionRunnerFactory.get_provider_instruction_runner"
+        "jupyter_deploy.provider.manifest_command_runner.InstructionRunnerFactory.get_provider_instruction_runner"
     )
     def test_update_variables_with_no_updates(self, mock_get_provider_instruction_runner: Mock) -> None:
         # Arrange
@@ -579,7 +579,7 @@ class TestManifestCommandRunner(unittest.TestCase):
         variable_handler_mock.sync_project_variables_config.assert_not_called()
 
     @patch(
-        "jupyter_deploy.provider.instruction_runner_factory.InstructionRunnerFactory.get_provider_instruction_runner"
+        "jupyter_deploy.provider.manifest_command_runner.InstructionRunnerFactory.get_provider_instruction_runner"
     )
     def test_update_variables_raises_error_for_invalid_source_key(
         self, mock_get_provider_instruction_runner: Mock
@@ -629,7 +629,7 @@ class TestManifestCommandRunner(unittest.TestCase):
             runner.update_variables(cmd)
 
     @patch(
-        "jupyter_deploy.provider.instruction_runner_factory.InstructionRunnerFactory.get_provider_instruction_runner"
+        "jupyter_deploy.provider.manifest_command_runner.InstructionRunnerFactory.get_provider_instruction_runner"
     )
     def test_instruction_error_bubbles_up(self, mock_get_provider_instruction_runner: Mock) -> None:
         # Arrange
