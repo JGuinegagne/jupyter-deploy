@@ -6,12 +6,13 @@ from jupyter_deploy.engine.engine_up import EngineUpHandler
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.engine.supervised_execution import CompletionContext, TerminalHandler
 from jupyter_deploy.engine.supervised_execution_callback import ExecutionCallbackInterface
-from jupyter_deploy.engine.terraform import tf_supervised_executor_factory
+from jupyter_deploy.engine.terraform import tf_plan_metadata, tf_supervised_executor_factory
 from jupyter_deploy.engine.terraform.tf_constants import (
     TF_APPLY_CMD,
     TF_AUTO_APPROVE_CMD_OPTION,
     TF_DEFAULT_PLAN_FILENAME,
     TF_ENGINE_DIR,
+    TF_PLAN_METADATA_FILENAME,
 )
 from jupyter_deploy.engine.terraform.tf_enums import TerraformSequenceId
 from jupyter_deploy.engine.terraform.tf_supervised_execution_callback import (
@@ -64,6 +65,10 @@ class TerraformUpHandler(EngineUpHandler):
         else:
             apply_callback = TerraformNoopExecutionCallback()
 
+        # Load plan metadata for dynamic progress tracking
+        metadata_path = self.engine_dir_path / TF_PLAN_METADATA_FILENAME
+        plan_metadata = tf_plan_metadata.load_plan_metadata(metadata_path)
+
         # Create executor for terraform apply
         apply_executor = tf_supervised_executor_factory.create_terraform_executor(
             sequence_id=TerraformSequenceId.up_apply,
@@ -71,6 +76,7 @@ class TerraformUpHandler(EngineUpHandler):
             log_file=self._log_file,
             execution_callback=apply_callback,
             manifest=self.project_manifest,
+            plan_metadata=plan_metadata,
         )
 
         # Execute terraform apply

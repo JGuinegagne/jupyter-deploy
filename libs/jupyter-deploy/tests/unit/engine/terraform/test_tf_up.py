@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.engine.terraform.tf_enums import TerraformSequenceId
+from jupyter_deploy.engine.terraform.tf_plan_metadata import TerraformPlanMetadata
 from jupyter_deploy.engine.terraform.tf_up import TerraformUpHandler
 from jupyter_deploy.exceptions import LogCleanupError, SupervisedExecutionError
 
@@ -289,3 +290,78 @@ class TestTerraformUpHandler(unittest.TestCase):
 
         self.assertEqual(str(context.exception), "Failed to delete 2 log file(s)")
         mock_history_handler.clear_logs.assert_called_once_with("up")
+
+    @patch("jupyter_deploy.engine.terraform.tf_up.tf_plan_metadata.load_plan_metadata")
+    @patch("jupyter_deploy.engine.terraform.tf_up.tf_supervised_executor_factory.create_terraform_executor")
+    def test_apply_loads_and_passes_plan_metadata(self, mock_create_executor: Mock, mock_load_metadata: Mock) -> None:
+        """Test that apply loads plan metadata and passes it to executor factory."""
+        path = Path("/mock/path")
+        project_path = Path("/mock/project")
+        mock_manifest = Mock()
+        mock_history_handler = Mock()
+        mock_history_handler.create_log_file.return_value = Path("/mock/log.log")
+
+        # Mock the plan metadata
+        mock_metadata = TerraformPlanMetadata(to_add=2, to_change=3, to_destroy=1)
+        mock_load_metadata.return_value = mock_metadata
+
+        # Mock executor - success
+        mock_executor = Mock()
+        mock_executor.execute.return_value = 0
+        mock_create_executor.return_value = mock_executor
+
+        handler = TerraformUpHandler(
+            project_path=project_path,
+            project_manifest=mock_manifest,
+            command_history_handler=mock_history_handler,
+        )
+
+        # Act
+        handler.apply(path)
+
+        # Assert - verify load_plan_metadata was called with correct path
+        expected_metadata_path = project_path / "engine" / "jdout-tfplan.meta.json"
+        mock_load_metadata.assert_called_once_with(expected_metadata_path)
+
+        # Assert - verify plan_metadata was passed to create_terraform_executor
+        mock_create_executor.assert_called_once()
+        call_kwargs = mock_create_executor.call_args.kwargs
+        self.assertEqual(call_kwargs["plan_metadata"], mock_metadata)
+
+    @patch("jupyter_deploy.engine.terraform.tf_up.tf_plan_metadata.load_plan_metadata")
+    @patch("jupyter_deploy.engine.terraform.tf_up.tf_supervised_executor_factory.create_terraform_executor")
+    def test_apply_passes_none_when_plan_metadata_missing(
+        self, mock_create_executor: Mock, mock_load_metadata: Mock
+    ) -> None:
+        """Test that apply passes None to executor when plan metadata file is missing."""
+        path = Path("/mock/path")
+        project_path = Path("/mock/project")
+        mock_manifest = Mock()
+        mock_history_handler = Mock()
+        mock_history_handler.create_log_file.return_value = Path("/mock/log.log")
+
+        # Mock load_plan_metadata to return None (file doesn't exist or is invalid)
+        mock_load_metadata.return_value = None
+
+        # Mock executor - success
+        mock_executor = Mock()
+        mock_executor.execute.return_value = 0
+        mock_create_executor.return_value = mock_executor
+
+        handler = TerraformUpHandler(
+            project_path=project_path,
+            project_manifest=mock_manifest,
+            command_history_handler=mock_history_handler,
+        )
+
+        # Act
+        handler.apply(path)
+
+        # Assert - verify load_plan_metadata was called
+        expected_metadata_path = project_path / "engine" / "jdout-tfplan.meta.json"
+        mock_load_metadata.assert_called_once_with(expected_metadata_path)
+
+        # Assert - verify None was passed to create_terraform_executor
+        mock_create_executor.assert_called_once()
+        call_kwargs = mock_create_executor.call_args.kwargs
+        self.assertIsNone(call_kwargs["plan_metadata"])

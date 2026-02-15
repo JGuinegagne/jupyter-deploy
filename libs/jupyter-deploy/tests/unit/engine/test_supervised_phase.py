@@ -607,3 +607,13 @@ class TestSupervisedDefaultPhase(unittest.TestCase):
 
         # Accumulated should still be capped at full_reward, not exceed it
         self.assertAlmostEqual(self.phase._accumulated_reward, 50.0)
+
+    def test_override_zero_uses_minimum_of_one(self) -> None:
+        """Test that estimate_override of 0 is treated as 1 to avoid division by zero."""
+        config = JupyterDeploySupervisedExecutionDefaultPhaseV1(
+            **{"progress-pattern": r"complete", "progress-events-estimate": 10}, label="Zero Override Test"
+        )
+        phase = SupervisedDefaultPhase(config=config, full_reward=100.0, estimate_override=0)
+
+        # Should use max(0, 1) = 1 to avoid division by zero
+        self.assertAlmostEqual(phase._reward_per_event, 100.0)  # 100 / 1

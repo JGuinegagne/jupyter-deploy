@@ -47,6 +47,7 @@ class TerraformPlanMetadataSource(Enum):
     plan_to_change = "plan.to_change"
     plan_to_destroy = "plan.to_destroy"
     plan_to_update = "plan.to_update"  # to_add + to_change
+    plan_to_mutate = "plan.to_mutate"  # to_add + to_change + to_destroy
 
     @classmethod
     def from_string(cls, value: str | None) -> "TerraformPlanMetadataSource | None":

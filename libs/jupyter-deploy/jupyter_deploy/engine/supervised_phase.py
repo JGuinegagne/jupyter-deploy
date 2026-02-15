@@ -232,8 +232,9 @@ class SupervisedDefaultPhase:
         self._progress_pattern = re.compile(self.config.progress_pattern)
 
         # Determine events estimate: override > explicit > default
+        # Use max(override, 1) to handle no-op applies (0 resources to update)
         if estimate_override is not None:
-            events_estimate = estimate_override
+            events_estimate = max(estimate_override, 1)
         elif self.config.progress_events_estimate is not None:
             events_estimate = self.config.progress_events_estimate
         else:
