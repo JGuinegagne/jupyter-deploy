@@ -61,11 +61,16 @@ class TestHostStatusCommand(unittest.TestCase):
         mock_host_handler_class.assert_called_once()
         mock_handler_fns["get_host_status"].assert_called_once()
 
+    @patch("jupyter_deploy.cli.host_app.SimpleDisplayManager")
     @patch("jupyter_deploy.cli.host_app.Console")
     @patch("jupyter_deploy.handlers.resource.host_handler.HostHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_uses_handler_console_to_print_status_response(
-        self, mock_project_dir: Mock, mock_host_handler_class: Mock, mock_console_class: Mock
+        self,
+        mock_project_dir: Mock,
+        mock_host_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_spinner_handler_class: Mock,
     ) -> None:
         # Setup
         mock_host_handler, mock_handler_fns = self.get_mock_host_handler()
@@ -74,6 +79,13 @@ class TestHostStatusCommand(unittest.TestCase):
 
         mock_console = Mock()
         mock_console_class.return_value = mock_console
+
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_spinner_instance = Mock()
+        mock_spinner_instance.spinner.return_value = mock_spinner
+        mock_spinner_handler_class.return_value = mock_spinner_instance
 
         # Execute
         runner = CliRunner()
@@ -326,15 +338,28 @@ class TestHostConnectCommand(unittest.TestCase):
             "connect": mock_connect,
         }
 
+    @patch("jupyter_deploy.cli.host_app.SimpleDisplayManager")
+    @patch("jupyter_deploy.cli.host_app.Console")
     @patch("jupyter_deploy.handlers.resource.host_handler.HostHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_instantiates_host_handler_and_calls_connect(
-        self, mock_project_dir: Mock, mock_host_handler_class: Mock
+        self,
+        mock_project_dir: Mock,
+        mock_host_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_simple_display_manager_class: Mock,
     ) -> None:
         # Setup
         mock_host_handler, mock_handler_fns = self.get_mock_host_handler()
         mock_host_handler_class.return_value = mock_host_handler
         mock_project_dir.return_value.__enter__.return_value = None
+
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_simple_display_manager = Mock()
+        mock_simple_display_manager.spinner.return_value = mock_spinner
+        mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         # Execute
         runner = CliRunner()
@@ -345,13 +370,28 @@ class TestHostConnectCommand(unittest.TestCase):
         mock_host_handler_class.assert_called_once()
         mock_handler_fns["connect"].assert_called_once()
 
+    @patch("jupyter_deploy.cli.host_app.SimpleDisplayManager")
+    @patch("jupyter_deploy.cli.host_app.Console")
     @patch("jupyter_deploy.handlers.resource.host_handler.HostHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_switches_dir_when_passed_a_project(self, mock_project_dir: Mock, mock_host_handler_class: Mock) -> None:
+    def test_switches_dir_when_passed_a_project(
+        self,
+        mock_project_dir: Mock,
+        mock_host_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_simple_display_manager_class: Mock,
+    ) -> None:
         # Setup
         mock_host_handler, _ = self.get_mock_host_handler()
         mock_host_handler_class.return_value = mock_host_handler
         mock_project_dir.return_value.__enter__.return_value = None
+
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_simple_display_manager = Mock()
+        mock_simple_display_manager.spinner.return_value = mock_spinner
+        mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         # Execute
         runner = CliRunner()
@@ -361,16 +401,29 @@ class TestHostConnectCommand(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_project_dir.assert_called_once_with("/test/project/path")
 
+    @patch("jupyter_deploy.cli.host_app.SimpleDisplayManager")
+    @patch("jupyter_deploy.cli.host_app.Console")
     @patch("jupyter_deploy.handlers.resource.host_handler.HostHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_raises_when_host_handler_connect_raises(
-        self, mock_project_dir: Mock, mock_host_handler_class: Mock
+        self,
+        mock_project_dir: Mock,
+        mock_host_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_simple_display_manager_class: Mock,
     ) -> None:
         # Setup
         mock_host_handler, mock_handler_fns = self.get_mock_host_handler()
         mock_host_handler_class.return_value = mock_host_handler
         mock_handler_fns["connect"].side_effect = Exception("Test error")
         mock_project_dir.return_value.__enter__.return_value = None
+
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_simple_display_manager = Mock()
+        mock_simple_display_manager.spinner.return_value = mock_spinner
+        mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         # Execute
         runner = CliRunner()
@@ -441,11 +494,16 @@ class TestHostExecCommand(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_handler_fns["exec_command"].assert_called_once_with(["echo", "hello world"])
 
+    @patch("jupyter_deploy.cli.host_app.SimpleDisplayManager")
     @patch("jupyter_deploy.cli.host_app.Console")
     @patch("jupyter_deploy.handlers.resource.host_handler.HostHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_prints_stdout_and_stderr(
-        self, mock_project_dir: Mock, mock_host_handler_class: Mock, mock_console_class: Mock
+        self,
+        mock_project_dir: Mock,
+        mock_host_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_simple_display_manager_class: Mock,
     ) -> None:
         # Setup
         mock_host_handler, mock_handler_fns = self.get_mock_host_handler()
@@ -456,12 +514,20 @@ class TestHostExecCommand(unittest.TestCase):
         mock_console_class.return_value = mock_console
         mock_handler_fns["exec_command"].return_value = ("test stdout", "test stderr", 0)
 
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_simple_display_manager = Mock()
+        mock_simple_display_manager.spinner.return_value = mock_spinner
+        mock_simple_display_manager_class.return_value = mock_simple_display_manager
+
         # Execute
         runner = CliRunner()
         result = runner.invoke(host_app, ["exec", "--", "whoami"])
 
         # Assert
         self.assertEqual(result.exit_code, 0)
+        mock_simple_display_manager_class.assert_called_once_with(console=mock_console)
         mock_console.print.assert_called()
         print_calls = [str(call) for call in mock_console.print.mock_calls]
         self.assertTrue(any("test stdout" in call for call in print_calls))

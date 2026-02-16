@@ -4,6 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import Mock, mock_open, patch
 
+from jupyter_deploy.engine.supervised_execution import ExecutionProgress
 from jupyter_deploy.engine.supervised_executor import SupervisedExecutor
 from jupyter_deploy.engine.supervised_phase import SupervisedDefaultPhase, SupervisedPhase
 
@@ -754,3 +755,55 @@ class TestSupervisedExecutor(unittest.TestCase):
 
         # Verify handle_interaction was called
         cb_mocks["handle_interaction"].assert_called_with("Enter value:")
+
+    def test_emit_current_progress_caps_at_end_reward_minus_one(self) -> None:
+        """Test that _emit_current_progress caps reward at end_reward - 1 when estimate is exceeded."""
+        cb, cb_mocks = self._create_execution_callback_and_mocks()
+        dft_phase, _ = self._create_mocked_default_phase_and_mocks()
+
+        executor = SupervisedExecutor(
+            exec_dir=Path("/mock/dir"),
+            log_file=Path("/mock/log.txt"),
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
+            start_reward=0,
+            end_reward=100,
+        )
+
+        # Simulate accumulated reward exceeding end_reward (estimate was wrong)
+        executor._accumulated_reward = 105
+
+        # Call _emit_current_progress
+        executor._emit_current_progress()
+
+        # Verify on_progress was called with capped reward (99, not 105)
+        cb_mocks["on_progress"].assert_called_once()
+        progress_arg: ExecutionProgress = cb_mocks["on_progress"].call_args[0][0]
+        self.assertEqual(progress_arg.reward, 99)  # end_reward - 1
+        self.assertEqual(progress_arg.label, dft_phase.label)
+
+    def test_complete_execution_emits_full_end_reward(self) -> None:
+        """Test that _complete_execution emits full end_reward even if accumulated exceeds it."""
+        cb, cb_mocks = self._create_execution_callback_and_mocks()
+        dft_phase, _ = self._create_mocked_default_phase_and_mocks()
+
+        executor = SupervisedExecutor(
+            exec_dir=Path("/mock/dir"),
+            log_file=Path("/mock/log.txt"),
+            execution_callback=cb,  # type: ignore[arg-type]
+            default_phase=dft_phase,  # type: ignore[arg-type]
+            start_reward=0,
+            end_reward=100,
+        )
+
+        # Simulate accumulated reward exceeding end_reward
+        executor._accumulated_reward = 105
+
+        # Call _complete_execution
+        executor._complete_execution()
+
+        # Verify on_progress was called with full end_reward (100, not 99)
+        cb_mocks["on_progress"].assert_called_once()
+        progress_arg: ExecutionProgress = cb_mocks["on_progress"].call_args[0][0]
+        self.assertEqual(progress_arg.reward, 100)  # full end_reward
+        self.assertEqual(progress_arg.label, dft_phase.label)

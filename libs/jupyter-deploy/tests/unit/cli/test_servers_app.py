@@ -63,11 +63,16 @@ class TestServerStatusCmd(unittest.TestCase):
         mock_server_handler_class.assert_called_once()
         mock_handler_fns["get_server_status"].assert_called_once()
 
+    @patch("jupyter_deploy.cli.servers_app.SimpleDisplayManager")
     @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_uses_handler_console_to_print_status_response(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+        self,
+        mock_project_dir: Mock,
+        mock_server_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_simple_display_manager_class: Mock,
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
@@ -76,6 +81,13 @@ class TestServerStatusCmd(unittest.TestCase):
 
         mock_console = Mock()
         mock_console_class.return_value = mock_console
+
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_simple_display_manager = Mock()
+        mock_simple_display_manager.spinner.return_value = mock_spinner
+        mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         # Execute
         runner = CliRunner()
@@ -161,11 +173,16 @@ class TestServerStartCmd(unittest.TestCase):
         mock_server_handler_class.assert_called_once()
         mock_handler_fns["start_server"].assert_called_once_with("all")
 
+    @patch("jupyter_deploy.cli.servers_app.SimpleDisplayManager")
     @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_print_the_valid_services_when_passed_an_invalid_service(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+        self,
+        mock_project_dir: Mock,
+        mock_server_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_simple_display_manager_class: Mock,
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
@@ -177,6 +194,13 @@ class TestServerStartCmd(unittest.TestCase):
         # Set up the console mock
         mock_console = Mock()
         mock_console_class.return_value = mock_console
+
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_simple_display_manager = Mock()
+        mock_simple_display_manager.spinner.return_value = mock_spinner
+        mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         # Execute
         runner = CliRunner()
@@ -284,11 +308,16 @@ class TestServerStopCmd(unittest.TestCase):
         mock_server_handler_class.assert_called_once()
         mock_handler_fns["stop_server"].assert_called_once_with("all")
 
+    @patch("jupyter_deploy.cli.servers_app.SimpleDisplayManager")
     @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_print_the_valid_services_when_passed_an_invalid_service(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+        self,
+        mock_project_dir: Mock,
+        mock_server_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_simple_display_manager_class: Mock,
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
@@ -300,6 +329,13 @@ class TestServerStopCmd(unittest.TestCase):
         # Set up the console mock
         mock_console = Mock()
         mock_console_class.return_value = mock_console
+
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_simple_display_manager = Mock()
+        mock_simple_display_manager.spinner.return_value = mock_spinner
+        mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         # Execute
         runner = CliRunner()
@@ -407,11 +443,16 @@ class TestServerRestartCmd(unittest.TestCase):
         mock_server_handler_class.assert_called_once()
         mock_handler_fns["restart_server"].assert_called_once_with("all")
 
+    @patch("jupyter_deploy.cli.servers_app.SimpleDisplayManager")
     @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_print_the_valid_services_when_passed_an_invalid_service(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+        self,
+        mock_project_dir: Mock,
+        mock_server_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_simple_display_manager_class: Mock,
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
@@ -423,6 +464,13 @@ class TestServerRestartCmd(unittest.TestCase):
         # Set up the console mock
         mock_console = Mock()
         mock_console_class.return_value = mock_console
+
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_simple_display_manager = Mock()
+        mock_simple_display_manager.spinner.return_value = mock_spinner
+        mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         # Execute
         runner = CliRunner()
@@ -512,16 +560,31 @@ class TestServerLogsCmd(unittest.TestCase):
             "get_console": mock_get_console,
         }
 
+    @patch("jupyter_deploy.cli.servers_app.SimpleDisplayManager")
     @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_instantiates_server_handler_and_calls_get_logs_and_print_results(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+        self,
+        mock_project_dir: Mock,
+        mock_server_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_simple_display_manager_class: Mock,
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
         mock_project_dir.return_value.__enter__.return_value = None
+
+        mock_console = Mock()
+        mock_console_class.return_value = mock_console
+
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_simple_display_manager = Mock()
+        mock_simple_display_manager.spinner.return_value = mock_spinner
+        mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         mock_console = Mock()
         mock_console_class.return_value = mock_console
@@ -538,11 +601,16 @@ class TestServerLogsCmd(unittest.TestCase):
         mock_console.print.assert_called()
         mock_console.rule.assert_called()
 
+    @patch("jupyter_deploy.cli.servers_app.SimpleDisplayManager")
     @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_print_the_valid_services_when_passed_an_invalid_service(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+        self,
+        mock_project_dir: Mock,
+        mock_server_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_simple_display_manager_class: Mock,
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
@@ -554,6 +622,13 @@ class TestServerLogsCmd(unittest.TestCase):
         # Set up the console mock
         mock_console = Mock()
         mock_console_class.return_value = mock_console
+
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_simple_display_manager = Mock()
+        mock_simple_display_manager.spinner.return_value = mock_spinner
+        mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         # Execute
         runner = CliRunner()
@@ -568,11 +643,16 @@ class TestServerLogsCmd(unittest.TestCase):
         self.assertTrue("Invalid service" in first_call[1][0])
         self.assertTrue("red" in first_call[2]["style"])
 
+    @patch("jupyter_deploy.cli.servers_app.SimpleDisplayManager")
     @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_prints_placeholder_when_no_logs_are_returned(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+        self,
+        mock_project_dir: Mock,
+        mock_server_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_simple_display_manager_class: Mock,
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
@@ -586,6 +666,13 @@ class TestServerLogsCmd(unittest.TestCase):
         mock_console = Mock()
         mock_console_class.return_value = mock_console
         mock_handler_fns["get_server_logs"].return_value = "", ""
+
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_simple_display_manager = Mock()
+        mock_simple_display_manager.spinner.return_value = mock_spinner
+        mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         # Execute
         runner = CliRunner()
@@ -647,11 +734,16 @@ class TestServerExecCmd(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertTrue("exec" in result.stdout, "exec command should appear in help")
 
+    @patch("jupyter_deploy.cli.servers_app.SimpleDisplayManager")
     @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_instantiates_handler_and_calls_exec_command(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+        self,
+        mock_project_dir: Mock,
+        mock_server_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_simple_display_manager_class: Mock,
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
@@ -660,6 +752,13 @@ class TestServerExecCmd(unittest.TestCase):
 
         mock_console = Mock()
         mock_console_class.return_value = mock_console
+
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_simple_display_manager = Mock()
+        mock_simple_display_manager.spinner.return_value = mock_spinner
+        mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         # Execute
         runner = CliRunner()
@@ -689,11 +788,16 @@ class TestServerExecCmd(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_handler_fns["exec_command"].assert_called_once_with(service="jupyter", command_args=["ls", "-la"])
 
+    @patch("jupyter_deploy.cli.servers_app.SimpleDisplayManager")
     @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_prints_stdout_and_stderr(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+        self,
+        mock_project_dir: Mock,
+        mock_server_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_simple_display_manager_class: Mock,
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
@@ -703,6 +807,13 @@ class TestServerExecCmd(unittest.TestCase):
         mock_console_class.return_value = mock_console
         mock_handler_fns["exec_command"].return_value = ("test stdout", "test stderr", 0)
         mock_project_dir.return_value.__enter__.return_value = None
+
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_simple_display_manager = Mock()
+        mock_simple_display_manager.spinner.return_value = mock_spinner
+        mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         # Execute
         runner = CliRunner()
@@ -750,11 +861,16 @@ class TestServerExecCmd(unittest.TestCase):
         mock_console_class.assert_called_once()
         mock_console.print.assert_called()
 
+    @patch("jupyter_deploy.cli.servers_app.SimpleDisplayManager")
     @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_prints_error_when_invalid_service(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+        self,
+        mock_project_dir: Mock,
+        mock_server_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_simple_display_manager_class: Mock,
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
@@ -765,6 +881,13 @@ class TestServerExecCmd(unittest.TestCase):
 
         mock_console = Mock()
         mock_console_class.return_value = mock_console
+
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_simple_display_manager = Mock()
+        mock_simple_display_manager.spinner.return_value = mock_spinner
+        mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         # Execute
         runner = CliRunner()
@@ -828,11 +951,16 @@ class TestServerConnectCmd(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertTrue("connect" in result.stdout, "connect command should appear in help")
 
+    @patch("jupyter_deploy.cli.servers_app.SimpleDisplayManager")
     @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_instantiates_handler_and_calls_connect(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+        self,
+        mock_project_dir: Mock,
+        mock_server_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_simple_display_manager_class: Mock,
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
@@ -841,6 +969,13 @@ class TestServerConnectCmd(unittest.TestCase):
 
         mock_console = Mock()
         mock_console_class.return_value = mock_console
+
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_simple_display_manager = Mock()
+        mock_simple_display_manager.spinner.return_value = mock_spinner
+        mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         # Execute
         runner = CliRunner()
@@ -851,16 +986,28 @@ class TestServerConnectCmd(unittest.TestCase):
         mock_server_handler_class.assert_called_once()
         mock_handler_fns["connect"].assert_called_once_with(service="jupyter")
 
+    @patch("jupyter_deploy.cli.servers_app.SimpleDisplayManager")
     @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_defaults_to_default_service(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+        self,
+        mock_project_dir: Mock,
+        mock_server_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_simple_display_manager_class: Mock,
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
         mock_project_dir.return_value.__enter__.return_value = None
+
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_simple_display_manager = Mock()
+        mock_simple_display_manager.spinner.return_value = mock_spinner
+        mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         # Execute
         runner = CliRunner()
@@ -870,11 +1017,16 @@ class TestServerConnectCmd(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         mock_handler_fns["connect"].assert_called_once_with(service="default")
 
+    @patch("jupyter_deploy.cli.servers_app.SimpleDisplayManager")
     @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_prints_error_when_invalid_service(
-        self, mock_project_dir: Mock, mock_server_handler_class: Mock, mock_console_class: Mock
+        self,
+        mock_project_dir: Mock,
+        mock_server_handler_class: Mock,
+        mock_console_class: Mock,
+        mock_simple_display_manager_class: Mock,
     ) -> None:
         # Setup
         mock_server_handler, mock_handler_fns = self.get_mock_server_handler()
@@ -885,6 +1037,13 @@ class TestServerConnectCmd(unittest.TestCase):
 
         mock_console = Mock()
         mock_console_class.return_value = mock_console
+
+        mock_spinner = Mock()
+        mock_spinner.__enter__ = Mock(return_value=None)
+        mock_spinner.__exit__ = Mock(return_value=None)
+        mock_simple_display_manager = Mock()
+        mock_simple_display_manager.spinner.return_value = mock_spinner
+        mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         # Execute
         runner = CliRunner()

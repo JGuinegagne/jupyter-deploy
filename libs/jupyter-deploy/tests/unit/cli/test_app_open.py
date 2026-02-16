@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 from typer.testing import CliRunner
 
 from jupyter_deploy.cli.app import runner as app_runner
-from jupyter_deploy.exceptions import OpenWebBrowserError
+from jupyter_deploy.exceptions import OpenWebBrowserError, UrlNotAvailableError, UrlNotSecureError
 
 
 class TestOpenCommand(unittest.TestCase):
@@ -274,8 +274,6 @@ class TestOpenCommand(unittest.TestCase):
         self, mock_project_ctx_manager: Mock, mock_open_handler_cls: Mock
     ) -> None:
         """Test that UrlNotAvailableError returns exit code 0 with helpful message."""
-        from jupyter_deploy.exceptions import UrlNotAvailableError
-
         mock_open_handler_instance, mock_open_fns = self.get_mock_open_handler()
         mock_open_fns["open"].side_effect = UrlNotAvailableError(
             "URL not available. Run 'jd config' then 'jd up'.", "https://example.com"
@@ -301,8 +299,6 @@ class TestOpenCommand(unittest.TestCase):
         self, mock_project_ctx_manager: Mock, mock_open_handler_cls: Mock
     ) -> None:
         """Test that UrlNotSecureError returns non-zero exit code (security error)."""
-        from jupyter_deploy.exceptions import UrlNotSecureError
-
         mock_open_handler_instance, mock_open_fns = self.get_mock_open_handler()
         mock_open_fns["open"].side_effect = UrlNotSecureError(
             "Insecure URL detected. Only HTTPS URLs are allowed for security reasons.",

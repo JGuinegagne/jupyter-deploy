@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 
-from rich import console as rich_console
-
+from jupyter_deploy.engine.supervised_execution import TerminalHandler
 from jupyter_deploy.provider.resolved_argdefs import ResolvedInstructionArgument
 from jupyter_deploy.provider.resolved_resultdefs import ResolvedInstructionResult
 
@@ -18,6 +17,6 @@ class InstructionRunner(ABC):
         self,
         instruction_name: str,
         resolved_arguments: dict[str, ResolvedInstructionArgument],
-        console: rich_console.Console,
+        terminal_handler: TerminalHandler | None = None,
     ) -> dict[str, ResolvedInstructionResult]:
         return {}

@@ -68,7 +68,7 @@ def create_terraform_executor(
         end_reward = 20
 
     elif sequence_id == TerraformSequenceId.config_plan:
-        # Plan: count read/refresh events, then plan generation
+        # Plan: count read/refresh events only
         fallback_default_phase_config = JupyterDeploySupervisedExecutionDefaultPhaseV1(
             label="Reading data sources",
             **{
@@ -76,23 +76,12 @@ def create_terraform_executor(
                 "progress-events-estimate": 50,
             },
         )
-        fallback_phase_configs = [
-            JupyterDeploySupervisedExecutionPhaseV1(
-                label="Generating plan",
-                weight=50,  # 50% of the total progress range
-                **{
-                    "enter-pattern": r"Terraform will perform the following actions:",
-                    "progress-pattern": (r"(will be created|will be read during apply|will be destroyed)"),
-                    "progress-events-estimate": 70,
-                },
-            ),
-        ]
         start_reward = 20
         end_reward = 100
 
     elif sequence_id == TerraformSequenceId.up_apply:
         # Apply: count resource creation/modification/destruction events
-        # Use plan.to_update dynamically if plan_metadata is available
+        # Use plan.to_mutate dynamically if plan_metadata is available
         fallback_default_phase_config = JupyterDeploySupervisedExecutionDefaultPhaseV1(
             label="Mutating resources",
             **{
@@ -100,7 +89,7 @@ def create_terraform_executor(
                     r"(Creation complete after|Modifications complete after|"
                     r"Destruction complete after|Refreshing state)"
                 ),
-                "progress-events-estimate-dynamic-source": "plan.to_update",
+                "progress-events-estimate-dynamic-source": "plan.to_mutate",
             },
         )
 

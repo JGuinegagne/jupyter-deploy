@@ -16,7 +16,7 @@ class ShowHandler(BaseProjectHandler):
 
     def __init__(self) -> None:
         """Initialize the show handler."""
-        super().__init__()
+        super().__init__(terminal_handler=None)
 
         if self.engine == EngineType.TERRAFORM:
             self._outputs_handler = tf_outputs.TerraformOutputsHandler(
@@ -26,6 +26,7 @@ class ShowHandler(BaseProjectHandler):
             self._variables_handler = tf_variables.TerraformVariablesHandler(
                 project_path=self.project_path,
                 project_manifest=self.project_manifest,
+                terminal_handler=self.terminal_handler,
             )
         else:
             raise NotImplementedError(f"ShowHandler implementation not found for engine: {self.engine}")

@@ -86,7 +86,9 @@ class TestOrganizationHandler(unittest.TestCase):
 
         mock_retrieve_manifest.assert_called_once()
         mock_tf_outputs_handler.assert_called_once_with(project_path=path, project_manifest=mock_manifest)
-        mock_tf_variables_handler.assert_called_once_with(project_path=path, project_manifest=mock_manifest)
+        mock_tf_variables_handler.assert_called_once_with(
+            project_path=path, project_manifest=mock_manifest, terminal_handler=None
+        )
         self.assertEqual(handler._output_handler, mock_output_handler)
         self.assertEqual(handler._variable_handler, mock_variable_handler)
         self.assertEqual(handler.engine, EngineType.TERRAFORM)
@@ -237,8 +239,6 @@ class TestOrganizationHandler(unittest.TestCase):
         mock_cmd_runner, mock_cmd_runner_fns = self.get_mock_manifest_cmd_runner_and_fns()
         mock_cmd_runner_class.return_value = mock_cmd_runner
 
-        mock_console = mock_console_class.return_value
-
         # Execute
         handler = OrganizationHandler()
         handler.set_organization("org-name")
@@ -246,7 +246,7 @@ class TestOrganizationHandler(unittest.TestCase):
         # Verify
         mock_manifest_fns["get_command"].assert_called_once_with("organization.set")
         mock_cmd_runner_class.assert_called_once_with(
-            console=mock_console,
+            terminal_handler=None,
             output_handler=mock_output_handler,
             variable_handler=mock_variable_handler,
         )
@@ -287,8 +287,6 @@ class TestOrganizationHandler(unittest.TestCase):
         mock_cmd_runner, mock_cmd_runner_fns = self.get_mock_manifest_cmd_runner_and_fns()
         mock_cmd_runner_class.return_value = mock_cmd_runner
 
-        mock_console = mock_console_class.return_value
-
         # Execute
         handler = OrganizationHandler()
         handler.unset_organization()
@@ -296,7 +294,7 @@ class TestOrganizationHandler(unittest.TestCase):
         # Verify
         mock_manifest_fns["get_command"].assert_called_once_with("organization.unset")
         mock_cmd_runner_class.assert_called_once_with(
-            console=mock_console,
+            terminal_handler=None,
             output_handler=mock_output_handler,
             variable_handler=mock_variable_handler,
         )
@@ -337,8 +335,6 @@ class TestOrganizationHandler(unittest.TestCase):
         mock_cmd_runner_class.return_value = mock_cmd_runner
         mock_cmd_runner_fns["get_result_value"].return_value = "org-name"
 
-        mock_console = mock_console_class.return_value
-
         # Execute
         handler = OrganizationHandler()
         result = handler.get_organization()
@@ -347,7 +343,7 @@ class TestOrganizationHandler(unittest.TestCase):
         self.assertEqual(result, "org-name")
         mock_manifest_fns["get_command"].assert_called_once_with("organization.get")
         mock_cmd_runner_class.assert_called_once_with(
-            console=mock_console,
+            terminal_handler=None,
             output_handler=mock_output_handler,
             variable_handler=mock_variable_handler,
         )

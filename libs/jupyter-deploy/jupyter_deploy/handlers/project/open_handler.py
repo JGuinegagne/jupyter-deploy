@@ -12,7 +12,7 @@ class OpenHandler(BaseProjectHandler):
 
     def __init__(self) -> None:
         """Base class to manage the open command of a jupyter-deploy project."""
-        super().__init__()
+        super().__init__(terminal_handler=None)
 
         if self.engine == EngineType.TERRAFORM:
             self._handler = tf_open.TerraformOpenHandler(

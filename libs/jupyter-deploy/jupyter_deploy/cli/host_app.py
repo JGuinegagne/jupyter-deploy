@@ -5,6 +5,7 @@ from rich.console import Console
 
 from jupyter_deploy import cmd_utils
 from jupyter_deploy.cli.error_decorator import handle_cli_errors
+from jupyter_deploy.cli.simple_display import SimpleDisplayManager
 from jupyter_deploy.handlers.resource import host_handler
 
 host_app = typer.Typer(
@@ -27,8 +28,11 @@ def status(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = host_handler.HostHandler()
-        status = handler.get_host_status()
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = host_handler.HostHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Checking host status..."):
+            status = handler.get_host_status()
 
         console.print(f"Jupyter host status: [bold cyan]{status}[/]")
 
@@ -47,8 +51,11 @@ def stop(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = host_handler.HostHandler()
-        handler.stop_host()
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = host_handler.HostHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Stopping host..."):
+            handler.stop_host()
 
 
 @host_app.command()
@@ -65,8 +72,11 @@ def start(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = host_handler.HostHandler()
-        handler.start_host()
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = host_handler.HostHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Starting host..."):
+            handler.start_host()
 
 
 @host_app.command()
@@ -83,8 +93,11 @@ def restart(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = host_handler.HostHandler()
-        handler.restart_host()
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = host_handler.HostHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Restarting host..."):
+            handler.restart_host()
 
 
 @host_app.command()
@@ -101,8 +114,11 @@ def connect(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = host_handler.HostHandler()
-        handler.connect()
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = host_handler.HostHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Connecting to host..."):
+            handler.connect()
 
 
 @host_app.command(context_settings={"allow_extra_args": True, "allow_interspersed_args": False})
@@ -134,8 +150,11 @@ def exec(
         raise typer.Exit(code=1)
 
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = host_handler.HostHandler()
-        stdout, stderr, returncode = handler.exec_command(command_args)
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = host_handler.HostHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Executing command..."):
+            stdout, stderr, returncode = handler.exec_command(command_args)
 
         if stdout:
             console.rule("stdout")

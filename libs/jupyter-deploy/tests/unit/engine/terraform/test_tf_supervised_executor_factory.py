@@ -93,7 +93,7 @@ class TestCreateTerraformExecutorNoManifestNorPlan(unittest.TestCase):
         self.assertEqual(len(executor._declared_phases), 0)
 
     def test_return_executor_with_default_phase_for_config_plan(self) -> None:
-        """Test config_plan creates executor with correct default phase and declared phase."""
+        """Test config_plan creates executor with correct default phase."""
         exec_dir = Path("/mock/exec")
         log_file = Path("/mock/log.txt")
         execution_cb = Mock()
@@ -106,8 +106,7 @@ class TestCreateTerraformExecutorNoManifestNorPlan(unittest.TestCase):
         )
 
         self.assertGreaterEqual(len(executor._default_phase.label), 1)
-        self.assertEqual(len(executor._declared_phases), 1)
-        self.assertGreaterEqual(len(executor._declared_phases[0].label), 1)
+        self.assertEqual(len(executor._declared_phases), 0)
 
     def test_config_sequence_executors_have_consistent_weights(self) -> None:
         """Test that config_init and config_plan have consistent weight distribution."""
@@ -355,9 +354,9 @@ class TestCreateTerraformExecutorWithManifest(unittest.TestCase):
             plan_metadata=plan_metadata,
         )
 
-        # Manifest specifies "progress-events-estimate-dynamic-source": "plan.to_update"
-        # plan.to_update = to_add + to_change = 10 + 10 = 20
+        # Manifest specifies "progress-events-estimate-dynamic-source": "plan.to_mutate"
+        # plan.to_mutate = to_add + to_change + to_destroy = 10 + 10 + 2 = 22
         # default phase weights 60% (since declared phase weights 40%)
-        # Reward per event should be 60 / 20 = 3 if using manifest (expected)
+        # Reward per event should be 60 / 22 = 2.727... if using manifest (expected)
         # If using default, reward per event should be 60 / 10 = 6
-        self.assertAlmostEqual(executor._default_phase._reward_per_event, 3)
+        self.assertAlmostEqual(executor._default_phase._reward_per_event, 60 / 22, places=2)

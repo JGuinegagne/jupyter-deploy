@@ -2,11 +2,11 @@ from pathlib import Path
 
 import yaml
 from pydantic import ValidationError
-from rich import console as rich_console
 from yaml.parser import ParserError
 from yaml.scanner import ScannerError
 
 from jupyter_deploy import constants, fs_utils, manifest, variables_config
+from jupyter_deploy.engine.supervised_execution import TerminalHandler
 from jupyter_deploy.exceptions import (
     InvalidManifestError,
     InvalidVariablesDotYamlError,
@@ -24,15 +24,18 @@ class BaseProjectHandler:
     otherwise this class will raise a typer.Exit().
     """
 
-    def __init__(self) -> None:
+    def __init__(self, terminal_handler: TerminalHandler | None = None) -> None:
         """Attempts to identify the engine associated with the project.
+
+        Args:
+            terminal_handler: Optional terminal handler for status updates
 
         Raises:
             ManifestNotFoundError: If project manifest not found
             ReadManifestError: If manifest cannot be read due to I/O error
             InvalidManifestError: If manifest cannot be parsed or validated
         """
-        self._console: rich_console.Console | None = None
+        self.terminal_handler = terminal_handler
         self.project_path = Path.cwd()
         self.command_history_handler = CommandHistoryHandler(self.project_path)
         manifest_path = self.project_path / constants.MANIFEST_FILENAME
@@ -40,13 +43,6 @@ class BaseProjectHandler:
         project_manifest = retrieve_project_manifest(manifest_path)
         self.engine = project_manifest.get_engine()
         self.project_manifest = project_manifest
-
-    def get_console(self) -> rich_console.Console:
-        """Return the instance's rich console."""
-        if self._console:
-            return self._console
-        self._console = rich_console.Console()
-        return self._console
 
 
 def retrieve_project_manifest(manifest_path: Path) -> manifest.JupyterDeployManifest:

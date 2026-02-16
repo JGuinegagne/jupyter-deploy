@@ -49,6 +49,8 @@ class TerraformPlanMetadata(BaseModel):
             return self.to_destroy
         elif source == TerraformPlanMetadataSource.plan_to_update:
             return self.to_update
+        elif source == TerraformPlanMetadataSource.plan_to_mutate:
+            return self.to_mutate
         return None
 
 

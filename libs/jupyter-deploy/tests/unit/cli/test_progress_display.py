@@ -8,10 +8,25 @@ from jupyter_deploy.engine.supervised_execution import ExecutionProgress, Intera
 class TestProgressDisplayManager(unittest.TestCase):
     """Test cases for ProgressDisplayManager."""
 
-    def _create_mocked_console(self) -> Mock:
-        """Helper to create a mocked Console instance."""
+    def _create_mocked_console_and_mocks(self) -> tuple[Mock, dict[str, Mock]]:
+        """Helper to create a mocked Console instance with mocked methods.
+
+        Dict keys: print, status, rule
+        """
         mock_console = Mock()
-        return mock_console
+        mock_print = Mock()
+        mock_status = Mock()
+        mock_rule = Mock()
+
+        mock_console.print = mock_print
+        mock_console.status = mock_status
+        mock_console.rule = mock_rule
+
+        return mock_console, {
+            "print": mock_print,
+            "status": mock_status,
+            "rule": mock_rule,
+        }
 
     def _create_mocked_progress_and_mocks(self) -> tuple[Mock, dict[str, Mock]]:
         """Helper to create a mocked Progress instance with mocked methods.
@@ -55,7 +70,7 @@ class TestProgressDisplayManager(unittest.TestCase):
     @patch("jupyter_deploy.cli.progress_display.Console")
     def test_context_manager_calls_start_and_stop(self, mock_console_cls: Mock) -> None:
         """Test that using as context manager calls start() and stop()."""
-        mock_console = self._create_mocked_console()
+        mock_console, _ = self._create_mocked_console_and_mocks()
         mock_console_cls.return_value = mock_console
 
         manager = ProgressDisplayManager()
@@ -70,7 +85,7 @@ class TestProgressDisplayManager(unittest.TestCase):
     @patch("jupyter_deploy.cli.progress_display.Console")
     def test_context_manager_returns_self(self, mock_console_cls: Mock) -> None:
         """Test that __enter__ returns self."""
-        mock_console = self._create_mocked_console()
+        mock_console, _ = self._create_mocked_console_and_mocks()
         mock_console_cls.return_value = mock_console
 
         manager = ProgressDisplayManager()
@@ -89,7 +104,7 @@ class TestProgressDisplayManager(unittest.TestCase):
         self, mock_progress_cls: Mock, mock_live_cls: Mock, mock_console_cls: Mock
     ) -> None:
         """Test that start() creates Progress and Live objects."""
-        mock_console = self._create_mocked_console()
+        mock_console, _ = self._create_mocked_console_and_mocks()
         mock_console_cls.return_value = mock_console
 
         mock_progress, progress_mocks = self._create_mocked_progress_and_mocks()
@@ -129,7 +144,7 @@ class TestProgressDisplayManager(unittest.TestCase):
         self, mock_progress_cls: Mock, mock_live_cls: Mock, mock_console_cls: Mock
     ) -> None:
         """Test that start() creates Live with transient=True."""
-        mock_console = self._create_mocked_console()
+        mock_console, _ = self._create_mocked_console_and_mocks()
         mock_console_cls.return_value = mock_console
 
         mock_progress, _ = self._create_mocked_progress_and_mocks()
@@ -152,7 +167,7 @@ class TestProgressDisplayManager(unittest.TestCase):
         self, mock_progress_cls: Mock, mock_live_cls: Mock, mock_console_cls: Mock
     ) -> None:
         """Test that start() creates Progress task with total=100."""
-        mock_console = self._create_mocked_console()
+        mock_console, _ = self._create_mocked_console_and_mocks()
         mock_console_cls.return_value = mock_console
 
         mock_progress, progress_mocks = self._create_mocked_progress_and_mocks()
@@ -175,7 +190,7 @@ class TestProgressDisplayManager(unittest.TestCase):
         self, mock_progress_cls: Mock, mock_live_cls: Mock, mock_console_cls: Mock
     ) -> None:
         """Test that start() is a no-op if already started."""
-        mock_console = self._create_mocked_console()
+        mock_console, _ = self._create_mocked_console_and_mocks()
         mock_console_cls.return_value = mock_console
 
         mock_progress, _ = self._create_mocked_progress_and_mocks()
@@ -201,7 +216,7 @@ class TestProgressDisplayManager(unittest.TestCase):
     @patch("jupyter_deploy.cli.progress_display.Console")
     def test_stop_calls_live_stop(self, mock_console_cls: Mock) -> None:
         """Test that stop() calls stop() on Live."""
-        mock_console = self._create_mocked_console()
+        mock_console, _ = self._create_mocked_console_and_mocks()
         mock_console_cls.return_value = mock_console
 
         manager = ProgressDisplayManager()
@@ -220,7 +235,7 @@ class TestProgressDisplayManager(unittest.TestCase):
     @patch("jupyter_deploy.cli.progress_display.Console")
     def test_stop_is_noop_if_not_started(self, mock_console_cls: Mock) -> None:
         """Test that stop() is a no-op if not started."""
-        mock_console = self._create_mocked_console()
+        mock_console, _ = self._create_mocked_console_and_mocks()
         mock_console_cls.return_value = mock_console
 
         manager = ProgressDisplayManager()
@@ -235,7 +250,7 @@ class TestProgressDisplayManager(unittest.TestCase):
     @patch("jupyter_deploy.cli.progress_display.Console")
     def test_stop_is_noop_if_already_stopped(self, mock_console_cls: Mock) -> None:
         """Test that stop() is a no-op if already stopped."""
-        mock_console = self._create_mocked_console()
+        mock_console, _ = self._create_mocked_console_and_mocks()
         mock_console_cls.return_value = mock_console
 
         manager = ProgressDisplayManager()
@@ -265,7 +280,7 @@ class TestProgressDisplayManager(unittest.TestCase):
         self, mock_progress_cls: Mock, mock_live_cls: Mock, mock_console_cls: Mock
     ) -> None:
         """Test that on_progress updates Progress with label and reward."""
-        mock_console = self._create_mocked_console()
+        mock_console, _ = self._create_mocked_console_and_mocks()
         mock_console_cls.return_value = mock_console
 
         mock_progress, progress_mocks = self._create_mocked_progress_and_mocks()
@@ -298,7 +313,7 @@ class TestProgressDisplayManager(unittest.TestCase):
         self, mock_progress_cls: Mock, mock_live_cls: Mock, mock_console_cls: Mock
     ) -> None:
         """Test that update_log_box updates Live display."""
-        mock_console = self._create_mocked_console()
+        mock_console, _ = self._create_mocked_console_and_mocks()
         mock_console_cls.return_value = mock_console
 
         mock_progress, _ = self._create_mocked_progress_and_mocks()
@@ -326,7 +341,7 @@ class TestProgressDisplayManager(unittest.TestCase):
         self, mock_print: Mock, mock_console_cls: Mock
     ) -> None:
         """Test that on_interaction_start stops Live and prints lines using print(), not console."""
-        mock_console = self._create_mocked_console()
+        mock_console, console_mocks = self._create_mocked_console_and_mocks()
         mock_console_cls.return_value = mock_console
 
         manager = ProgressDisplayManager()
@@ -347,7 +362,7 @@ class TestProgressDisplayManager(unittest.TestCase):
 
         # Verify print was called (NOT console.print)
         self.assertGreater(mock_print.call_count, 0)
-        mock_console.print.assert_not_called()
+        console_mocks["print"].assert_not_called()
 
         # Verify the lines were printed
         print_calls = [call[0][0] if call[0] else call[1].get("") for call in mock_print.call_args_list]
@@ -358,7 +373,7 @@ class TestProgressDisplayManager(unittest.TestCase):
     @patch("builtins.print")
     def test_on_interaction_start_adds_space_to_prompt(self, mock_print: Mock, mock_console_cls: Mock) -> None:
         """Test that on_interaction_start adds trailing space to last line if missing."""
-        mock_console = self._create_mocked_console()
+        mock_console, _ = self._create_mocked_console_and_mocks()
         mock_console_cls.return_value = mock_console
 
         manager = ProgressDisplayManager()
@@ -388,7 +403,7 @@ class TestProgressDisplayManager(unittest.TestCase):
     @patch("jupyter_deploy.cli.progress_display.Console")
     def test_on_interaction_end_clears_interaction_flag(self, mock_console_cls: Mock) -> None:
         """Test that on_interaction_end clears the interaction flag."""
-        mock_console = self._create_mocked_console()
+        mock_console, _ = self._create_mocked_console_and_mocks()
         mock_console_cls.return_value = mock_console
 
         manager = ProgressDisplayManager()
@@ -405,7 +420,7 @@ class TestProgressDisplayManager(unittest.TestCase):
         self, mock_print: Mock, mock_console_cls: Mock
     ) -> None:
         """Test that display_error_context stops Live and prints using print(), not console."""
-        mock_console = self._create_mocked_console()
+        mock_console, console_mocks = self._create_mocked_console_and_mocks()
         mock_console_cls.return_value = mock_console
 
         manager = ProgressDisplayManager()
@@ -423,7 +438,7 @@ class TestProgressDisplayManager(unittest.TestCase):
         live_mocks["stop"].assert_called_once()
 
         # Verify console.rule was called (for error context header/footer)
-        self.assertEqual(mock_console.rule.call_count, 2)
+        self.assertEqual(console_mocks["rule"].call_count, 2)
 
         # Verify print was called for error lines (NOT console.print)
         self.assertGreater(mock_print.call_count, 0)
@@ -438,7 +453,7 @@ class TestProgressDisplayManager(unittest.TestCase):
     @patch("builtins.print")
     def test_display_error_context_noop_if_no_lines(self, mock_print: Mock, mock_console_cls: Mock) -> None:
         """Test that display_error_context handles empty lines gracefully."""
-        mock_console = self._create_mocked_console()
+        mock_console, console_mocks = self._create_mocked_console_and_mocks()
         mock_console_cls.return_value = mock_console
 
         manager = ProgressDisplayManager()
@@ -455,7 +470,7 @@ class TestProgressDisplayManager(unittest.TestCase):
         live_mocks["stop"].assert_called_once()
 
         # Verify console.rule was NOT called (no error context to display)
-        mock_console.rule.assert_not_called()
+        console_mocks["rule"].assert_not_called()
 
     @patch("jupyter_deploy.cli.progress_display.Console")
     @patch("jupyter_deploy.cli.progress_display.Live")
@@ -464,7 +479,7 @@ class TestProgressDisplayManager(unittest.TestCase):
         self, mock_progress_cls: Mock, mock_live_cls: Mock, mock_console_cls: Mock
     ) -> None:
         """Test that on_progress updates Live when not in interaction mode."""
-        mock_console = self._create_mocked_console()
+        mock_console, _ = self._create_mocked_console_and_mocks()
         mock_console_cls.return_value = mock_console
 
         mock_progress, _ = self._create_mocked_progress_and_mocks()
@@ -493,7 +508,7 @@ class TestProgressDisplayManager(unittest.TestCase):
         self, mock_progress_cls: Mock, mock_live_cls: Mock, mock_console_cls: Mock
     ) -> None:
         """Test that on_progress does not update Live during interaction."""
-        mock_console = self._create_mocked_console()
+        mock_console, _ = self._create_mocked_console_and_mocks()
         mock_console_cls.return_value = mock_console
 
         mock_progress, _ = self._create_mocked_progress_and_mocks()
@@ -523,7 +538,7 @@ class TestProgressDisplayManager(unittest.TestCase):
         self, mock_progress_cls: Mock, mock_live_cls: Mock, mock_console_cls: Mock
     ) -> None:
         """Test that update_log_box does not update Live during interaction."""
-        mock_console = self._create_mocked_console()
+        mock_console, _ = self._create_mocked_console_and_mocks()
         mock_console_cls.return_value = mock_console
 
         mock_progress, _ = self._create_mocked_progress_and_mocks()
@@ -541,6 +556,139 @@ class TestProgressDisplayManager(unittest.TestCase):
 
         # Call update_log_box while in interaction
         manager.update_log_box(["Line 1", "Line 2"])
+
+        # Verify Live.update was NOT called
+        live_mocks["update"].assert_not_called()
+
+    @patch("jupyter_deploy.cli.progress_display.Console")
+    def test_info_adds_message_in_verbose_mode(self, mock_console_cls: Mock) -> None:
+        """Test that info() adds message to top display when verbose=True."""
+        mock_console, _ = self._create_mocked_console_and_mocks()
+        mock_console_cls.return_value = mock_console
+
+        manager = ProgressDisplayManager(verbose=True)
+        manager.info("Test info message")
+
+        # Verify message was added
+        self.assertEqual(len(manager._top_messages), 1)
+        self.assertEqual(manager._top_messages[0], ("Test info message", ""))
+
+    @patch("jupyter_deploy.cli.progress_display.Console")
+    def test_info_does_not_add_message_in_non_verbose_mode(self, mock_console_cls: Mock) -> None:
+        """Test that info() does not add message when verbose=False."""
+        mock_console, _ = self._create_mocked_console_and_mocks()
+        mock_console_cls.return_value = mock_console
+
+        manager = ProgressDisplayManager(verbose=False)
+        manager.info("Test info message")
+
+        # Verify message was NOT added
+        self.assertEqual(len(manager._top_messages), 0)
+
+    @patch("jupyter_deploy.cli.progress_display.Console")
+    def test_warning_adds_message_with_style(self, mock_console_cls: Mock) -> None:
+        """Test that warning() adds message with warning icon and yellow style."""
+        mock_console, _ = self._create_mocked_console_and_mocks()
+        mock_console_cls.return_value = mock_console
+
+        manager = ProgressDisplayManager()
+        manager.warning("Test warning")
+
+        # Verify message was added with correct style
+        self.assertEqual(len(manager._top_messages), 1)
+        self.assertEqual(manager._top_messages[0], (":warning: Test warning", "yellow"))
+
+    @patch("jupyter_deploy.cli.progress_display.Console")
+    def test_success_adds_message_with_style(self, mock_console_cls: Mock) -> None:
+        """Test that success() adds message with checkmark icon and green style."""
+        mock_console, _ = self._create_mocked_console_and_mocks()
+        mock_console_cls.return_value = mock_console
+
+        manager = ProgressDisplayManager()
+        manager.success("Test success")
+
+        # Verify message was added with correct style
+        self.assertEqual(len(manager._top_messages), 1)
+        self.assertEqual(manager._top_messages[0], (":white_check_mark: Test success", "green"))
+
+    @patch("jupyter_deploy.cli.progress_display.Console")
+    def test_hint_adds_message_with_dim_style(self, mock_console_cls: Mock) -> None:
+        """Test that hint() adds message with dim style."""
+        mock_console, _ = self._create_mocked_console_and_mocks()
+        mock_console_cls.return_value = mock_console
+
+        manager = ProgressDisplayManager()
+        manager.hint("Test hint")
+
+        # Verify message was added with dim style
+        self.assertEqual(len(manager._top_messages), 1)
+        self.assertEqual(manager._top_messages[0], ("Test hint", "dim"))
+
+    @patch("jupyter_deploy.cli.progress_display.Console")
+    def test_top_messages_limited_to_max(self, mock_console_cls: Mock) -> None:
+        """Test that top messages are limited to max_top_messages (3)."""
+        mock_console, _ = self._create_mocked_console_and_mocks()
+        mock_console_cls.return_value = mock_console
+
+        manager = ProgressDisplayManager(verbose=True)
+
+        # Add 5 messages
+        manager.info("Message 1")
+        manager.info("Message 2")
+        manager.info("Message 3")
+        manager.info("Message 4")
+        manager.info("Message 5")
+
+        # Verify only last 3 messages are kept
+        self.assertEqual(len(manager._top_messages), 3)
+        self.assertEqual(manager._top_messages[0][0], "Message 3")
+        self.assertEqual(manager._top_messages[1][0], "Message 4")
+        self.assertEqual(manager._top_messages[2][0], "Message 5")
+
+    @patch("jupyter_deploy.cli.progress_display.Console")
+    @patch("jupyter_deploy.cli.progress_display.Live")
+    @patch("jupyter_deploy.cli.progress_display.Progress")
+    def test_top_messages_update_live_when_active(
+        self, mock_progress_cls: Mock, mock_live_cls: Mock, mock_console_cls: Mock
+    ) -> None:
+        """Test that adding messages updates Live display when active."""
+        mock_console, _ = self._create_mocked_console_and_mocks()
+        mock_console_cls.return_value = mock_console
+
+        mock_progress, _ = self._create_mocked_progress_and_mocks()
+        mock_progress_cls.return_value = mock_progress
+
+        mock_live, live_mocks = self._create_mocked_live_and_mocks()
+        mock_live_cls.return_value = mock_live
+
+        manager = ProgressDisplayManager(verbose=True)
+        manager.start()
+
+        # Reset to check subsequent calls
+        live_mocks["update"].reset_mock()
+
+        # Add a message
+        manager.info("Test message")
+
+        # Verify Live.update was called
+        live_mocks["update"].assert_called_once()
+
+    @patch("jupyter_deploy.cli.progress_display.Console")
+    def test_top_messages_do_not_update_live_during_interaction(self, mock_console_cls: Mock) -> None:
+        """Test that adding messages does not update Live during interaction."""
+        mock_console, _ = self._create_mocked_console_and_mocks()
+        mock_console_cls.return_value = mock_console
+
+        manager = ProgressDisplayManager(verbose=True)
+
+        # Set up interaction state
+        mock_live, live_mocks = self._create_mocked_live_and_mocks()
+        manager._live = mock_live
+        manager._is_started = True
+        manager._in_interaction = True
+
+        # Add a message
+        manager.info("Test message")
 
         # Verify Live.update was NOT called
         live_mocks["update"].assert_not_called()

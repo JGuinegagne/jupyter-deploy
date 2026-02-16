@@ -95,8 +95,6 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # Allow lazy imports in provider factory (handles optional dependencies)
 "jupyter_deploy/provider/instruction_runner_factory.py" = ["PLC0415"]
-# Allow lazy imports in tests (common pattern for imports after mocks)
-"tests/**/*.py" = ["PLC0415"]
 
 [tool.ruff.format]
 quote-style = "double"

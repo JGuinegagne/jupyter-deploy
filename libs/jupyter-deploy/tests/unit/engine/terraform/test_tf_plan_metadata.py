@@ -28,6 +28,9 @@ class TestTerraformPlanMetadataSource(unittest.TestCase):
         self.assertEqual(
             TerraformPlanMetadataSource.from_string("plan.to_update"), TerraformPlanMetadataSource.plan_to_update
         )
+        self.assertEqual(
+            TerraformPlanMetadataSource.from_string("plan.to_mutate"), TerraformPlanMetadataSource.plan_to_mutate
+        )
 
     def test_from_string_invalid_value(self) -> None:
         """Test from_string with invalid value returns None."""
@@ -73,6 +76,7 @@ class TestTerraformPlanMetadata(unittest.TestCase):
         self.assertEqual(metadata.get_value(TerraformPlanMetadataSource.plan_to_change), 5)
         self.assertEqual(metadata.get_value(TerraformPlanMetadataSource.plan_to_destroy), 2)
         self.assertEqual(metadata.get_value(TerraformPlanMetadataSource.plan_to_update), 15)
+        self.assertEqual(metadata.get_value(TerraformPlanMetadataSource.plan_to_mutate), 17)
 
 
 class TestSavePlanMetadata(unittest.TestCase):

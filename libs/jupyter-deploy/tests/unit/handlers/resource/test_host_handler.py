@@ -84,7 +84,9 @@ class TestHostHandler(unittest.TestCase):
 
         mock_retrieve_manifest.assert_called_once()
         mock_tf_outputs_handler.assert_called_once_with(project_path=path, project_manifest=mock_manifest)
-        mock_tf_variables_handler.assert_called_once_with(project_path=path, project_manifest=mock_manifest)
+        mock_tf_variables_handler.assert_called_once_with(
+            project_path=path, project_manifest=mock_manifest, terminal_handler=None
+        )
 
         self.assertEqual(handler._output_handler, mock_output_handler)
         self.assertEqual(handler._variable_handler, mock_variable_handler)

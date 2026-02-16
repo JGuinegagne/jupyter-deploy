@@ -5,6 +5,7 @@ from rich.console import Console
 
 from jupyter_deploy import cmd_utils
 from jupyter_deploy.cli.error_decorator import handle_cli_errors
+from jupyter_deploy.cli.simple_display import SimpleDisplayManager
 from jupyter_deploy.handlers.access import user_handler
 
 users_app = typer.Typer(
@@ -28,8 +29,11 @@ def add(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = user_handler.UsersHandler()
-        handler.add_users(users)
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = user_handler.UsersHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Adding users..."):
+            handler.add_users(users)
 
 
 @users_app.command()
@@ -47,8 +51,11 @@ def remove(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = user_handler.UsersHandler()
-        handler.remove_users(users)
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = user_handler.UsersHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Removing users..."):
+            handler.remove_users(users)
 
 
 @users_app.command()
@@ -66,8 +73,11 @@ def set(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = user_handler.UsersHandler()
-        handler.set_users(users)
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = user_handler.UsersHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Setting users..."):
+            handler.set_users(users)
 
 
 # use a cmd alias because mypy shows an 'valid-type' error if we just call the method 'list'
@@ -85,8 +95,11 @@ def list_users(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        handler = user_handler.UsersHandler()
-        users = handler.list_users()
+        simple_display_manager = SimpleDisplayManager(console=console)
+        handler = user_handler.UsersHandler(terminal_handler=simple_display_manager)
+
+        with simple_display_manager.spinner("Fetching users..."):
+            users = handler.list_users()
 
         if users:
             console.print(f"Allowlisted usernames: [bold cyan]{', '.join(users)}[/]")

@@ -56,7 +56,7 @@ class TerraformConfigHandler(EngineConfigHandler):
         terminal_handler: TerminalHandler | None = None,
     ) -> None:
         variables_handler = tf_variables.TerraformVariablesHandler(
-            project_path=project_path, project_manifest=project_manifest
+            project_path=project_path, project_manifest=project_manifest, terminal_handler=terminal_handler
         )
         super().__init__(
             project_path=project_path,

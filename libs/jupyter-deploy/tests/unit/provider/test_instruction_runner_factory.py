@@ -1,3 +1,4 @@
+import importlib
 import sys
 import unittest
 from collections.abc import Generator
@@ -6,6 +7,7 @@ from unittest.mock import Mock, patch
 
 from jupyter_deploy.engine.engine_outputs import EngineOutputsHandler
 from jupyter_deploy.engine.outdefs import StrTemplateOutputDefinition
+from jupyter_deploy.provider import instruction_runner_factory
 from jupyter_deploy.provider.enum import ProviderType
 from jupyter_deploy.provider.instruction_runner import InstructionRunner
 
@@ -51,8 +53,8 @@ class TestInstructionRunnerFactory(unittest.TestCase):
 
     def test_does_not_create_any_runner_provider_on_class_setup(self) -> None:
         with self.patch_provider_runner_modules():
-            from jupyter_deploy.provider.instruction_runner_factory import InstructionRunnerFactory
-
+            importlib.reload(instruction_runner_factory)
+            InstructionRunnerFactory = instruction_runner_factory.InstructionRunnerFactory
             InstructionRunnerFactory._provider_runner_map = {}
 
             self.mock_aws_api_runner_cls.assert_not_called()
@@ -63,8 +65,8 @@ class TestInstructionRunnerFactory(unittest.TestCase):
     def test_imports_aws_provider_at_runtime_only_and_return_it(self) -> None:
         # Execute
         with self.patch_provider_runner_modules():
-            from jupyter_deploy.provider.instruction_runner_factory import InstructionRunnerFactory
-
+            importlib.reload(instruction_runner_factory)
+            InstructionRunnerFactory = instruction_runner_factory.InstructionRunnerFactory
             InstructionRunnerFactory._provider_runner_map = {}
 
             runner = InstructionRunnerFactory.get_provider_instruction_runner("aws", self.mock_outputs_handler)
@@ -85,8 +87,8 @@ class TestInstructionRunnerFactory(unittest.TestCase):
 
         # Execute and verify
         with self.assertRaises(ValueError) as context, self.patch_provider_runner_modules():
-            from jupyter_deploy.provider.instruction_runner_factory import InstructionRunnerFactory
-
+            importlib.reload(instruction_runner_factory)
+            InstructionRunnerFactory = instruction_runner_factory.InstructionRunnerFactory
             InstructionRunnerFactory._provider_runner_map = {}
 
             InstructionRunnerFactory.get_provider_instruction_runner("aws", mock_outputs_handler)
@@ -97,8 +99,8 @@ class TestInstructionRunnerFactory(unittest.TestCase):
 
     def test_recycle_aws_runner_provider_for_same_output_handler(self) -> None:
         with self.patch_provider_runner_modules():
-            from jupyter_deploy.provider.instruction_runner_factory import InstructionRunnerFactory
-
+            importlib.reload(instruction_runner_factory)
+            InstructionRunnerFactory = instruction_runner_factory.InstructionRunnerFactory
             InstructionRunnerFactory._provider_runner_map = {}
 
             # First call
@@ -122,8 +124,8 @@ class TestInstructionRunnerFactory(unittest.TestCase):
         mock_outputs_handler2.get_declared_output_def.return_value = mock_str_template_output_def2
 
         with self.patch_provider_runner_modules():
-            from jupyter_deploy.provider.instruction_runner_factory import InstructionRunnerFactory
-
+            importlib.reload(instruction_runner_factory)
+            InstructionRunnerFactory = instruction_runner_factory.InstructionRunnerFactory
             InstructionRunnerFactory._provider_runner_map = {}
 
             # First call
@@ -146,8 +148,8 @@ class TestInstructionRunnerFactory(unittest.TestCase):
             self.patch_provider_runner_modules(),
             self.assertRaises(ValueError),
         ):
-            from jupyter_deploy.provider.instruction_runner_factory import InstructionRunnerFactory
-
+            importlib.reload(instruction_runner_factory)
+            InstructionRunnerFactory = instruction_runner_factory.InstructionRunnerFactory
             InstructionRunnerFactory._provider_runner_map = {}
 
             InstructionRunnerFactory.get_provider_instruction_runner("onpremises", mock_outputs_handler)

@@ -1,8 +1,6 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from rich.console import Console
-
 from jupyter_deploy.api.aws.ec2 import ec2_instance
 from jupyter_deploy.api.aws.ec2.ec2_instance import Ec2InstanceState
 from jupyter_deploy.exceptions import IncompatibleHostStateError, InstructionNotFoundError
@@ -27,12 +25,11 @@ class TestAwsEc2Runner(unittest.TestCase):
     def test_aws_ec2_raise_not_implemented_error_on_unmatched_instruction_name(self) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Execute & Assert
         with self.assertRaises(InstructionNotFoundError) as context:
             runner.execute_instruction(
-                instruction_name="non-existent-instruction", resolved_arguments={}, console=console
+                instruction_name="non-existent-instruction", resolved_arguments={}, terminal_handler=None
             )
 
         self.assertIn("non-existent-instruction", str(context.exception))
@@ -43,7 +40,6 @@ class TestDescribeInstanceStatus(unittest.TestCase):
     def test_happy_path(self, mock_describe_instance_status: Mock) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "running", "Code": 16}}
 
         # Prepare arguments
@@ -51,18 +47,16 @@ class TestDescribeInstanceStatus(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"instance_id": instance_id_arg}
 
         # Execute
-        result = runner._describe_instance_status(resolved_arguments=resolved_args, console=console)
+        result = runner._describe_instance_status(resolved_arguments=resolved_args, terminal_handler=None)
 
         # Assert
         mock_describe_instance_status.assert_called_once_with(runner.client, instance_id="i-123456789abcdef")
-        console.print.assert_called()
         self.assertEqual(result["InstanceStateName"].value, "running")
 
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.describe_instance_status")
     def test_raises_when_describe_instance_status_raises(self, mock_describe_instance_status: Mock) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
         mock_describe_instance_status.side_effect = ValueError("Instance not found")
 
         # Prepare arguments
@@ -71,7 +65,7 @@ class TestDescribeInstanceStatus(unittest.TestCase):
 
         # Execute & Assert
         with self.assertRaises(ValueError) as context:
-            runner._describe_instance_status(resolved_arguments=resolved_args, console=console)
+            runner._describe_instance_status(resolved_arguments=resolved_args, terminal_handler=None)
 
         self.assertIn("Instance not found", str(context.exception))
         mock_describe_instance_status.assert_called_once()
@@ -83,7 +77,6 @@ class TestStartInstance(unittest.TestCase):
     def test_happy_path_on_stopped_state(self, mock_start_instance: Mock, mock_describe_instance_status: Mock) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mocks
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "stopped", "Code": 80}}
@@ -97,12 +90,11 @@ class TestStartInstance(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"instance_id": instance_id_arg}
 
         # Execute
-        result = runner._start_instance(resolved_arguments=resolved_args, console=console)
+        result = runner._start_instance(resolved_arguments=resolved_args, terminal_handler=None)
 
         # Assert
         mock_describe_instance_status.assert_called_once_with(runner.client, instance_id="i-123456789abcdef")
         mock_start_instance.assert_called_once_with(runner.client, instance_id="i-123456789abcdef")
-        console.print.assert_called()
         self.assertEqual(result, {})
 
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.describe_instance_status")
@@ -110,7 +102,6 @@ class TestStartInstance(unittest.TestCase):
     def test_interrupt_on_pending_state(self, mock_start_instance: Mock, mock_describe_instance_status: Mock) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mocks
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "pending", "Code": 0}}
@@ -121,7 +112,7 @@ class TestStartInstance(unittest.TestCase):
 
         # Execute & Assert
         with self.assertRaises(IncompatibleHostStateError):
-            runner._start_instance(resolved_arguments=resolved_args, console=console)
+            runner._start_instance(resolved_arguments=resolved_args, terminal_handler=None)
 
         mock_describe_instance_status.assert_called_once()
         mock_start_instance.assert_not_called()
@@ -131,7 +122,6 @@ class TestStartInstance(unittest.TestCase):
     def test_interrupt_on_running_state(self, mock_start_instance: Mock, mock_describe_instance_status: Mock) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mocks
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "running", "Code": 16}}
@@ -142,7 +132,7 @@ class TestStartInstance(unittest.TestCase):
 
         # Execute & Assert
         with self.assertRaises(IncompatibleHostStateError):
-            runner._start_instance(resolved_arguments=resolved_args, console=console)
+            runner._start_instance(resolved_arguments=resolved_args, terminal_handler=None)
 
         mock_describe_instance_status.assert_called_once()
         mock_start_instance.assert_not_called()
@@ -152,7 +142,6 @@ class TestStartInstance(unittest.TestCase):
     def test_interrupt_on_stopping_state(self, mock_start_instance: Mock, mock_describe_instance_status: Mock) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mocks
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "stopping", "Code": 64}}
@@ -163,7 +152,7 @@ class TestStartInstance(unittest.TestCase):
 
         # Execute & Assert
         with self.assertRaises(IncompatibleHostStateError):
-            runner._start_instance(resolved_arguments=resolved_args, console=console)
+            runner._start_instance(resolved_arguments=resolved_args, terminal_handler=None)
 
         mock_describe_instance_status.assert_called_once()
         mock_start_instance.assert_not_called()
@@ -175,7 +164,6 @@ class TestStartInstance(unittest.TestCase):
     ) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mocks
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "shutting-down", "Code": 32}}
@@ -186,7 +174,7 @@ class TestStartInstance(unittest.TestCase):
 
         # Execute & Assert
         with self.assertRaises(IncompatibleHostStateError):
-            runner._start_instance(resolved_arguments=resolved_args, console=console)
+            runner._start_instance(resolved_arguments=resolved_args, terminal_handler=None)
 
         mock_describe_instance_status.assert_called_once()
         mock_start_instance.assert_not_called()
@@ -198,7 +186,6 @@ class TestStartInstance(unittest.TestCase):
     ) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mocks
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "terminated", "Code": 48}}
@@ -209,7 +196,7 @@ class TestStartInstance(unittest.TestCase):
 
         # Execute & Assert
         with self.assertRaises(IncompatibleHostStateError):
-            runner._start_instance(resolved_arguments=resolved_args, console=console)
+            runner._start_instance(resolved_arguments=resolved_args, terminal_handler=None)
 
         mock_describe_instance_status.assert_called_once()
         mock_start_instance.assert_not_called()
@@ -221,7 +208,6 @@ class TestStopInstance(unittest.TestCase):
     def test_happy_path_on_running_state(self, mock_stop_instance: Mock, mock_describe_instance_status: Mock) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mocks
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "running", "Code": 16}}
@@ -235,12 +221,11 @@ class TestStopInstance(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"instance_id": instance_id_arg}
 
         # Execute
-        result = runner._stop_instance(resolved_arguments=resolved_args, console=console)
+        result = runner._stop_instance(resolved_arguments=resolved_args, terminal_handler=None)
 
         # Assert
         mock_describe_instance_status.assert_called_once_with(runner.client, instance_id="i-123456789abcdef")
         mock_stop_instance.assert_called_once_with(runner.client, instance_id="i-123456789abcdef")
-        console.print.assert_called()
         self.assertEqual(result, {})
 
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.describe_instance_status")
@@ -248,7 +233,6 @@ class TestStopInstance(unittest.TestCase):
     def test_interrupt_on_pending_state(self, mock_stop_instance: Mock, mock_describe_instance_status: Mock) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mocks
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "pending", "Code": 0}}
@@ -259,7 +243,7 @@ class TestStopInstance(unittest.TestCase):
 
         # Execute & Assert
         with self.assertRaises(IncompatibleHostStateError):
-            runner._stop_instance(resolved_arguments=resolved_args, console=console)
+            runner._stop_instance(resolved_arguments=resolved_args, terminal_handler=None)
 
         mock_describe_instance_status.assert_called_once()
         mock_stop_instance.assert_not_called()
@@ -269,7 +253,6 @@ class TestStopInstance(unittest.TestCase):
     def test_interrupt_on_stopping_state(self, mock_stop_instance: Mock, mock_describe_instance_status: Mock) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mocks
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "stopping", "Code": 64}}
@@ -280,7 +263,7 @@ class TestStopInstance(unittest.TestCase):
 
         # Execute & Assert
         with self.assertRaises(IncompatibleHostStateError):
-            runner._stop_instance(resolved_arguments=resolved_args, console=console)
+            runner._stop_instance(resolved_arguments=resolved_args, terminal_handler=None)
 
         mock_describe_instance_status.assert_called_once()
         mock_stop_instance.assert_not_called()
@@ -290,7 +273,6 @@ class TestStopInstance(unittest.TestCase):
     def test_interrupt_on_stopped_state(self, mock_stop_instance: Mock, mock_describe_instance_status: Mock) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mocks
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "stopped", "Code": 80}}
@@ -301,7 +283,7 @@ class TestStopInstance(unittest.TestCase):
 
         # Execute & Assert
         with self.assertRaises(IncompatibleHostStateError):
-            runner._stop_instance(resolved_arguments=resolved_args, console=console)
+            runner._stop_instance(resolved_arguments=resolved_args, terminal_handler=None)
 
         mock_describe_instance_status.assert_called_once()
         mock_stop_instance.assert_not_called()
@@ -313,7 +295,6 @@ class TestStopInstance(unittest.TestCase):
     ) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mocks
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "shutting-down", "Code": 32}}
@@ -324,7 +305,7 @@ class TestStopInstance(unittest.TestCase):
 
         # Execute & Assert
         with self.assertRaises(IncompatibleHostStateError):
-            runner._stop_instance(resolved_arguments=resolved_args, console=console)
+            runner._stop_instance(resolved_arguments=resolved_args, terminal_handler=None)
 
         mock_describe_instance_status.assert_called_once()
         mock_stop_instance.assert_not_called()
@@ -334,7 +315,6 @@ class TestStopInstance(unittest.TestCase):
     def test_interrupt_on_terminated_state(self, mock_stop_instance: Mock, mock_describe_instance_status: Mock) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mocks
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "terminated", "Code": 48}}
@@ -345,7 +325,7 @@ class TestStopInstance(unittest.TestCase):
 
         # Execute & Assert
         with self.assertRaises(IncompatibleHostStateError):
-            runner._stop_instance(resolved_arguments=resolved_args, console=console)
+            runner._stop_instance(resolved_arguments=resolved_args, terminal_handler=None)
 
         mock_describe_instance_status.assert_called_once()
         mock_stop_instance.assert_not_called()
@@ -359,7 +339,6 @@ class TestRebootInstance(unittest.TestCase):
     ) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mocks
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "running", "Code": 16}}
@@ -369,12 +348,11 @@ class TestRebootInstance(unittest.TestCase):
         resolved_args: dict[str, ResolvedInstructionArgument] = {"instance_id": instance_id_arg}
 
         # Execute
-        result = runner._reboot_instance(resolved_arguments=resolved_args, console=console)
+        result = runner._reboot_instance(resolved_arguments=resolved_args, terminal_handler=None)
 
         # Assert
         mock_describe_instance_status.assert_called_once_with(runner.client, instance_id="i-123456789abcdef")
         mock_restart_instance.assert_called_once_with(runner.client, instance_id="i-123456789abcdef")
-        console.print.assert_called()
         self.assertEqual(result, {})
 
     @patch("jupyter_deploy.api.aws.ec2.ec2_instance.describe_instance_status")
@@ -382,7 +360,6 @@ class TestRebootInstance(unittest.TestCase):
     def test_interrupt_on_pending_state(self, mock_restart_instance: Mock, mock_describe_instance_status: Mock) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mocks
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "pending", "Code": 0}}
@@ -393,7 +370,7 @@ class TestRebootInstance(unittest.TestCase):
 
         # Execute & Assert
         with self.assertRaises(IncompatibleHostStateError):
-            runner._reboot_instance(resolved_arguments=resolved_args, console=console)
+            runner._reboot_instance(resolved_arguments=resolved_args, terminal_handler=None)
 
         mock_describe_instance_status.assert_called_once()
         mock_restart_instance.assert_not_called()
@@ -405,7 +382,6 @@ class TestRebootInstance(unittest.TestCase):
     ) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mocks
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "stopping", "Code": 64}}
@@ -416,7 +392,7 @@ class TestRebootInstance(unittest.TestCase):
 
         # Execute & Assert
         with self.assertRaises(IncompatibleHostStateError):
-            runner._reboot_instance(resolved_arguments=resolved_args, console=console)
+            runner._reboot_instance(resolved_arguments=resolved_args, terminal_handler=None)
 
         mock_describe_instance_status.assert_called_once()
         mock_restart_instance.assert_not_called()
@@ -426,7 +402,6 @@ class TestRebootInstance(unittest.TestCase):
     def test_interrupt_on_stopped_state(self, mock_restart_instance: Mock, mock_describe_instance_status: Mock) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mocks
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "stopped", "Code": 80}}
@@ -437,7 +412,7 @@ class TestRebootInstance(unittest.TestCase):
 
         # Execute & Assert
         with self.assertRaises(IncompatibleHostStateError):
-            runner._reboot_instance(resolved_arguments=resolved_args, console=console)
+            runner._reboot_instance(resolved_arguments=resolved_args, terminal_handler=None)
 
         mock_describe_instance_status.assert_called_once()
         mock_restart_instance.assert_not_called()
@@ -449,7 +424,6 @@ class TestRebootInstance(unittest.TestCase):
     ) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mocks
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "shutting-down", "Code": 32}}
@@ -460,7 +434,7 @@ class TestRebootInstance(unittest.TestCase):
 
         # Execute & Assert
         with self.assertRaises(IncompatibleHostStateError):
-            runner._reboot_instance(resolved_arguments=resolved_args, console=console)
+            runner._reboot_instance(resolved_arguments=resolved_args, terminal_handler=None)
 
         mock_describe_instance_status.assert_called_once()
         mock_restart_instance.assert_not_called()
@@ -472,7 +446,6 @@ class TestRebootInstance(unittest.TestCase):
     ) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mocks
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "terminated", "Code": 48}}
@@ -483,7 +456,7 @@ class TestRebootInstance(unittest.TestCase):
 
         # Execute & Assert
         with self.assertRaises(IncompatibleHostStateError):
-            runner._reboot_instance(resolved_arguments=resolved_args, console=console)
+            runner._reboot_instance(resolved_arguments=resolved_args, terminal_handler=None)
 
         mock_describe_instance_status.assert_called_once()
         mock_restart_instance.assert_not_called()
@@ -494,7 +467,6 @@ class TestWaitForState(unittest.TestCase):
     def test_happy_path(self, mock_poll_for_instance_status: Mock) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mock
         mock_poll_for_instance_status.return_value = {"InstanceState": {"Name": "running", "Code": 16}}
@@ -505,13 +477,13 @@ class TestWaitForState(unittest.TestCase):
 
         # Execute
         result = runner._wait_for_state(
-            resolved_arguments=resolved_args, console=console, desired_state=Ec2InstanceState.RUNNING
+            resolved_arguments=resolved_args, terminal_handler=None, desired_state=Ec2InstanceState.RUNNING
         )
 
         # Assert
         mock_poll_for_instance_status.assert_called_once_with(
             runner.client,
-            console=console,
+            terminal_handler=None,
             instance_id="i-123456789abcdef",
             desired_state=Ec2InstanceState.RUNNING,
             timeout_seconds=60,  # default timeout
@@ -522,7 +494,6 @@ class TestWaitForState(unittest.TestCase):
     def test_allows_timeout_override(self, mock_poll_for_instance_status: Mock) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mock
         mock_poll_for_instance_status.return_value = {"InstanceState": {"Name": "stopped", "Code": 80}}
@@ -534,7 +505,7 @@ class TestWaitForState(unittest.TestCase):
         # Execute
         result = runner._wait_for_state(
             resolved_arguments=resolved_args,
-            console=console,
+            terminal_handler=None,
             desired_state=Ec2InstanceState.STOPPED,
             timeout_seconds=120,  # custom timeout
         )
@@ -542,7 +513,7 @@ class TestWaitForState(unittest.TestCase):
         # Assert
         mock_poll_for_instance_status.assert_called_once_with(
             runner.client,
-            console=console,
+            terminal_handler=None,
             instance_id="i-123456789abcdef",
             desired_state=Ec2InstanceState.STOPPED,
             timeout_seconds=120,  # custom timeout
@@ -553,7 +524,6 @@ class TestWaitForState(unittest.TestCase):
     def test_raises_on_poll_raises(self, mock_poll_for_instance_status: Mock) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mock to raise an exception
         mock_poll_for_instance_status.side_effect = TimeoutError("Timed out waiting for instance")
@@ -565,7 +535,7 @@ class TestWaitForState(unittest.TestCase):
         # Execute & Assert
         with self.assertRaises(TimeoutError) as context:
             runner._wait_for_state(
-                resolved_arguments=resolved_args, console=console, desired_state=Ec2InstanceState.RUNNING
+                resolved_arguments=resolved_args, terminal_handler=None, desired_state=Ec2InstanceState.RUNNING
             )
 
         self.assertIn("Timed out waiting for instance", str(context.exception))
@@ -576,7 +546,6 @@ class TestExecuteInstructions(unittest.TestCase):
     def test_all_instructions_implemented(self) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
         resolved_args: dict[str, ResolvedInstructionArgument] = {}
 
         # Create patch targets for all methods that would be called by execute_instruction
@@ -605,7 +574,7 @@ class TestExecuteInstructions(unittest.TestCase):
                 try:
                     # Execute
                     runner.execute_instruction(
-                        instruction_name=instruction, resolved_arguments=resolved_args, console=console
+                        instruction_name=instruction, resolved_arguments=resolved_args, terminal_handler=None
                     )
 
                     # Assert the correct method was called
@@ -625,13 +594,12 @@ class TestExecuteInstructions(unittest.TestCase):
     def test_raise_not_implemented_error_on_unrecognized_instruction(self) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
         resolved_args: dict[str, ResolvedInstructionArgument] = {}
 
         # Execute & Assert
         with self.assertRaises(InstructionNotFoundError) as context:
             runner.execute_instruction(
-                instruction_name="unknown-instruction", resolved_arguments=resolved_args, console=console
+                instruction_name="unknown-instruction", resolved_arguments=resolved_args, terminal_handler=None
             )
 
         self.assertIn("unknown-instruction", str(context.exception))
@@ -642,7 +610,6 @@ class TestExecuteInstructions(unittest.TestCase):
     ) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mock
         mock_poll_for_instance_status.return_value = {"InstanceState": {"Name": "running", "Code": 16}}
@@ -653,7 +620,7 @@ class TestExecuteInstructions(unittest.TestCase):
 
         # Execute
         runner.execute_instruction(
-            instruction_name=AwsEc2Instruction.WAIT_FOR_RUNNING, resolved_arguments=resolved_args, console=console
+            instruction_name=AwsEc2Instruction.WAIT_FOR_RUNNING, resolved_arguments=resolved_args, terminal_handler=None
         )
 
         # Assert that poll_for_instance_status was called with a timeout >= 60 seconds
@@ -676,7 +643,6 @@ class TestExecuteInstructions(unittest.TestCase):
     ) -> None:
         # Setup
         runner = AwsEc2Runner(region_name="us-west-2")
-        console = Mock(spec=Console)
 
         # Configure mock
         mock_poll_for_instance_status.return_value = {"InstanceState": {"Name": "stopped", "Code": 80}}
@@ -687,7 +653,7 @@ class TestExecuteInstructions(unittest.TestCase):
 
         # Execute
         runner.execute_instruction(
-            instruction_name=AwsEc2Instruction.WAIT_FOR_STOPPED, resolved_arguments=resolved_args, console=console
+            instruction_name=AwsEc2Instruction.WAIT_FOR_STOPPED, resolved_arguments=resolved_args, terminal_handler=None
         )
 
         # Assert that poll_for_instance_status was called with a timeout >= 300 seconds (5 minutes)

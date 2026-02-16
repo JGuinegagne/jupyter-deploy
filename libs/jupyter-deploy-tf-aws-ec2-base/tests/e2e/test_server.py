@@ -185,8 +185,8 @@ def test_server_connect_default_service(e2e_deployment: EndToEndDeployment) -> N
 
     # Start an interactive jd server connect session (no -s flag, should default to jupyter)
     with e2e_deployment.cli.spawn_interactive_session("jupyter-deploy server connect") as session:
-        # Wait for the session to start
-        session.expect("Starting SSM session", timeout=10)
+        # Wait for the session to start (AWS SSM output)
+        session.expect("Starting session with SessionId:", timeout=10)
 
         # Send whoami command
         session.sendline("whoami")
@@ -209,8 +209,8 @@ def test_server_connect_jupyter(e2e_deployment: EndToEndDeployment) -> None:
 
     # Start an interactive jd server connect session with explicit -s jupyter
     with e2e_deployment.cli.spawn_interactive_session("jupyter-deploy server connect -s jupyter") as session:
-        # Wait for the session to start
-        session.expect("Starting SSM session", timeout=10)
+        # Wait for the session to start (AWS SSM output)
+        session.expect("Starting session with SessionId:", timeout=10)
 
         # Send whoami command
         session.sendline("whoami")
@@ -233,8 +233,8 @@ def test_server_connect_traefik(e2e_deployment: EndToEndDeployment) -> None:
 
     # Start an interactive jd server connect session with explicit -s traefik
     with e2e_deployment.cli.spawn_interactive_session("jupyter-deploy server connect -s traefik") as session:
-        # Wait for the session to start
-        session.expect("Starting SSM session", timeout=10)
+        # Wait for the session to start (AWS SSM output)
+        session.expect("Starting session with SessionId:", timeout=10)
 
         # Send ps command
         session.sendline("ps")

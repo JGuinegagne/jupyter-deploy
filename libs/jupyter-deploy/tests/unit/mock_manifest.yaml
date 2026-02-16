@@ -479,7 +479,7 @@ supervised-execution:
       default-phase:
         label: "Mutating resources"
         progress-pattern: "(Creation complete after|Modifications complete after|Destruction complete after)"
-        progress-events-estimate-dynamic-source: "plan.to_update"     
+        progress-events-estimate-dynamic-source: "plan.to_mutate"     
       phases:
         - enter-pattern: "null_resource.wait_for_instance_ready: Creating"
           exit-pattern: "null_resource.wait_for_instance_ready: Creation complete"
