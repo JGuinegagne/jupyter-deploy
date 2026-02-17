@@ -1,11 +1,12 @@
 import unittest
 from pathlib import Path
 from unittest import mock
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 import yaml
 
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.handlers.resource.host_handler import HostHandler
 from jupyter_deploy.manifest import JupyterDeployManifest, JupyterDeployManifestV1
 
@@ -80,12 +81,12 @@ class TestHostHandler(unittest.TestCase):
         mock_manifest, _ = self.get_mock_manifest_and_fns()
         mock_retrieve_manifest.return_value = mock_manifest
 
-        handler = HostHandler()
+        handler = HostHandler(display_manager=NullDisplay())
 
         mock_retrieve_manifest.assert_called_once()
         mock_tf_outputs_handler.assert_called_once_with(project_path=path, project_manifest=mock_manifest)
         mock_tf_variables_handler.assert_called_once_with(
-            project_path=path, project_manifest=mock_manifest, terminal_handler=None
+            project_path=path, project_manifest=mock_manifest, display_manager=ANY
         )
 
         self.assertEqual(handler._output_handler, mock_output_handler)
@@ -114,7 +115,7 @@ class TestHostHandler(unittest.TestCase):
         )
         mock_retrieve_manifest.return_value = no_cmd_manifest
 
-        handler = HostHandler()
+        handler = HostHandler(display_manager=NullDisplay())
 
         with self.assertRaises(NotImplementedError):
             handler.get_host_status()
@@ -151,7 +152,7 @@ class TestHostHandler(unittest.TestCase):
         mock_tf_outputs_handler.return_value = self.get_mock_outputs_handler_and_fns()[0]
         mock_tf_variables_handler.return_value = Mock()
 
-        handler = HostHandler()
+        handler = HostHandler(display_manager=NullDisplay())
 
         # Test get_host_status
         status = handler.get_host_status()
@@ -204,7 +205,7 @@ class TestHostHandler(unittest.TestCase):
         mock_cmd_runner_class.return_value = mock_cmd_runner
         mock_cmd_runner_fns["run_command_sequence"].side_effect = RuntimeError()
 
-        handler = HostHandler()
+        handler = HostHandler(display_manager=NullDisplay())
 
         # verify methods raise
         with self.assertRaises(RuntimeError):
@@ -244,7 +245,7 @@ class TestHostHandler(unittest.TestCase):
         mock_cmd_runner_class.return_value = mock_cmd_runner
         mock_cmd_runner_fns["get_result_value"].side_effect = KeyError()
 
-        handler = HostHandler()
+        handler = HostHandler(display_manager=NullDisplay())
 
         # verify methods raise
         # add only commands that return a result here
@@ -278,7 +279,7 @@ class TestHostHandler(unittest.TestCase):
         mock_cmd_runner_class.return_value = mock_cmd_runner
 
         # Act
-        handler = HostHandler()
+        handler = HostHandler(display_manager=NullDisplay())
         result = handler.get_host_status()
 
         # Verify
@@ -317,7 +318,7 @@ class TestHostHandler(unittest.TestCase):
         mock_cmd_runner_class.return_value = mock_cmd_runner
 
         # Act
-        handler = HostHandler()
+        handler = HostHandler(display_manager=NullDisplay())
         handler.start_host()
 
         # Verify
@@ -354,7 +355,7 @@ class TestHostHandler(unittest.TestCase):
         mock_cmd_runner_class.return_value = mock_cmd_runner
 
         # Act
-        handler = HostHandler()
+        handler = HostHandler(display_manager=NullDisplay())
         handler.stop_host()
 
         # Verify
@@ -391,7 +392,7 @@ class TestHostHandler(unittest.TestCase):
         mock_cmd_runner_class.return_value = mock_cmd_runner
 
         # Act
-        handler = HostHandler()
+        handler = HostHandler(display_manager=NullDisplay())
         handler.restart_host()
 
         # Verify
@@ -428,7 +429,7 @@ class TestHostHandler(unittest.TestCase):
         mock_cmd_runner_class.return_value = mock_cmd_runner
 
         # Act
-        handler = HostHandler()
+        handler = HostHandler(display_manager=NullDisplay())
         handler.connect()
 
         # Verify
@@ -469,7 +470,7 @@ class TestHostHandler(unittest.TestCase):
         mock_cmd_runner_fns["get_result_value_with_fallback"].return_value = 0
 
         # Act
-        handler = HostHandler()
+        handler = HostHandler(display_manager=NullDisplay())
         stdout, stderr, returncode = handler.exec_command(["echo", "hello"])
 
         # Verify
@@ -530,7 +531,7 @@ class TestHostHandler(unittest.TestCase):
         mock_cmd_runner_fns["get_result_value_with_fallback"].return_value = 127
 
         # Act
-        handler = HostHandler()
+        handler = HostHandler(display_manager=NullDisplay())
         stdout, stderr, returncode = handler.exec_command(["command_that_does_not_exist"])
 
         # Verify

@@ -1,6 +1,6 @@
 from jupyter_deploy.engine.engine_outputs import EngineOutputsHandler
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.engine.supervised_execution import TerminalHandler
+from jupyter_deploy.engine.supervised_execution import DisplayManager
 from jupyter_deploy.engine.terraform import tf_outputs, tf_variables
 from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
 from jupyter_deploy.provider import manifest_command_runner as cmd_runner
@@ -12,9 +12,9 @@ class ServerHandler(BaseProjectHandler):
 
     _output_handler: EngineOutputsHandler
 
-    def __init__(self, terminal_handler: TerminalHandler | None = None) -> None:
+    def __init__(self, display_manager: DisplayManager) -> None:
         """Instantiate the Users handler."""
-        super().__init__(terminal_handler=terminal_handler)
+        super().__init__(display_manager=display_manager)
 
         if self.engine == EngineType.TERRAFORM:
             self._output_handler = tf_outputs.TerraformOutputsHandler(
@@ -23,7 +23,7 @@ class ServerHandler(BaseProjectHandler):
             self._variable_handler = tf_variables.TerraformVariablesHandler(
                 project_path=self.project_path,
                 project_manifest=self.project_manifest,
-                terminal_handler=self.terminal_handler,
+                display_manager=self.display_manager,
             )
         else:
             raise NotImplementedError(f"OutputsHandler implementation not found for engine: {self.engine}")
@@ -32,7 +32,7 @@ class ServerHandler(BaseProjectHandler):
         """Sends an health check to the jupyter server app, return status."""
         command = self.project_manifest.get_command("server.status")
         runner = cmd_runner.ManifestCommandRunner(
-            terminal_handler=self.terminal_handler,
+            display_manager=self.display_manager,
             output_handler=self._output_handler,
             variable_handler=self._variable_handler,
         )
@@ -44,7 +44,7 @@ class ServerHandler(BaseProjectHandler):
         command = self.project_manifest.get_command("server.start")
         validated_service = self.project_manifest.get_validated_service(service, allow_all=True)
         runner = cmd_runner.ManifestCommandRunner(
-            terminal_handler=self.terminal_handler,
+            display_manager=self.display_manager,
             output_handler=self._output_handler,
             variable_handler=self._variable_handler,
         )
@@ -61,7 +61,7 @@ class ServerHandler(BaseProjectHandler):
         command = self.project_manifest.get_command("server.stop")
         validated_service = self.project_manifest.get_validated_service(service, allow_all=True)
         runner = cmd_runner.ManifestCommandRunner(
-            terminal_handler=self.terminal_handler,
+            display_manager=self.display_manager,
             output_handler=self._output_handler,
             variable_handler=self._variable_handler,
         )
@@ -78,7 +78,7 @@ class ServerHandler(BaseProjectHandler):
         command = self.project_manifest.get_command("server.restart")
         validated_service = self.project_manifest.get_validated_service(service, allow_all=True)
         runner = cmd_runner.ManifestCommandRunner(
-            terminal_handler=self.terminal_handler,
+            display_manager=self.display_manager,
             output_handler=self._output_handler,
             variable_handler=self._variable_handler,
         )
@@ -95,7 +95,7 @@ class ServerHandler(BaseProjectHandler):
         command = self.project_manifest.get_command("server.logs")
         validated_service = self.project_manifest.get_validated_service(service, allow_all=False)
         runner = cmd_runner.ManifestCommandRunner(
-            terminal_handler=self.terminal_handler,
+            display_manager=self.display_manager,
             output_handler=self._output_handler,
             variable_handler=self._variable_handler,
         )
@@ -116,7 +116,7 @@ class ServerHandler(BaseProjectHandler):
         command = self.project_manifest.get_command("server.exec")
         validated_service = self.project_manifest.get_validated_service(service, allow_all=False)
         runner = cmd_runner.ManifestCommandRunner(
-            terminal_handler=self.terminal_handler,
+            display_manager=self.display_manager,
             output_handler=self._output_handler,
             variable_handler=self._variable_handler,
         )
@@ -141,7 +141,7 @@ class ServerHandler(BaseProjectHandler):
         command = self.project_manifest.get_command("server.connect")
         validated_service = self.project_manifest.get_validated_service(service, allow_all=False)
         runner = cmd_runner.ManifestCommandRunner(
-            terminal_handler=self.terminal_handler,
+            display_manager=self.display_manager,
             output_handler=self._output_handler,
             variable_handler=self._variable_handler,
         )

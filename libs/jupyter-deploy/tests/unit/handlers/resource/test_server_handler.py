@@ -1,11 +1,12 @@
 import unittest
 from pathlib import Path
 from unittest import mock
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 import yaml
 
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.handlers.resource.server_handler import ServerHandler
 from jupyter_deploy.manifest import JupyterDeployManifest, JupyterDeployManifestV1
 
@@ -87,12 +88,12 @@ class TestServerHandler(unittest.TestCase):
         mock_manifest, _ = self.get_mock_manifest_and_fns()
         mock_retrieve_manifest.return_value = mock_manifest
 
-        handler = ServerHandler()
+        handler = ServerHandler(display_manager=NullDisplay())
 
         mock_retrieve_manifest.assert_called_once()
         mock_tf_outputs_handler.assert_called_once_with(project_path=path, project_manifest=mock_manifest)
         mock_tf_variables_handler.assert_called_once_with(
-            project_path=path, project_manifest=mock_manifest, terminal_handler=None
+            project_path=path, project_manifest=mock_manifest, display_manager=ANY
         )
 
         self.assertEqual(handler._output_handler, mock_output_handler)
@@ -121,7 +122,7 @@ class TestServerHandler(unittest.TestCase):
         )
         mock_retrieve_manifest.return_value = no_cmd_manifest
 
-        handler = ServerHandler()
+        handler = ServerHandler(display_manager=NullDisplay())
 
         with self.assertRaises(NotImplementedError):
             handler.get_server_status()
@@ -158,7 +159,7 @@ class TestServerHandler(unittest.TestCase):
         mock_tf_outputs_handler.return_value = self.get_mock_outputs_handler_and_fns()[0]
         mock_tf_variables_handler.return_value = Mock()
 
-        handler = ServerHandler()
+        handler = ServerHandler(display_manager=NullDisplay())
 
         # Test get_server_status
         status = handler.get_server_status()
@@ -216,7 +217,7 @@ class TestServerHandler(unittest.TestCase):
         mock_cmd_runner_class.return_value = mock_cmd_runner
         mock_cmd_runner_fns["run_command_sequence"].side_effect = RuntimeError()
 
-        handler = ServerHandler()
+        handler = ServerHandler(display_manager=NullDisplay())
 
         # verify methods raise
         with self.assertRaises(RuntimeError):
@@ -256,7 +257,7 @@ class TestServerHandler(unittest.TestCase):
         mock_cmd_runner_class.return_value = mock_cmd_runner
         mock_cmd_runner_fns["get_result_value"].side_effect = KeyError()
 
-        handler = ServerHandler()
+        handler = ServerHandler(display_manager=NullDisplay())
 
         # verify methods raise
         # add only commands that return a result here
@@ -290,7 +291,7 @@ class TestServerHandler(unittest.TestCase):
         mock_cmd_runner_class.return_value = mock_cmd_runner
 
         # Act
-        handler = ServerHandler()
+        handler = ServerHandler(display_manager=NullDisplay())
         result = handler.get_server_status()
 
         # Verify
@@ -330,7 +331,7 @@ class TestServerHandler(unittest.TestCase):
         mock_cmd_runner_class.return_value = mock_cmd_runner
 
         # Act
-        handler = ServerHandler()
+        handler = ServerHandler(display_manager=NullDisplay())
         handler.start_server("all")
 
         # Verify
@@ -378,7 +379,7 @@ class TestServerHandler(unittest.TestCase):
         mock_cmd_runner_class.return_value = mock_cmd_runner
 
         # Act
-        handler = ServerHandler()
+        handler = ServerHandler(display_manager=NullDisplay())
         handler.stop_server("jupyter")
 
         # Verify
@@ -426,7 +427,7 @@ class TestServerHandler(unittest.TestCase):
         mock_cmd_runner_class.return_value = mock_cmd_runner
 
         # Act
-        handler = ServerHandler()
+        handler = ServerHandler(display_manager=NullDisplay())
         handler.restart_server("sidecars")
 
         # Verify
@@ -475,7 +476,7 @@ class TestServerHandler(unittest.TestCase):
         mock_cmd_runner_class.return_value = mock_cmd_runner
 
         # Act
-        handler = ServerHandler()
+        handler = ServerHandler(display_manager=NullDisplay())
         logs, error_logs = handler.get_server_logs("oauth", ["-n", "200"])
 
         # Assert results
@@ -534,7 +535,7 @@ class TestServerHandler(unittest.TestCase):
         mock_cmd_runner_fns["get_result_value_with_fallback"].return_value = 0
 
         # Act
-        handler = ServerHandler()
+        handler = ServerHandler(display_manager=NullDisplay())
         stdout, stderr, returncode = handler.exec_command(service="jupyter", command_args=["whoami"])
 
         # Verify
@@ -603,7 +604,7 @@ class TestServerHandler(unittest.TestCase):
         mock_cmd_runner_fns["get_result_value_with_fallback"].return_value = 127
 
         # Act
-        handler = ServerHandler()
+        handler = ServerHandler(display_manager=NullDisplay())
         stdout, stderr, returncode = handler.exec_command(
             service="jupyter", command_args=["command_that_does_not_exist"]
         )

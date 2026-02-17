@@ -1,6 +1,5 @@
 import subprocess
 import sys
-from contextlib import nullcontext
 from pathlib import Path
 from typing import Annotated
 
@@ -217,10 +216,12 @@ def config(
     with handle_cli_errors(console):
         preset_name = None if defaults_preset_name == "none" else defaults_preset_name
 
-        # Create progress display manager (or None if verbose mode)
-        progress_display = None if verbose else ProgressDisplayManager()
+        # Create display manager: SimpleDisplayManager for verbose, ProgressDisplayManager for non-verbose
+        display_manager = (
+            SimpleDisplayManager(console=console, pass_through=True) if verbose else ProgressDisplayManager()
+        )
 
-        handler = config_handler.ConfigHandler(output_filename=output_filename, terminal_handler=progress_display)
+        handler = config_handler.ConfigHandler(output_filename=output_filename, display_manager=display_manager)
 
         # Validate and set preset
         # First, verify whether there are recorded variables values from user inputs
@@ -275,7 +276,7 @@ def config(
                 console.rule("[bold]jupyter-deploy:[/] configuring the project")
 
             completion_context = None
-            with progress_display or nullcontext():
+            with display_manager:
                 try:
                     completion_context = handler.configure(variable_overrides=variables)
                 except LogCleanupError as e:
@@ -284,14 +285,19 @@ def config(
 
             if verbose:
                 console.rule("[bold]jupyter-deploy:[/] recording input values")
-
-            handler.record(record_vars=True, record_secrets=record_secrets)
-
-            if verbose:
+                handler.record(record_vars=True, record_secrets=record_secrets)
                 if record_secrets:
                     console.print(":floppy_disk: Recorded configuration, variables and secrets")
                 else:
                     console.print(":floppy_disk: Recorded configuration and variables")
+            else:
+                # Show spinner during record phase in non-verbose mode
+                with display_manager.spinner("Recording configuration..."):
+                    handler.record(record_vars=True, record_secrets=record_secrets)
+                    if record_secrets:
+                        display_manager.info(":floppy_disk: Recorded configuration, variables and secrets")
+                    else:
+                        display_manager.info(":floppy_disk: Recorded configuration and variables")
 
             # finally, display a message to the user if config ignored the template defaults
             # in favor of the recorded variables, with instructions on how to change this behavior.
@@ -354,11 +360,13 @@ def up(
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
-        # Create progress display manager (or None if verbose mode)
-        progress_display = None if verbose else ProgressDisplayManager()
+        # Create display manager: SimpleDisplayManager for verbose, ProgressDisplayManager for non-verbose
+        display_manager = (
+            SimpleDisplayManager(console=console, pass_through=True) if verbose else ProgressDisplayManager()
+        )
 
         # Pass to handler via protocol
-        handler = UpHandler(terminal_handler=progress_display)
+        handler = UpHandler(display_manager=display_manager)
 
         if verbose:
             console.rule("[bold]jupyter-deploy:[/] verifying presence of config file")
@@ -367,7 +375,7 @@ def up(
         if verbose:
             console.rule("[bold]jupyter-deploy:[/] applying infrastructure changes")
         completion_context = None
-        with progress_display or nullcontext():
+        with display_manager:
             try:
                 completion_context = handler.apply(config_file_path, auto_approve)
             except LogCleanupError as e:
@@ -410,10 +418,10 @@ def down(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         # Create display manager based on mode
-        terminal_handler = SimpleDisplayManager(console, pass_through=True) if verbose else ProgressDisplayManager()
+        display_manager = SimpleDisplayManager(console, pass_through=True) if verbose else ProgressDisplayManager()
 
         # Pass to handler via protocol
-        handler = DownHandler(terminal_handler=terminal_handler)
+        handler = DownHandler(display_manager=display_manager)
 
         # Check for persisting resources and display warning
         persisting_resources = handler.get_persisting_resources()
@@ -425,7 +433,7 @@ def down(
 
         if verbose:
             console.rule("[bold]jupyter-deploy:[/] destroying infrastructure resources")
-        with terminal_handler:
+        with display_manager:
             try:
                 handler.destroy(auto_approve)
             except LogCleanupError as e:

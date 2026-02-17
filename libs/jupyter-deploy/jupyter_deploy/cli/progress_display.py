@@ -1,7 +1,7 @@
 """Progress display manager for CLI commands using Rich.
 
 This module provides the ProgressDisplayManager class that implements
-the TerminalHandler protocol for Rich-based terminal display.
+the DisplayManager protocol for Rich-based terminal display.
 """
 
 from collections.abc import Iterator
@@ -20,7 +20,7 @@ from jupyter_deploy.engine.supervised_execution import ExecutionProgress, Intera
 class ProgressDisplayManager:
     """Rich-based terminal display manager for supervised execution.
 
-    Implements the TerminalHandler protocol to provide:
+    Implements the DisplayManager protocol to provide:
     - Progress bar with spinner and percentage
     - Live log box displaying lines provided by the engine callback
     - Interactive prompt handling (whenever the underlying process prompts):
@@ -269,7 +269,7 @@ class ProgressDisplayManager:
         """Stop the current spinner if one is active.
 
         Not applicable for ProgressDisplayManager (no persistent spinner).
-        This is a no-op to satisfy the TerminalHandler protocol.
+        This is a no-op to satisfy the DisplayManager protocol.
         """
         pass
 
@@ -282,6 +282,17 @@ class ProgressDisplayManager:
             Always returns False
         """
         return False
+
+    def on_log_line(self, line: str) -> None:
+        """Handle subprocess output line.
+
+        Stub implementation - ProgressDisplayManager handles log output via update_log_box()
+        instead of individual line processing. This method is a no-op.
+
+        Args:
+            line: A single line of output (without trailing newline)
+        """
+        pass
 
     def _get_display_panel(self) -> Panel:
         """Create Rich Panel with top messages, progress bar, and log box.

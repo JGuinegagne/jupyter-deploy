@@ -2,6 +2,7 @@ from jupyter_deploy.engine import outdefs
 from jupyter_deploy.engine.engine_outputs import EngineOutputsHandler
 from jupyter_deploy.engine.engine_variables import EngineVariablesHandler
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.engine.terraform import tf_outputs, tf_variables
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
 from jupyter_deploy.exceptions import OutputNotFoundError, VariableNotFoundError
@@ -16,7 +17,7 @@ class ShowHandler(BaseProjectHandler):
 
     def __init__(self) -> None:
         """Initialize the show handler."""
-        super().__init__(terminal_handler=None)
+        super().__init__(display_manager=NullDisplay())
 
         if self.engine == EngineType.TERRAFORM:
             self._outputs_handler = tf_outputs.TerraformOutputsHandler(
@@ -26,7 +27,7 @@ class ShowHandler(BaseProjectHandler):
             self._variables_handler = tf_variables.TerraformVariablesHandler(
                 project_path=self.project_path,
                 project_manifest=self.project_manifest,
-                terminal_handler=self.terminal_handler,
+                display_manager=self.display_manager,
             )
         else:
             raise NotImplementedError(f"ShowHandler implementation not found for engine: {self.engine}")

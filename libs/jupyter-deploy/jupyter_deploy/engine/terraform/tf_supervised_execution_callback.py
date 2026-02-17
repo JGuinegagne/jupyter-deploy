@@ -2,7 +2,7 @@
 
 import re
 
-from jupyter_deploy.engine.supervised_execution import CompletionContext, InteractionContext, TerminalHandler
+from jupyter_deploy.engine.supervised_execution import CompletionContext, DisplayManager, InteractionContext
 from jupyter_deploy.engine.supervised_execution_callback import EngineExecutionCallback, NoopExecutionCallback
 from jupyter_deploy.engine.terraform.tf_enums import TerraformSequenceId
 
@@ -21,14 +21,14 @@ class TerraformSupervisedExecutionCallback(EngineExecutionCallback):
     - Extracts plan summaries for UP/DOWN commands
     """
 
-    def __init__(self, terminal_handler: TerminalHandler, sequence_id: TerraformSequenceId):
+    def __init__(self, display_manager: DisplayManager, sequence_id: TerraformSequenceId):
         """Initialize the terraform callback.
 
         Args:
-            terminal_handler: Handler for terminal display
+            display_manager: Handler for terminal display
             sequence_id: The terraform command sequence being executed (CONFIG_INIT, UP_APPLY, etc.)
         """
-        super().__init__(terminal_handler)
+        super().__init__(display_manager)
         self.sequence_id = sequence_id
 
     def _detect_interaction(self, line: str) -> bool:
@@ -195,7 +195,7 @@ class TerraformSupervisedExecutionCallback(EngineExecutionCallback):
                 # Found error line - extract from here to end (max 50 lines)
                 end_index = min(i + 50, len(buffer_list))
                 error_context = buffer_list[i:end_index]
-                self._terminal_handler.display_error_context(error_context)
+                self._display_manager.display_error_context(error_context)
                 return
 
         # Fallback: no "Error: " found, use default behavior
@@ -206,8 +206,15 @@ class TerraformNoopExecutionCallback(NoopExecutionCallback):
     """No-op execution callback with terraform-specific prompt detection for verbose mode.
 
     Extends NoopExecutionCallback to add terraform prompt detection for stdin coordination.
-    Used when terminal_handler is None (verbose mode) but we still need prompts to work.
     """
+
+    def __init__(self, display_manager: DisplayManager) -> None:
+        """Initialize with a display manager.
+
+        Args:
+            display_manager: DisplayManager for handling output
+        """
+        super().__init__(display_manager)
 
     def is_requesting_user_input(self, line: str) -> bool:
         """Detect terraform prompts for stdin coordination.

@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.handlers.project.variables_handler import VariablesHandler
 
 
@@ -61,7 +62,10 @@ class TestVariablesHandler(unittest.TestCase):
 
         # Assert
         mock_manifest_fns["get_engine"].assert_called_once()
-        mock_tf_handler.assert_called_once_with(project_path=path, project_manifest=mock_manifest)
+        call_args = mock_tf_handler.call_args
+        self.assertEqual(call_args.kwargs["project_path"], path)
+        self.assertEqual(call_args.kwargs["project_manifest"], mock_manifest)
+        self.assertIsInstance(call_args.kwargs["display_manager"], NullDisplay)
         tf_fns["is_template_directory"].assert_not_called()
         tf_fns["get_template_variables"].assert_not_called()
 

@@ -2,7 +2,7 @@ from pathlib import Path
 
 from jupyter_deploy.engine.engine_up import EngineUpHandler
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.engine.supervised_execution import CompletionContext, TerminalHandler
+from jupyter_deploy.engine.supervised_execution import CompletionContext, DisplayManager
 from jupyter_deploy.engine.terraform import tf_up
 from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
 
@@ -10,16 +10,16 @@ from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
 class UpHandler(BaseProjectHandler):
     _handler: EngineUpHandler
 
-    def __init__(self, terminal_handler: TerminalHandler | None = None) -> None:
+    def __init__(self, display_manager: DisplayManager) -> None:
         """Base class to manage the up command of a jupyter-deploy project."""
-        super().__init__(terminal_handler=terminal_handler)
+        super().__init__(display_manager=display_manager)
 
         if self.engine == EngineType.TERRAFORM:
             self._handler = tf_up.TerraformUpHandler(
                 project_path=self.project_path,
                 project_manifest=self.project_manifest,
                 command_history_handler=self.command_history_handler,
-                terminal_handler=terminal_handler,
+                display_manager=display_manager,
             )
         else:
             raise NotImplementedError(f"UpHandler implementation not found for engine: {self.engine}")

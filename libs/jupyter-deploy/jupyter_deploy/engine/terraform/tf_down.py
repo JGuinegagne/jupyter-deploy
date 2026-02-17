@@ -5,7 +5,7 @@ from subprocess import CalledProcessError
 
 from jupyter_deploy import cmd_utils, fs_utils
 from jupyter_deploy.engine.engine_down import EngineDownHandler
-from jupyter_deploy.engine.supervised_execution import TerminalHandler
+from jupyter_deploy.engine.supervised_execution import DisplayManager
 from jupyter_deploy.engine.supervised_execution_callback import ExecutionCallbackInterface
 from jupyter_deploy.engine.terraform import tf_outputs, tf_supervised_executor_factory
 from jupyter_deploy.engine.terraform.tf_constants import (
@@ -35,7 +35,7 @@ class TerraformDownHandler(EngineDownHandler):
         project_path: Path,
         project_manifest: JupyterDeployManifest,
         command_history_handler: CommandHistoryHandler,
-        terminal_handler: TerminalHandler,
+        display_manager: DisplayManager,
     ) -> None:
         outputs_handler = tf_outputs.TerraformOutputsHandler(
             project_path=project_path,
@@ -45,7 +45,7 @@ class TerraformDownHandler(EngineDownHandler):
         super().__init__(project_path=project_path, project_manifest=project_manifest, output_handler=outputs_handler)
         self.engine_dir_path = project_path / TF_ENGINE_DIR
         self.command_history_handler = command_history_handler
-        self.terminal_handler = terminal_handler
+        self.display_manager = display_manager
         self._log_file: Path | None = None
 
     def _get_destroy_tfvars_file_path(self) -> Path:
@@ -67,7 +67,7 @@ class TerraformDownHandler(EngineDownHandler):
             if not auto_approve:
                 raise DownAutoApproveRequiredError(persisting_resources)
 
-            self.terminal_handler.info("Running dry-run to detach resources from terraform state...")
+            self.display_manager.info("Running dry-run to detach resources from terraform state...")
 
             dryrun_rm_cmd = TF_RM_FROM_STATE_CMD.copy()
             dryrun_rm_cmd.append("--dry-run")
@@ -75,25 +75,25 @@ class TerraformDownHandler(EngineDownHandler):
             try:
                 cmd_utils.run_cmd_and_capture_output(dryrun_rm_cmd, exec_dir=self.engine_dir_path)
             except CalledProcessError as e:
-                self.terminal_handler.warning("Error performing dry-run of removing resources from Terraform state.")
-                self.terminal_handler.warning(f"Details: {e}")
+                self.display_manager.warning("Error performing dry-run of removing resources from Terraform state.")
+                self.display_manager.warning(f"Details: {e}")
                 return
 
-            self.terminal_handler.success("Dry-run succeeded.")
+            self.display_manager.success("Dry-run succeeded.")
 
             # otherwise, remove the resources from the state using supervised execution
-            self.terminal_handler.info("Removing persisting resources from the Terraform state...")
+            self.display_manager.info("Removing persisting resources from the Terraform state...")
 
             rm_cmd = TF_RM_FROM_STATE_CMD.copy()
             rm_cmd.extend([pr for pr in persisting_resources])
 
             # Choose callback: full featured with progress tracking, or no-op for pass-through mode
             rm_callback: ExecutionCallbackInterface
-            if self.terminal_handler.is_pass_through():
-                rm_callback = TerraformNoopExecutionCallback()
+            if self.display_manager.is_pass_through():
+                rm_callback = TerraformNoopExecutionCallback(self.display_manager)
             else:
                 rm_callback = TerraformSupervisedExecutionCallback(
-                    terminal_handler=self.terminal_handler,
+                    display_manager=self.display_manager,
                     sequence_id=TerraformSequenceId.down_rm_state,
                 )
 
@@ -113,7 +113,7 @@ class TerraformDownHandler(EngineDownHandler):
                     message="Error removing persisting resources from Terraform state.",
                 )
 
-            self.terminal_handler.success("Removed the persisting resources from the Terraform state.")
+            self.display_manager.success("Removed the persisting resources from the Terraform state.")
 
         # second: run terraform destroy with supervised execution
         destroy_cmd = TF_DESTROY_CMD.copy()
@@ -128,11 +128,11 @@ class TerraformDownHandler(EngineDownHandler):
 
         # Choose callback: full featured with progress tracking, or no-op for pass-through mode
         destroy_callback: ExecutionCallbackInterface
-        if self.terminal_handler.is_pass_through():
-            destroy_callback = TerraformNoopExecutionCallback()
+        if self.display_manager.is_pass_through():
+            destroy_callback = TerraformNoopExecutionCallback(self.display_manager)
         else:
             destroy_callback = TerraformSupervisedExecutionCallback(
-                terminal_handler=self.terminal_handler,
+                display_manager=self.display_manager,
                 sequence_id=TerraformSequenceId.down_destroy,
             )
 

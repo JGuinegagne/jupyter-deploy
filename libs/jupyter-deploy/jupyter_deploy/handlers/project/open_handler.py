@@ -2,6 +2,7 @@ import webbrowser
 
 from jupyter_deploy.engine.engine_open import EngineOpenHandler
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.engine.terraform import tf_open
 from jupyter_deploy.exceptions import OpenWebBrowserError, UrlNotSecureError
 from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
@@ -12,7 +13,7 @@ class OpenHandler(BaseProjectHandler):
 
     def __init__(self) -> None:
         """Base class to manage the open command of a jupyter-deploy project."""
-        super().__init__(terminal_handler=None)
+        super().__init__(display_manager=NullDisplay())
 
         if self.engine == EngineType.TERRAFORM:
             self._handler = tf_open.TerraformOpenHandler(

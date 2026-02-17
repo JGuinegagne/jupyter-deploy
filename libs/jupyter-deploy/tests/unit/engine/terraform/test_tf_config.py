@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 
 from pydantic import ValidationError
 
+from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.engine.terraform.tf_config import TerraformConfigHandler
 from jupyter_deploy.engine.terraform.tf_constants import (
     TF_DEFAULT_PLAN_FILENAME,
@@ -84,7 +85,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
 
         mock_vars_handler, mock_vars_fns = self.get_mock_variable_handler_and_fns()
         mock_variable_handler_cls.return_value = mock_vars_handler
-        handler = TerraformConfigHandler(path, manifest, mock_history)
+        handler = TerraformConfigHandler(path, manifest, mock_history, NullDisplay())
 
         # Assert
         self.assertIsNotNone(handler)
@@ -104,7 +105,9 @@ class TestTerraformConfigHandler(unittest.TestCase):
         custom_output = "custom-output-file"
         mock_vars_handler, _ = self.get_mock_variable_handler_and_fns()
         mock_variable_handler_cls.return_value = mock_vars_handler
-        handler = TerraformConfigHandler(path, manifest, self.get_mock_command_history(), output_filename=custom_output)
+        handler = TerraformConfigHandler(
+            path, manifest, self.get_mock_command_history(), NullDisplay(), output_filename=custom_output
+        )
 
         # Assert
         self.assertIsNotNone(handler)
@@ -118,7 +121,9 @@ class TestTerraformConfigHandler(unittest.TestCase):
         path = Path("/fake/path")
         mock_vars_handler, _ = self.get_mock_variable_handler_and_fns()
         mock_variable_handler_cls.return_value = mock_vars_handler
-        handler = TerraformConfigHandler(path, Mock(), command_history_handler=self.get_mock_command_history())
+        handler = TerraformConfigHandler(
+            path, Mock(), command_history_handler=self.get_mock_command_history(), display_manager=NullDisplay()
+        )
 
         # Act
         handler.verify_preset_exists("all")
@@ -141,7 +146,9 @@ class TestTerraformConfigHandler(unittest.TestCase):
         path = Path("/fake/path")
         mock_vars_handler, _ = self.get_mock_variable_handler_and_fns()
         mock_variable_handler_cls.return_value = mock_vars_handler
-        handler = TerraformConfigHandler(path, Mock(), command_history_handler=self.get_mock_command_history())
+        handler = TerraformConfigHandler(
+            path, Mock(), command_history_handler=self.get_mock_command_history(), display_manager=NullDisplay()
+        )
 
         # Act
         presets = handler.list_presets()
@@ -162,7 +169,9 @@ class TestTerraformConfigHandler(unittest.TestCase):
         path = Path("/fake/path")
         mock_vars_handler, _ = self.get_mock_variable_handler_and_fns()
         mock_variable_handler_cls.return_value = mock_vars_handler
-        handler = TerraformConfigHandler(path, Mock(), command_history_handler=self.get_mock_command_history())
+        handler = TerraformConfigHandler(
+            path, Mock(), command_history_handler=self.get_mock_command_history(), display_manager=NullDisplay()
+        )
 
         # Act
         presets = handler.list_presets()
@@ -176,7 +185,9 @@ class TestTerraformConfigHandler(unittest.TestCase):
         path = Path("/fake/path")
         mock_vars_handler, mock_vars_fns = self.get_mock_variable_handler_and_fns()
         mock_variable_handler_cls.return_value = mock_vars_handler
-        handler = TerraformConfigHandler(path, Mock(), command_history_handler=self.get_mock_command_history())
+        handler = TerraformConfigHandler(
+            path, Mock(), command_history_handler=self.get_mock_command_history(), display_manager=NullDisplay()
+        )
 
         # Act
         handler.reset_recorded_variables()
@@ -190,7 +201,9 @@ class TestTerraformConfigHandler(unittest.TestCase):
         path = Path("/fake/path")
         mock_vars_handler, mock_vars_fns = self.get_mock_variable_handler_and_fns()
         mock_variable_handler_cls.return_value = mock_vars_handler
-        handler = TerraformConfigHandler(path, Mock(), command_history_handler=self.get_mock_command_history())
+        handler = TerraformConfigHandler(
+            path, Mock(), command_history_handler=self.get_mock_command_history(), display_manager=NullDisplay()
+        )
 
         # Act
         handler.reset_recorded_secrets()
@@ -210,7 +223,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_executor.execute.return_value = 0  # Return code 0 (success)
         mock_create_executor.return_value = mock_executor
 
-        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history())
+        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history(), NullDisplay())
 
         # Act
         handler.configure()
@@ -237,7 +250,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_executor.execute.return_value = 0  # Return code 0 (success)
         mock_create_executor.return_value = mock_executor
 
-        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history())
+        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history(), NullDisplay())
 
         # Act
         handler.configure()
@@ -262,7 +275,9 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_create_executor.return_value = mock_executor
 
         path = Path("/fake/path")
-        handler = TerraformConfigHandler(path, Mock(), command_history_handler=self.get_mock_command_history())
+        handler = TerraformConfigHandler(
+            path, Mock(), command_history_handler=self.get_mock_command_history(), display_manager=NullDisplay()
+        )
 
         # Act
         handler.configure(preset_name="all")
@@ -290,7 +305,9 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_create_executor.return_value = mock_executor
 
         path = Path("/fake/path")
-        handler = TerraformConfigHandler(path, Mock(), command_history_handler=self.get_mock_command_history())
+        handler = TerraformConfigHandler(
+            path, Mock(), command_history_handler=self.get_mock_command_history(), display_manager=NullDisplay()
+        )
 
         mock_var1 = Mock(spec=StrTemplateVariableDefinition)
         mock_var2 = Mock(spec=FloatTemplateVariableDefinition)
@@ -352,7 +369,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_executor.execute.return_value = 1  # Return code 1 (failure)
         mock_create_executor.return_value = mock_executor
 
-        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history())
+        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history(), NullDisplay())
 
         # Act & Assert - should raise ExecutionError
         with self.assertRaises(SupervisedExecutionError) as context:
@@ -378,7 +395,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_executor.execute.side_effect = TimeoutError("Command timed out")
         mock_create_executor.return_value = mock_executor
 
-        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history())
+        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history(), NullDisplay())
 
         # Act & Assert - should raise TimeoutError
         with self.assertRaises(TimeoutError):
@@ -402,7 +419,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_executor.execute.side_effect = [0, 1]  # init=0 (success), plan=1 (failure)
         mock_create_executor.return_value = mock_executor
 
-        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history())
+        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history(), NullDisplay())
 
         # Act & Assert - should raise ExecutionError
         with self.assertRaises(SupervisedExecutionError) as context:
@@ -428,7 +445,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_executor.execute.side_effect = [0, TimeoutError("Command timed out")]  # init=0 (success), plan=timeout
         mock_create_executor.return_value = mock_executor
 
-        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history())
+        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history(), NullDisplay())
 
         # Act & Assert - should raise TimeoutError
         with self.assertRaises(TimeoutError):
@@ -456,7 +473,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         # Arrange
         mock_vars_handler, mock_vars_fns = self.get_mock_variable_handler_and_fns()
         mock_variable_handler_cls.return_value = mock_vars_handler
-        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history())
+        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history(), NullDisplay())
 
         # Mock the plan parsing and resource counts extraction (always happens)
         mock_capture.return_value = "plan-json-string"
@@ -520,7 +537,9 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_format.return_value = ["var1 = 1\n", 'var2 = "two"\n']
 
         path = Path("/fake/path")
-        handler = TerraformConfigHandler(path, Mock(), command_history_handler=self.get_mock_command_history())
+        handler = TerraformConfigHandler(
+            path, Mock(), command_history_handler=self.get_mock_command_history(), display_manager=NullDisplay()
+        )
 
         # Act
         handler.record(record_vars=True)
@@ -586,7 +605,9 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_format.return_value = ['secret1 = "nuclear-codes"\n']
 
         path = Path("/fake/path")
-        handler = TerraformConfigHandler(path, Mock(), command_history_handler=self.get_mock_command_history())
+        handler = TerraformConfigHandler(
+            path, Mock(), command_history_handler=self.get_mock_command_history(), display_manager=NullDisplay()
+        )
 
         # Act
         handler.record(record_secrets=True)
@@ -645,7 +666,9 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_format.side_effect = [["var1 = 1\n", 'var2 = "two"\n'], ['secret1 = "nuclear-codes"\n']]
 
         path = Path("/fake/path")
-        handler = TerraformConfigHandler(path, Mock(), command_history_handler=self.get_mock_command_history())
+        handler = TerraformConfigHandler(
+            path, Mock(), command_history_handler=self.get_mock_command_history(), display_manager=NullDisplay()
+        )
 
         # Act
         handler.record(record_vars=True, record_secrets=True)
@@ -687,7 +710,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_capture.side_effect = subprocess.CalledProcessError(
             1, ["terraform", "show", "-json"], "something went wrong", None
         )
-        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history())
+        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history(), NullDisplay())
 
         # Act & Assert
         with self.assertRaises(ReadConfigurationError):
@@ -721,7 +744,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_parse.return_value = mock_plan
         mock_extract_counts.return_value = (5, 3, 2)
         mock_extract.side_effect = ValidationError("some error", [])
-        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history())
+        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history(), NullDisplay())
 
         # Act & Assert
         with self.assertRaises(ReadConfigurationError):
@@ -751,7 +774,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_variable_handler_cls.return_value = mock_vars_handler
         mock_capture.return_value = "i-am-a-serialized-plan"
         mock_parse.side_effect = ValueError("Invalid JSON")
-        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history())
+        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), self.get_mock_command_history(), NullDisplay())
 
         # Act & Assert
         with self.assertRaises(ReadConfigurationError):
@@ -765,13 +788,13 @@ class TestTerraformConfigHandler(unittest.TestCase):
     @patch("jupyter_deploy.engine.terraform.tf_config.TerraformSupervisedExecutionCallback")
     @patch("jupyter_deploy.engine.terraform.tf_supervised_executor_factory.create_terraform_executor")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
-    def test_configure_with_terminal_handler_uses_supervised_callback(
+    def test_configure_with_display_manager_uses_supervised_callback(
         self,
         mock_variable_handler_cls: Mock,
         mock_create_executor: Mock,
         mock_callback_cls: Mock,
     ) -> None:
-        """Test that configure with terminal_handler uses TerraformSupervisedExecutionCallback."""
+        """Test that configure with display_manager uses TerraformSupervisedExecutionCallback."""
         # Arrange
         mock_vars_handler, _ = self.get_mock_variable_handler_and_fns()
         mock_variable_handler_cls.return_value = mock_vars_handler
@@ -785,13 +808,14 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_callback = Mock()
         mock_callback_cls.return_value = mock_callback
 
-        # Create handler WITH terminal_handler
-        mock_terminal_handler = Mock()
+        # Create handler WITH display_manager
+        mock_display_manager = Mock()
+        mock_display_manager.is_pass_through.return_value = False  # Use supervised callbacks
         handler = TerraformConfigHandler(
             Path("/fake/path"),
             Mock(),
             self.get_mock_command_history(),
-            terminal_handler=mock_terminal_handler,  # type: ignore[arg-type]
+            display_manager=mock_display_manager,  # type: ignore[arg-type]
         )
 
         # Act
@@ -804,12 +828,12 @@ class TestTerraformConfigHandler(unittest.TestCase):
 
         # Verify init callback
         init_callback_call = mock_callback_cls.call_args_list[0]
-        self.assertEqual(init_callback_call.kwargs["terminal_handler"], mock_terminal_handler)
+        self.assertEqual(init_callback_call.kwargs["display_manager"], mock_display_manager)
         self.assertEqual(init_callback_call.kwargs["sequence_id"], TerraformSequenceId.config_init)
 
         # Verify plan callback
         plan_callback_call = mock_callback_cls.call_args_list[1]
-        self.assertEqual(plan_callback_call.kwargs["terminal_handler"], mock_terminal_handler)
+        self.assertEqual(plan_callback_call.kwargs["display_manager"], mock_display_manager)
         self.assertEqual(plan_callback_call.kwargs["sequence_id"], TerraformSequenceId.config_plan)
 
         # Verify executor was created with the supervised callback
@@ -823,13 +847,13 @@ class TestTerraformConfigHandler(unittest.TestCase):
     @patch("jupyter_deploy.engine.terraform.tf_config.TerraformNoopExecutionCallback")
     @patch("jupyter_deploy.engine.terraform.tf_supervised_executor_factory.create_terraform_executor")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
-    def test_configure_without_terminal_handler_uses_noop_callback(
+    def test_configure_without_display_manager_uses_noop_callback(
         self,
         mock_variable_handler_cls: Mock,
         mock_create_executor: Mock,
         mock_noop_callback_cls: Mock,
     ) -> None:
-        """Test that configure without terminal_handler uses TerraformNoopExecutionCallback."""
+        """Test that configure without display_manager uses TerraformNoopExecutionCallback."""
         # Arrange
         mock_vars_handler, _ = self.get_mock_variable_handler_and_fns()
         mock_variable_handler_cls.return_value = mock_vars_handler
@@ -843,12 +867,14 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_noop = Mock()
         mock_noop_callback_cls.return_value = mock_noop
 
-        # Create handler WITHOUT terminal_handler
+        # Create handler with pass-through display_manager (verbose mode)
+        mock_display_manager = Mock()
+        mock_display_manager.is_pass_through.return_value = True  # Use noop callbacks
         handler = TerraformConfigHandler(
             Path("/fake/path"),
             Mock(),
             self.get_mock_command_history(),
-            terminal_handler=None,
+            display_manager=mock_display_manager,  # type: ignore[arg-type]
         )
 
         # Act
@@ -883,7 +909,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_create_executor.return_value = mock_executor
 
         mock_history = self.get_mock_command_history()
-        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), mock_history)
+        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), mock_history, NullDisplay())
 
         # Act
         handler.configure()
@@ -907,7 +933,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         mock_create_executor.return_value = mock_executor
 
         mock_history = self.get_mock_command_history()
-        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), mock_history)
+        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), mock_history, NullDisplay())
 
         # Act & Assert - should raise ExecutionError
         with self.assertRaises(SupervisedExecutionError):
@@ -933,7 +959,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
 
         mock_history = self.get_mock_command_history()
         mock_history.clear_logs.side_effect = LogCleanupError("Failed to delete 2 log file(s)")
-        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), mock_history)
+        handler = TerraformConfigHandler(Path("/fake/path"), Mock(), mock_history, NullDisplay())
 
         # Act & Assert - should raise LogCleanupError from clear_logs
         with self.assertRaises(LogCleanupError) as context:

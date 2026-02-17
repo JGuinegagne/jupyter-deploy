@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import Mock, patch
 
+from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.exceptions import (
     HostCommandInstructionError,
     InstructionNotFoundError,
@@ -27,7 +28,7 @@ class TestAwsSsmRunner(unittest.TestCase):
         region_name = "us-west-2"
 
         # Act
-        runner = AwsSsmRunner(region_name=region_name)
+        runner = AwsSsmRunner(NullDisplay(), region_name=region_name)
 
         # Assert
         mock_boto3_client.assert_called_once_with("ssm", region_name=region_name)
@@ -35,14 +36,12 @@ class TestAwsSsmRunner(unittest.TestCase):
 
     def test_aws_ssm_raise_not_implemented_error_on_unmatched_instruction_name(self) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         invalid_instruction = "invalid-instruction"
 
         # Act & Assert
         with self.assertRaises(InstructionNotFoundError) as context:
-            runner.execute_instruction(
-                instruction_name=invalid_instruction, resolved_arguments={}, terminal_handler=None
-            )
+            runner.execute_instruction(instruction_name=invalid_instruction, resolved_arguments={})
 
         self.assertIn(f"aws.ssm.{invalid_instruction}", str(context.exception))
 
@@ -51,7 +50,7 @@ class TestVerifyEc2InstanceAccessible(unittest.TestCase):
     @patch("jupyter_deploy.api.aws.ssm.ssm_session.describe_instance_information")
     def test_happy_case_calls_describe_return_true_no_console_print(self, mock_describe: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         instance_id = "i-1234567890abcdef0"
 
         # Setup mock to return online status
@@ -62,17 +61,17 @@ class TestVerifyEc2InstanceAccessible(unittest.TestCase):
         }
 
         # Act - should not raise
-        runner._verify_ec2_instance_accessible(instance_id, terminal_handler=None)
+        runner._verify_ec2_instance_accessible(instance_id)
 
         # Assert
         mock_describe.assert_called_once_with(runner.client, instance_id=instance_id)
-        # No terminal output when terminal_handler=None and silent_success=True (default)
+        # No terminal output when display_manager=NullDisplay() and silent_success=True (default)
 
     @patch("jupyter_deploy.api.aws.ssm.ssm_session.describe_instance_information")
     def test_happy_case_with_silent_success_false_print_something(self, mock_describe: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
-        terminal_handler = Mock()
+        display_manager = Mock()
+        runner = AwsSsmRunner(display_manager, region_name="us-west-2")
         instance_id = "i-1234567890abcdef0"
 
         # Setup mock to return online status
@@ -83,18 +82,18 @@ class TestVerifyEc2InstanceAccessible(unittest.TestCase):
         }
 
         # Act - should not raise
-        runner._verify_ec2_instance_accessible(instance_id, terminal_handler, silent_success=False)
+        runner._verify_ec2_instance_accessible(instance_id, silent_success=False)
 
         # Assert
         mock_describe.assert_called_once_with(runner.client, instance_id=instance_id)
         # Terminal handler info should be called when silent_success=False
-        terminal_handler.info.assert_called_once()
-        self.assertIn(instance_id, terminal_handler.info.mock_calls[0][1][0])
+        display_manager.info.assert_called_once()
+        self.assertIn(instance_id, display_manager.info.mock_calls[0][1][0])
 
     @patch("jupyter_deploy.api.aws.ssm.ssm_session.describe_instance_information")
     def test_ping_status_connection_lost_raises_unreachable_host_error(self, mock_describe: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         instance_id = "i-1234567890abcdef0"
         last_ping_date = "2023-01-01T00:00:00.000Z"
 
@@ -107,7 +106,7 @@ class TestVerifyEc2InstanceAccessible(unittest.TestCase):
 
         # Act & Assert - should raise UnreachableHostError
         with self.assertRaises(UnreachableHostError) as context:
-            runner._verify_ec2_instance_accessible(instance_id, terminal_handler=None)
+            runner._verify_ec2_instance_accessible(instance_id)
 
         # Verify error message contains relevant information
         self.assertIn(instance_id, str(context.exception))
@@ -116,7 +115,7 @@ class TestVerifyEc2InstanceAccessible(unittest.TestCase):
     @patch("jupyter_deploy.api.aws.ssm.ssm_session.describe_instance_information")
     def test_ping_status_inactive_raises_unreachable_host_error(self, mock_describe: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         instance_id = "i-1234567890abcdef0"
 
         # Setup mock to return Inactive status
@@ -127,7 +126,7 @@ class TestVerifyEc2InstanceAccessible(unittest.TestCase):
 
         # Act & Assert - should raise UnreachableHostError
         with self.assertRaises(UnreachableHostError) as context:
-            runner._verify_ec2_instance_accessible(instance_id, terminal_handler=None)
+            runner._verify_ec2_instance_accessible(instance_id)
 
         # Verify error message contains instance ID
         self.assertIn(instance_id, str(context.exception))
@@ -135,7 +134,7 @@ class TestVerifyEc2InstanceAccessible(unittest.TestCase):
     @patch("jupyter_deploy.api.aws.ssm.ssm_session.describe_instance_information")
     def test_missing_ping_status_raises_unreachable_host_error(self, mock_describe: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         instance_id = "i-1234567890abcdef0"
 
         # Setup mock to return unknown/empty status
@@ -146,7 +145,7 @@ class TestVerifyEc2InstanceAccessible(unittest.TestCase):
 
         # Act & Assert - should raise UnreachableHostError
         with self.assertRaises(UnreachableHostError) as context:
-            runner._verify_ec2_instance_accessible(instance_id, terminal_handler=None)
+            runner._verify_ec2_instance_accessible(instance_id)
 
         # Verify error message contains instance ID
         self.assertIn(instance_id, str(context.exception))
@@ -154,7 +153,7 @@ class TestVerifyEc2InstanceAccessible(unittest.TestCase):
     @patch("jupyter_deploy.api.aws.ssm.ssm_session.describe_instance_information")
     def test_bubbles_up_errors_from_api(self, mock_describe: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         instance_id = "i-1234567890abcdef0"
 
         # Setup mock to raise an exception
@@ -162,7 +161,7 @@ class TestVerifyEc2InstanceAccessible(unittest.TestCase):
 
         # Act & Assert
         with self.assertRaises(Exception) as context:
-            runner._verify_ec2_instance_accessible(instance_id, terminal_handler=None)
+            runner._verify_ec2_instance_accessible(instance_id)
 
         self.assertEqual(str(context.exception), "API Error")
 
@@ -174,7 +173,7 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
         self, mock_send_cmd: Mock, mock_verify: Mock
     ) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         document_name = "some-doc-name"
         instance_id = "i-1234567890abcdef0"
 
@@ -196,12 +195,11 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
         result = runner.execute_instruction(
             instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
             resolved_arguments=resolved_arguments,
-            terminal_handler=None,
         )
 
         # Assert
         # Verify that SSM agent connection was checked
-        mock_verify.assert_called_once_with(instance_id=instance_id, terminal_handler=None)
+        mock_verify.assert_called_once_with(instance_id=instance_id)
 
         # Update to include default timeout values
         mock_send_cmd.assert_called_once_with(
@@ -220,7 +218,7 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
     @patch("jupyter_deploy.api.aws.ssm.ssm_command.send_cmd_to_one_instance_and_wait_sync")
     def test_execute_happy_path_with_parameters(self, mock_send_cmd: Mock, mock_verify: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         document_name = "AWS-RunShellScript"
         instance_id = "i-1234567890abcdef0"
         commands = ["echo 'Hello World'", "ls -la"]
@@ -247,12 +245,11 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
         result = runner.execute_instruction(
             instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
             resolved_arguments=resolved_arguments,
-            terminal_handler=None,
         )
 
         # Assert
         # Verify that SSM agent connection was checked
-        mock_verify.assert_called_once_with(instance_id=instance_id, terminal_handler=None)
+        mock_verify.assert_called_once_with(instance_id=instance_id)
 
         # Check that the parameters were passed correctly
         mock_send_cmd.assert_called_once()
@@ -275,7 +272,7 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
     @patch("jupyter_deploy.api.aws.ssm.ssm_command.send_cmd_to_one_instance_and_wait_sync")
     def test_execute_happy_path_with_optional_args(self, mock_send_cmd: Mock, mock_verify: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         document_name = "AWS-RunShellScript"
         instance_id = "i-1234567890abcdef0"
         # Custom timeout values
@@ -303,12 +300,11 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
         result = runner.execute_instruction(
             instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
             resolved_arguments=resolved_arguments,
-            terminal_handler=None,
         )
 
         # Assert
         # Verify that SSM agent connection was checked
-        mock_verify.assert_called_once_with(instance_id=instance_id, terminal_handler=None)
+        mock_verify.assert_called_once_with(instance_id=instance_id)
 
         # Check that custom timeout values were used
         mock_send_cmd.assert_called_once_with(
@@ -326,7 +322,7 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
     @patch("jupyter_deploy.api.aws.ssm.ssm_command.send_cmd_to_one_instance_and_wait_sync")
     def test_execute_cmd_fail_raises_instruction_error(self, mock_send_cmd: Mock, mock_verify: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         document_name = "AWS-RunShellScript"
         instance_id = "i-1234567890abcdef0"
 
@@ -347,7 +343,6 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
                 resolved_arguments=resolved_arguments,
-                terminal_handler=None,
             )
 
         # Verify error message and attributes
@@ -359,7 +354,7 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
 
     def test_execute_raise_on_missing_or_invalid_type_instance_id(self) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         document_name = "AWS-RunShellScript"
 
         # Case 1: Missing instance_id
@@ -372,7 +367,6 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
                 resolved_arguments=resolved_arguments_missing,
-                terminal_handler=None,
             )
 
         self.assertIn("instance_id", str(context.exception))
@@ -390,12 +384,11 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
                 resolved_arguments=resolved_arguments_invalid_type,
-                terminal_handler=None,
             )
 
     def test_execute_raise_on_missing_or_invalid_type_doc_name(self) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         instance_id = "i-1234567890abcdef0"
 
         # Case 1: Missing document_name
@@ -408,7 +401,6 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
                 resolved_arguments=resolved_arguments_missing,
-                terminal_handler=None,
             )
 
         self.assertIn("document_name", str(context.exception))
@@ -424,14 +416,13 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
                 resolved_arguments=resolved_arguments_invalid_type,
-                terminal_handler=None,
             )
 
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
     @patch("jupyter_deploy.api.aws.ssm.ssm_command.send_cmd_to_one_instance_and_wait_sync")
     def test_execute_raise_when_api_handler_raise(self, mock_send_cmd: Mock, mock_verify: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         document_name = "AWS-RunShellScript"
         instance_id = "i-1234567890abcdef0"
 
@@ -450,12 +441,11 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
                 resolved_arguments=resolved_arguments,
-                terminal_handler=None,
             )
 
         self.assertEqual(str(context.exception), "API Error")
         # Verify that SSM agent connection was checked
-        mock_verify.assert_called_once_with(instance_id=instance_id, terminal_handler=None)
+        mock_verify.assert_called_once_with(instance_id=instance_id)
 
         mock_send_cmd.assert_called_once_with(
             runner.client,
@@ -468,7 +458,7 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
     def test_execute_raise_when_verification_fails(self, mock_verify: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         document_name = "AWS-RunShellScript"
         instance_id = "i-1234567890abcdef0"
 
@@ -485,17 +475,16 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
                 resolved_arguments=resolved_arguments,
-                terminal_handler=None,
             )
 
         # Verify that SSM agent connection was checked
-        mock_verify.assert_called_once_with(instance_id=instance_id, terminal_handler=None)
+        mock_verify.assert_called_once_with(instance_id=instance_id)
 
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
     @patch("jupyter_deploy.api.aws.ssm.ssm_command.send_cmd_to_one_instance_and_wait_sync")
     def test_execute_includes_response_code_in_results(self, mock_send_cmd: Mock, mock_verify: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         document_name = "AWS-RunShellScript"
         instance_id = "i-1234567890abcdef0"
 
@@ -515,7 +504,6 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
         result = runner.execute_instruction(
             instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
             resolved_arguments=resolved_arguments,
-            terminal_handler=None,
         )
 
         # Assert
@@ -527,7 +515,7 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
     @patch("jupyter_deploy.api.aws.ssm.ssm_command.send_cmd_to_one_instance_and_wait_sync")
     def test_execute_includes_non_zero_response_code(self, mock_send_cmd: Mock, mock_verify: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         document_name = "AWS-RunShellScript"
         instance_id = "i-1234567890abcdef0"
 
@@ -549,14 +537,13 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
                 resolved_arguments=resolved_arguments,
-                terminal_handler=None,
             )
 
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
     @patch("jupyter_deploy.api.aws.ssm.ssm_command.send_cmd_to_one_instance_and_wait_sync")
     def test_execute_defaults_response_code_to_zero_when_missing(self, mock_send_cmd: Mock, mock_verify: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         document_name = "AWS-RunShellScript"
         instance_id = "i-1234567890abcdef0"
 
@@ -576,7 +563,6 @@ class TestSendCmdToOneInstanceAndWaitSync(unittest.TestCase):
         result = runner.execute_instruction(
             instruction_name=AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC,
             resolved_arguments=resolved_arguments,
-            terminal_handler=None,
         )
 
         # Assert - Should default to 0 when ResponseCode is missing
@@ -592,7 +578,7 @@ class TestStartSession(unittest.TestCase):
         self, mock_verify_tools: Mock, mock_verify_ec2: Mock, mock_run_cmd: Mock
     ) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         target_id = "i-1234567890abcdef0"
 
         # Mock successful verifications
@@ -610,13 +596,12 @@ class TestStartSession(unittest.TestCase):
         result = runner.execute_instruction(
             instruction_name=AwsSsmInstruction.START_SESSION,
             resolved_arguments=resolved_arguments,
-            terminal_handler=None,
         )
 
         # Assert
         # Verify that all required checks were performed
         mock_verify_tools.assert_called_once()
-        mock_verify_ec2.assert_called_once_with(instance_id=target_id, terminal_handler=None, silent_success=False)
+        mock_verify_ec2.assert_called_once_with(instance_id=target_id, silent_success=False)
 
         # Verify that the session command was executed with the correct target
         mock_run_cmd.assert_called_once()
@@ -630,7 +615,7 @@ class TestStartSession(unittest.TestCase):
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.verify_utils.verify_tools_installation")
     def test_stops_on_missing_tool_installations(self, mock_verify_tools: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         target_id = "i-1234567890abcdef0"
 
         # Mock failed tool verification
@@ -645,7 +630,6 @@ class TestStartSession(unittest.TestCase):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.START_SESSION,
                 resolved_arguments=resolved_arguments,
-                terminal_handler=None,
             )
 
         # Verify that the verification was called but no further processing happened
@@ -655,7 +639,7 @@ class TestStartSession(unittest.TestCase):
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.verify_utils.verify_tools_installation")
     def test_stops_on_ssm_agent_not_connected(self, mock_verify_tools: Mock, mock_verify_ec2: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         target_id = "i-1234567890abcdef0"
 
         # Mock successful tools verification but failed EC2 connection
@@ -670,12 +654,11 @@ class TestStartSession(unittest.TestCase):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.START_SESSION,
                 resolved_arguments=resolved_arguments,
-                terminal_handler=None,
             )
 
         # Verify that both verifications were called but no further processing
         mock_verify_tools.assert_called_once()
-        mock_verify_ec2.assert_called_once_with(instance_id=target_id, terminal_handler=None, silent_success=False)
+        mock_verify_ec2.assert_called_once_with(instance_id=target_id, silent_success=False)
 
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.cmd_utils.run_cmd_and_pipe_to_terminal")
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
@@ -684,7 +667,7 @@ class TestStartSession(unittest.TestCase):
         self, mock_verify_tools: Mock, mock_verify_ec2: Mock, mock_run_cmd: Mock
     ) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         target_id = "i-1234567890abcdef0"
 
         # Mock successful verifications
@@ -703,7 +686,6 @@ class TestStartSession(unittest.TestCase):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.START_SESSION,
                 resolved_arguments=resolved_arguments,
-                terminal_handler=None,
             )
 
         # Verify that session command was executed but detected the error
@@ -716,7 +698,7 @@ class TestStartSession(unittest.TestCase):
         self, mock_verify_tools: Mock, mock_verify_ec2: Mock, mock_run_cmd: Mock
     ) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         target_id = "i-1234567890abcdef0"
 
         # Mock successful verifications
@@ -735,7 +717,6 @@ class TestStartSession(unittest.TestCase):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.START_SESSION,
                 resolved_arguments=resolved_arguments,
-                terminal_handler=None,
             )
 
         # Verify that session command was executed but detected timeout
@@ -757,7 +738,7 @@ class TestExecuteInstructions(unittest.TestCase):
         mock_verify_ec2: Mock,
     ) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
 
         # Setup mocks for all possible instructions
         mock_verify_ec2.return_value = True
@@ -805,7 +786,7 @@ class TestExecuteInstructions(unittest.TestCase):
 
             # Each enum instruction should be implemented in the runner
             result = runner.execute_instruction(
-                instruction_name=instruction, resolved_arguments=base_resolved_arguments, terminal_handler=None
+                instruction_name=instruction, resolved_arguments=base_resolved_arguments
             )
 
             # Simple verification that the instruction was executed correctly
@@ -823,7 +804,7 @@ class TestExecuteInstructions(unittest.TestCase):
 
     def test_raise_not_implemented_error_on_unrecognized_instruction(self) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         invalid_instruction = "invalid-instruction"
 
         resolved_arguments: dict[str, ResolvedInstructionArgument] = {
@@ -834,7 +815,8 @@ class TestExecuteInstructions(unittest.TestCase):
         # Act & Assert
         with self.assertRaises(InstructionNotFoundError) as context:
             runner.execute_instruction(
-                instruction_name=invalid_instruction, resolved_arguments=resolved_arguments, terminal_handler=None
+                instruction_name=invalid_instruction,
+                resolved_arguments=resolved_arguments,
             )
 
         self.assertIn(f"aws.ssm.{invalid_instruction}", str(context.exception))
@@ -845,7 +827,7 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
     def test_uses_aws_run_shell_script_by_default(self, mock_verify: Mock, mock_send_cmd: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         instance_id = "i-1234567890abcdef0"
 
         mock_send_cmd.return_value = {
@@ -863,7 +845,6 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
         result = runner.execute_instruction(
             instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
             resolved_arguments=resolved_arguments,
-            terminal_handler=None,
         )
 
         # Assert
@@ -881,7 +862,7 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
     def test_passes_commands_parameter(self, mock_verify: Mock, mock_send_cmd: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         instance_id = "i-1234567890abcdef0"
         commands = ["df", "-h"]
 
@@ -900,7 +881,6 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
         runner.execute_instruction(
             instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
             resolved_arguments=resolved_arguments,
-            terminal_handler=None,
         )
 
         # Assert
@@ -912,7 +892,7 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
     def test_returns_stdout_and_stderr(self, mock_verify: Mock, mock_send_cmd: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         instance_id = "i-1234567890abcdef0"
 
         mock_send_cmd.return_value = {
@@ -930,7 +910,6 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
         result = runner.execute_instruction(
             instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
             resolved_arguments=resolved_arguments,
-            terminal_handler=None,
         )
 
         # Assert
@@ -942,7 +921,7 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
     def test_handles_failed_commands(self, mock_verify: Mock, mock_send_cmd: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         instance_id = "i-1234567890abcdef0"
 
         mock_send_cmd.return_value = {
@@ -963,7 +942,6 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
                 resolved_arguments=resolved_arguments,
-                terminal_handler=None,
             )
 
         # Verify error attributes contain stderr content
@@ -975,7 +953,7 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
     def test_raises_when_verification_fails(self, mock_verify: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         instance_id = "i-1234567890abcdef0"
 
         mock_verify.side_effect = UnreachableHostError(f"SSM agent on instance '{instance_id}' is not running")
@@ -990,16 +968,15 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
                 resolved_arguments=resolved_arguments,
-                terminal_handler=None,
             )
 
-        mock_verify.assert_called_once_with(instance_id=instance_id, terminal_handler=None)
+        mock_verify.assert_called_once_with(instance_id=instance_id)
 
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.ssm_command.send_cmd_to_one_instance_and_wait_sync")
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
     def test_includes_response_code_in_results(self, mock_verify: Mock, mock_send_cmd: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         instance_id = "i-1234567890abcdef0"
 
         mock_send_cmd.return_value = {
@@ -1018,7 +995,6 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
         result = runner.execute_instruction(
             instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
             resolved_arguments=resolved_arguments,
-            terminal_handler=None,
         )
 
         # Assert
@@ -1030,7 +1006,7 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
     def test_raises_instruction_error_on_failure(self, mock_verify: Mock, mock_send_cmd: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         instance_id = "i-1234567890abcdef0"
 
         # Simulate command failure with exit code 1
@@ -1051,14 +1027,13 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
             runner.execute_instruction(
                 instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
                 resolved_arguments=resolved_arguments,
-                terminal_handler=None,
             )
 
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.ssm_command.send_cmd_to_one_instance_and_wait_sync")
     @patch("jupyter_deploy.provider.aws.aws_ssm_runner.AwsSsmRunner._verify_ec2_instance_accessible")
     def test_defaults_response_code_to_zero_when_missing(self, mock_verify: Mock, mock_send_cmd: Mock) -> None:
         # Arrange
-        runner = AwsSsmRunner(region_name="us-west-2")
+        runner = AwsSsmRunner(NullDisplay(), region_name="us-west-2")
         instance_id = "i-1234567890abcdef0"
 
         # Simulate response without ResponseCode (backward compatibility)
@@ -1077,7 +1052,6 @@ class TestSendCmdToOneInstanceUsingDefaultShellDoc(unittest.TestCase):
         result = runner.execute_instruction(
             instruction_name=AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC,
             resolved_arguments=resolved_arguments,
-            terminal_handler=None,
         )
 
         # Assert - Should default to 0 when ResponseCode is missing

@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.engine.terraform.tf_variables import TerraformVariablesHandler
 
 
@@ -9,14 +10,18 @@ class TestTerraformVariablesHandler(unittest.TestCase):
     def test_successfully_instantiates(self) -> None:
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
         self.assertEqual(handler.project_path, project_path)
         self.assertEqual(handler.project_manifest, manifest)
 
     def test_get_recorded_variables_filepath(self) -> None:
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Get the filepath and verify it's correct
         result = handler.get_recorded_variables_filepath()
@@ -27,7 +32,9 @@ class TestTerraformVariablesHandler(unittest.TestCase):
     def test_get_recorded_secrets_filepath(self) -> None:
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Get the filepath and verify it's correct
         result = handler.get_recorded_secrets_filepath()
@@ -42,7 +49,9 @@ class TestIsTemplateDir(unittest.TestCase):
         mock_file_exists.return_value = True
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         result = handler.is_template_directory()
         self.assertTrue(result)
@@ -53,7 +62,9 @@ class TestIsTemplateDir(unittest.TestCase):
         mock_file_exists.return_value = False
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         result = handler.is_template_directory()
         self.assertFalse(result)
@@ -99,7 +110,9 @@ class TestGetTemplateVariables(unittest.TestCase):
         mock_parse_tfvars.side_effect = tfvars_side_effect
 
         # Act
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
         result = handler.get_template_variables()
 
         # Assert
@@ -131,7 +144,9 @@ class TestGetTemplateVariables(unittest.TestCase):
         mock_read_short_file.side_effect = RuntimeError("File is too large!")
 
         # Act
-        handler = TerraformVariablesHandler(project_path=Path("/mock/project"), project_manifest=Mock())
+        handler = TerraformVariablesHandler(
+            project_path=Path("/mock/project"), project_manifest=Mock(), display_manager=NullDisplay()
+        )
         with self.assertRaises(RuntimeError):
             handler.get_template_variables()
 
@@ -151,7 +166,9 @@ class TestGetTemplateVariables(unittest.TestCase):
         mock_parse_variables.return_value = {}
 
         # Act
-        handler = TerraformVariablesHandler(project_path=Path("/mock/project"), project_manifest=Mock())
+        handler = TerraformVariablesHandler(
+            project_path=Path("/mock/project"), project_manifest=Mock(), display_manager=NullDisplay()
+        )
         with self.assertRaises(RuntimeError):
             handler.get_template_variables()
 
@@ -175,7 +192,9 @@ class TestGetTemplateVariables(unittest.TestCase):
         mock_to_template_def_1.return_value = {"val": "1"}
 
         # Act
-        handler = TerraformVariablesHandler(project_path=Path("/mock/project"), project_manifest=Mock())
+        handler = TerraformVariablesHandler(
+            project_path=Path("/mock/project"), project_manifest=Mock(), display_manager=NullDisplay()
+        )
         result1 = handler.get_template_variables()
 
         # Verify-1
@@ -209,7 +228,9 @@ class TestUpdateVariablesRecord(unittest.TestCase):
         mock_get_updated_vars.return_value = ["updated_line1", "updated_line2"]
 
         # Create a handler with mocked template variables
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=Mock())
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=Mock(), display_manager=NullDisplay()
+        )
         mock_validate1 = Mock()
         mock_validate2 = Mock()
         handler._template_vars = {
@@ -245,7 +266,9 @@ class TestUpdateVariablesRecord(unittest.TestCase):
         mock_get_updated_vars.return_value = ["line1", "line2"]
 
         # Create a handler with mocked template variables
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=Mock())
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=Mock(), display_manager=NullDisplay()
+        )
         mock_validate = Mock()
         handler._template_vars = {
             "var1": Mock(validate_value=mock_validate),
@@ -267,7 +290,9 @@ class TestUpdateVariablesRecord(unittest.TestCase):
         project_path = Path("/mock/project")
 
         # Create a handler with mocked template variables
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=Mock())
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=Mock(), display_manager=NullDisplay()
+        )
 
         # Mock that will raise TypeError
         mock_var = Mock()
@@ -292,7 +317,9 @@ class TestUpdateVariablesRecord(unittest.TestCase):
         project_path = Path("/mock/project")
 
         # Create a handler with mocked template variables
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=Mock())
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=Mock(), display_manager=NullDisplay()
+        )
         handler._template_vars = {
             "var1": Mock(validate_value=Mock()),
         }
@@ -312,7 +339,9 @@ class TestUpdateVariablesRecord(unittest.TestCase):
         mock_read_file.side_effect = RuntimeError("File read error")
 
         # Create a handler with mocked template variables
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=Mock())
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=Mock(), display_manager=NullDisplay()
+        )
         handler._template_vars = {
             "var1": Mock(validate_value=Mock()),
         }
@@ -336,7 +365,9 @@ class TestUpdateVariablesRecord(unittest.TestCase):
         mock_write_file.side_effect = RuntimeError("File write error")
 
         # Create a handler with mocked template variables
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=Mock())
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=Mock(), display_manager=NullDisplay()
+        )
         handler._template_vars = {
             "var1": Mock(validate_value=Mock()),
         }
@@ -350,7 +381,9 @@ class TestUpdateVariablesRecord(unittest.TestCase):
         project_path = Path("/mock/project")
 
         # Create a handler with mocked get_template_variables
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=Mock())
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=Mock(), display_manager=NullDisplay()
+        )
         handler.get_template_variables = Mock()  # type: ignore
 
         # Execute
@@ -370,7 +403,9 @@ class TestCreateFilteredPresetFile(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Mock the retrieved variable names
         handler.get_variable_names_assigned_in_config = Mock(return_value=["var1", "var2"])  # type: ignore
@@ -400,7 +435,9 @@ class TestCreateFilteredPresetFile(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Mock the retrieved variable names
         handler.get_variable_names_assigned_in_config = Mock(return_value=["var1", "var2"])  # type: ignore
@@ -424,7 +461,9 @@ class TestCreateFilteredPresetFile(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Mock file read to raise FileNotFoundError
         mock_read_file.side_effect = FileNotFoundError("File not found")
@@ -439,7 +478,9 @@ class TestCreateFilteredPresetFile(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Mock file read to raise some other error
         mock_read_file.side_effect = RuntimeError("Error reading file")
@@ -458,7 +499,9 @@ class TestCreateFilteredPresetFile(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Mock the retrieved variable names
         handler.get_variable_names_assigned_in_config = Mock(return_value=["var1"])  # type: ignore
@@ -483,7 +526,9 @@ class TestResetRecordedVariables(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
         mock_delete_file.return_value = False  # File wasn't deleted
 
         # Execute
@@ -499,7 +544,9 @@ class TestResetRecordedVariables(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
         mock_delete_file.return_value = True  # File was deleted
         mock_parent_reset.return_value = False  # Parent didn't delete anything
 
@@ -519,7 +566,9 @@ class TestResetRecordedVariables(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
         mock_delete_file.side_effect = OSError("Permission denied")
 
         # Execute & Assert
@@ -537,7 +586,9 @@ class TestResetRecordedSecrets(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
         mock_delete_file.return_value = False  # File wasn't deleted
 
         # Execute
@@ -553,7 +604,9 @@ class TestResetRecordedSecrets(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
         mock_delete_file.return_value = True  # File was deleted
         mock_parent_reset.return_value = False  # Parent didn't delete anything
 
@@ -573,7 +626,9 @@ class TestResetRecordedSecrets(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = TerraformVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = TerraformVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
         mock_delete_file.side_effect = OSError("Permission denied")
 
         # Execute & Assert

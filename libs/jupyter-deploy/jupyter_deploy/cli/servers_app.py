@@ -31,7 +31,7 @@ def status(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = server_handler.ServerHandler(terminal_handler=simple_display_manager)
+        handler = server_handler.ServerHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Checking server status..."):
             server_status = handler.get_server_status()
@@ -59,7 +59,7 @@ def start(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = server_handler.ServerHandler(terminal_handler=simple_display_manager)
+        handler = server_handler.ServerHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Starting server..."):
             handler.start_server(service)
@@ -90,7 +90,7 @@ def stop(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = server_handler.ServerHandler(terminal_handler=simple_display_manager)
+        handler = server_handler.ServerHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Stopping server..."):
             handler.stop_server(service)
@@ -121,7 +121,7 @@ def restart(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = server_handler.ServerHandler(terminal_handler=simple_display_manager)
+        handler = server_handler.ServerHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Restarting server..."):
             handler.restart_server(service)
@@ -165,7 +165,7 @@ def logs(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = server_handler.ServerHandler(terminal_handler=simple_display_manager)
+        handler = server_handler.ServerHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Fetching logs..."):
             logs, err_logs = handler.get_server_logs(service=service, extra=extra)
@@ -223,7 +223,7 @@ def exec(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = server_handler.ServerHandler(terminal_handler=simple_display_manager)
+        handler = server_handler.ServerHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Executing command..."):
             stdout, stderr, returncode = handler.exec_command(service=service, command_args=command_args)
@@ -274,7 +274,7 @@ def connect(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = server_handler.ServerHandler(terminal_handler=simple_display_manager)
+        handler = server_handler.ServerHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Connecting to service..."):
             handler.connect(service=service)

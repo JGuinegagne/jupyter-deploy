@@ -1,6 +1,6 @@
 from jupyter_deploy.engine.engine_down import EngineDownHandler
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.engine.supervised_execution import TerminalHandler
+from jupyter_deploy.engine.supervised_execution import DisplayManager
 from jupyter_deploy.engine.terraform import tf_down
 from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
 
@@ -8,16 +8,16 @@ from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
 class DownHandler(BaseProjectHandler):
     _handler: EngineDownHandler
 
-    def __init__(self, terminal_handler: TerminalHandler) -> None:
+    def __init__(self, display_manager: DisplayManager) -> None:
         """Base class to manage the down command of a jupyter-deploy project."""
-        super().__init__(terminal_handler=terminal_handler)
+        super().__init__(display_manager=display_manager)
 
         if self.engine == EngineType.TERRAFORM:
             self._handler = tf_down.TerraformDownHandler(
                 project_path=self.project_path,
                 project_manifest=self.project_manifest,
                 command_history_handler=self.command_history_handler,
-                terminal_handler=terminal_handler,
+                display_manager=display_manager,
             )
         else:
             raise NotImplementedError(f"DownHandler implementation not found for engine: {self.engine}")

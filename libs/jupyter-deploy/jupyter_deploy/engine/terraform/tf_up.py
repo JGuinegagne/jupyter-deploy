@@ -4,7 +4,7 @@ from pathlib import Path
 
 from jupyter_deploy.engine.engine_up import EngineUpHandler
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.engine.supervised_execution import CompletionContext, TerminalHandler
+from jupyter_deploy.engine.supervised_execution import CompletionContext, DisplayManager
 from jupyter_deploy.engine.supervised_execution_callback import ExecutionCallbackInterface
 from jupyter_deploy.engine.terraform import tf_plan_metadata, tf_supervised_executor_factory
 from jupyter_deploy.engine.terraform.tf_constants import (
@@ -33,13 +33,13 @@ class TerraformUpHandler(EngineUpHandler):
         project_path: Path,
         project_manifest: JupyterDeployManifest,
         command_history_handler: CommandHistoryHandler,
-        terminal_handler: TerminalHandler | None = None,
+        display_manager: DisplayManager,
     ) -> None:
         self.engine_dir_path = project_path / TF_ENGINE_DIR
         super().__init__(project_path=project_path, engine=EngineType.TERRAFORM, engine_dir_path=self.engine_dir_path)
         self.project_manifest = project_manifest
         self.command_history_handler = command_history_handler
-        self.terminal_handler = terminal_handler
+        self.display_manager = display_manager
         self._log_file: Path | None = None
 
     def get_default_config_filename(self) -> str:
@@ -57,13 +57,13 @@ class TerraformUpHandler(EngineUpHandler):
 
         # Choose callback: full featured with progress tracking, or no-op for verbose mode
         apply_callback: ExecutionCallbackInterface
-        if self.terminal_handler:
+        if self.display_manager.is_pass_through():
+            apply_callback = TerraformNoopExecutionCallback(display_manager=self.display_manager)
+        else:
             apply_callback = TerraformSupervisedExecutionCallback(
-                terminal_handler=self.terminal_handler,
+                display_manager=self.display_manager,
                 sequence_id=TerraformSequenceId.up_apply,
             )
-        else:
-            apply_callback = TerraformNoopExecutionCallback()
 
         # Load plan metadata for dynamic progress tracking
         metadata_path = self.engine_dir_path / TF_PLAN_METADATA_FILENAME

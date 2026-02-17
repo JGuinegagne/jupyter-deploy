@@ -30,7 +30,7 @@ def set(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = organization_handler.OrganizationHandler(terminal_handler=simple_display_manager)
+        handler = organization_handler.OrganizationHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Setting organization..."):
             handler.set_organization(organization)
@@ -51,7 +51,7 @@ def unset(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = organization_handler.OrganizationHandler(terminal_handler=simple_display_manager)
+        handler = organization_handler.OrganizationHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Removing organization..."):
             handler.unset_organization()
@@ -72,7 +72,7 @@ def get(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = organization_handler.OrganizationHandler(terminal_handler=simple_display_manager)
+        handler = organization_handler.OrganizationHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Fetching organization..."):
             organization = handler.get_organization()

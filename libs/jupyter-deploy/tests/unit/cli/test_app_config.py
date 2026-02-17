@@ -4,6 +4,7 @@ from unittest.mock import ANY, Mock, patch
 from typer.testing import CliRunner
 
 from jupyter_deploy.cli.app import runner as app_runner
+from jupyter_deploy.cli.simple_display import SimpleDisplayManager
 from jupyter_deploy.exceptions import InvalidPresetError, LogCleanupError, SupervisedExecutionError
 from jupyter_deploy.verify_utils import ToolRequiredError
 
@@ -91,8 +92,8 @@ class TestConfigCommand(unittest.TestCase):
 
         # Verify
         self.assertEqual(result.exit_code, 0)
-        # Check that ConfigHandler is called with terminal_handler (ProgressDisplayManager instance)
-        mock_config_handler.assert_called_once_with(output_filename=None, terminal_handler=ANY)
+        # Check that ConfigHandler is called with display_manager (ProgressDisplayManager instance)
+        mock_config_handler.assert_called_once_with(output_filename=None, display_manager=ANY)
         mock_config_fns["has_recorded_variables"].assert_called_once()
         mock_config_fns["validate_preset"].assert_called_once_with("all")
         mock_config_fns["set_preset"].assert_called_once_with("all")
@@ -100,7 +101,7 @@ class TestConfigCommand(unittest.TestCase):
 
     @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
     def test_config_default_uses_progress_display(self, mock_config_handler: Mock) -> None:
-        """Test that config command by default creates ProgressDisplayManager for terminal_handler."""
+        """Test that config command by default creates ProgressDisplayManager for display_manager."""
         mock_config_handler_instance, _ = self.get_mock_config_handler()
         mock_config_handler.return_value = mock_config_handler_instance
 
@@ -110,13 +111,13 @@ class TestConfigCommand(unittest.TestCase):
 
         # Verify
         self.assertEqual(result.exit_code, 0)
-        # terminal_handler should be a ProgressDisplayManager instance (not None)
+        # display_manager should be a ProgressDisplayManager instance (not None)
         call_kwargs = mock_config_handler.call_args.kwargs
-        self.assertIsNotNone(call_kwargs["terminal_handler"])
+        self.assertIsNotNone(call_kwargs["display_manager"])
 
     @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
-    def test_config_with_verbose_uses_no_terminal_handler(self, mock_config_handler: Mock) -> None:
-        """Test that config with --verbose passes None as terminal_handler."""
+    def test_config_with_verbose_uses_simple_display_manager(self, mock_config_handler: Mock) -> None:
+        """Test that config with --verbose uses SimpleDisplayManager in pass-through mode."""
         mock_config_handler_instance, _ = self.get_mock_config_handler()
         mock_config_handler.return_value = mock_config_handler_instance
 
@@ -126,8 +127,11 @@ class TestConfigCommand(unittest.TestCase):
 
         # Verify
         self.assertEqual(result.exit_code, 0)
-        # terminal_handler should be None when verbose is True
-        mock_config_handler.assert_called_once_with(output_filename=None, terminal_handler=None)
+        # display_manager should be SimpleDisplayManager when verbose is True
+        mock_config_handler.assert_called_once()
+        call_kwargs = mock_config_handler.call_args.kwargs
+        self.assertEqual(call_kwargs["output_filename"], None)
+        self.assertIsInstance(call_kwargs["display_manager"], SimpleDisplayManager)
 
     @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
     def test_config_passes_no_preset_when_user_passes_none(self, mock_config_handler: Mock) -> None:
@@ -140,7 +144,7 @@ class TestConfigCommand(unittest.TestCase):
 
         # Verify
         self.assertEqual(result.exit_code, 0)
-        mock_config_handler.assert_called_once_with(output_filename=None, terminal_handler=ANY)
+        mock_config_handler.assert_called_once_with(output_filename=None, display_manager=ANY)
         mock_config_fns["has_recorded_variables"].assert_called_once()
         mock_config_fns["validate_preset"].assert_not_called()  # None preset doesn't need validation
         mock_config_fns["set_preset"].assert_called_once_with(None)
@@ -157,7 +161,7 @@ class TestConfigCommand(unittest.TestCase):
 
         # Verify
         self.assertEqual(result.exit_code, 0)
-        mock_config_handler.assert_called_once_with(output_filename=None, terminal_handler=ANY)
+        mock_config_handler.assert_called_once_with(output_filename=None, display_manager=ANY)
         mock_config_fns["has_recorded_variables"].assert_called_once()
         mock_config_fns["validate_preset"].assert_called_once_with("some-preset")
         mock_config_fns["set_preset"].assert_called_once_with("some-preset")

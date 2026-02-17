@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from jupyter_deploy import constants
 from jupyter_deploy.engine.engine_variables import EngineVariablesHandler
+from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
 from jupyter_deploy.exceptions import InvalidVariablesDotYamlError
 from jupyter_deploy.variables_config import (
@@ -54,7 +55,9 @@ class TestVariablesConfigProperty(unittest.TestCase):
         # Verify that _variables_config is None after initialization
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         self.assertIsNone(handler._variables_config)
 
@@ -63,7 +66,9 @@ class TestVariablesConfigProperty(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         mock_config = Mock(spec=JupyterDeployVariablesConfig)
         mock_retrieve.return_value = mock_config
@@ -81,7 +86,9 @@ class TestVariablesConfigProperty(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         mock_config = Mock(spec=JupyterDeployVariablesConfig)
         mock_retrieve.return_value = mock_config
@@ -100,7 +107,9 @@ class TestVariablesConfigProperty(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Mock retrieve to raise FileNotFoundError
         mock_retrieve.side_effect = FileNotFoundError("File not found")
@@ -117,7 +126,9 @@ class TestVariablesConfigProperty(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Mock retrieve to raise ValidationError
         mock_retrieve.side_effect = ValidationError.from_exception_data("Validation error", [])
@@ -134,7 +145,9 @@ class TestVariablesConfigProperty(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Mock retrieve to raise InvalidVariablesDotYamlError
         mock_retrieve.side_effect = InvalidVariablesDotYamlError("Invalid variables config")
@@ -152,7 +165,9 @@ class TestSyncEngineVarfilesWithProjectVariablesConfig(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Mock the handler's update_variable_records method
         with patch.object(handler, "update_variable_records") as mock_update_records:
@@ -176,7 +191,9 @@ class TestSyncEngineVarfilesWithProjectVariablesConfig(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Mock the handler's update_variable_records method
         with patch.object(handler, "update_variable_records") as mock_update_records:
@@ -200,7 +217,9 @@ class TestSyncEngineVarfilesWithProjectVariablesConfig(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Mock the handler's update_variable_records method
         with patch.object(handler, "update_variable_records") as mock_update_records:
@@ -225,7 +244,9 @@ class TestSyncEngineVarfilesWithProjectVariablesConfig(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Mock the handler's update_variable_records method to raise an exception
         with patch.object(handler, "update_variable_records", side_effect=ValueError("Test error")):
@@ -248,7 +269,9 @@ class TestGetVariableNamesAssignedInConfig(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Create a mock variables_config with a mix of None and non-None values
         mock_config = Mock(spec=JupyterDeployVariablesConfig)
@@ -277,7 +300,9 @@ class TestGetVariableNamesAssignedInConfig(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Create a mock variables_config with empty dictionaries
         mock_config = Mock(spec=JupyterDeployVariablesConfig)
@@ -298,7 +323,9 @@ class TestGetVariableNamesAssignedInConfig(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Create a mock variables_config with all None values
         mock_config = Mock(spec=JupyterDeployVariablesConfig)
@@ -319,7 +346,9 @@ class TestGetVariableNamesAssignedInConfig(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Create a mock variables_config with defaults that have non-None values
         mock_config = Mock(spec=JupyterDeployVariablesConfig)
@@ -349,7 +378,9 @@ class TestSyncProjectVariablesConfig(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Create a mock variables_config
         mock_config = Mock(spec=JupyterDeployVariablesConfig)
@@ -388,7 +419,9 @@ class TestSyncProjectVariablesConfig(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Create a mock variables_config
         mock_config = Mock(spec=JupyterDeployVariablesConfig)
@@ -424,7 +457,9 @@ class TestSyncProjectVariablesConfig(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Create a mock variables_config
         mock_config = Mock(spec=JupyterDeployVariablesConfig)
@@ -460,7 +495,9 @@ class TestResetRecordedVariables(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Create a mock variables_config with some values
         mock_config = Mock(spec=JupyterDeployVariablesConfig)
@@ -497,7 +534,9 @@ class TestResetRecordedVariables(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Create a mock variables_config
         mock_config = Mock(spec=JupyterDeployVariablesConfig)
@@ -523,7 +562,9 @@ class TestResetRecordedVariables(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Create a mock variables_config
         mock_config = Mock(spec=JupyterDeployVariablesConfig)
@@ -549,7 +590,9 @@ class TestResetRecordedSecrets(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Create a mock variables_config with some values
         mock_config = Mock(spec=JupyterDeployVariablesConfig)
@@ -592,7 +635,9 @@ class TestResetRecordedSecrets(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Create a mock variables_config
         mock_config = Mock(spec=JupyterDeployVariablesConfig)
@@ -618,7 +663,9 @@ class TestResetRecordedSecrets(unittest.TestCase):
         # Setup
         project_path = Path("/mock/project")
         manifest = Mock()
-        handler = DummyVariablesHandler(project_path=project_path, project_manifest=manifest)
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
 
         # Create a mock variables_config
         mock_config = Mock(spec=JupyterDeployVariablesConfig)

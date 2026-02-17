@@ -1,5 +1,6 @@
 from jupyter_deploy.engine.engine_outputs import EngineOutputsHandler
 from jupyter_deploy.engine.outdefs import StrTemplateOutputDefinition
+from jupyter_deploy.engine.supervised_execution import DisplayManager
 from jupyter_deploy.provider.enum import ProviderType
 from jupyter_deploy.provider.instruction_runner import InstructionRunner
 
@@ -13,7 +14,9 @@ class InstructionRunnerFactory:
     _provider_runner_map: dict[ProviderType, InstructionRunner] = {}
 
     @staticmethod
-    def get_provider_instruction_runner(api_name: str, outputs_handler: EngineOutputsHandler) -> InstructionRunner:
+    def get_provider_instruction_runner(
+        api_name: str, outputs_handler: EngineOutputsHandler, display_manager: DisplayManager
+    ) -> InstructionRunner:
         """Return the instruction runner for the cloud provider.
 
         Raises:
@@ -30,7 +33,7 @@ class InstructionRunnerFactory:
             # do NOT move import to top level
             from jupyter_deploy.provider.aws import aws_runner
 
-            provider_runner = aws_runner.AwsApiRunner(region_name=aws_region_def.value)
+            provider_runner = aws_runner.AwsApiRunner(display_manager=display_manager, region_name=aws_region_def.value)
             InstructionRunnerFactory._provider_runner_map[provider] = provider_runner
             return provider_runner
 
