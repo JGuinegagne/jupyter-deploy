@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.handlers.project.up_handler import UpHandler
 from jupyter_deploy.manifest import JupyterDeployManifestV1
 
@@ -31,23 +32,23 @@ class TestUpHandler(unittest.TestCase):
         mock_tf_handler_cls.return_value = mock_tf_handler
         mock_tf_handler.engine_dir_path = Path("/mock/cwd/engine")
 
-        handler = UpHandler()
+        handler = UpHandler(display_manager=NullDisplay())
 
         # Verify TerraformUpHandler was called with correct arguments
         call_args = mock_tf_handler_cls.call_args
         self.assertEqual(call_args.kwargs["project_path"], Path("/mock/cwd"))
         self.assertEqual(call_args.kwargs["project_manifest"], self.mock_manifest)
         self.assertIsNotNone(call_args.kwargs["command_history_handler"])
-        self.assertIsNone(call_args.kwargs["terminal_handler"])
+        self.assertIsInstance(call_args.kwargs["display_manager"], NullDisplay)
         self.assertEqual(handler._handler, mock_tf_handler)
 
     @patch("jupyter_deploy.engine.terraform.tf_up.TerraformUpHandler")
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("pathlib.Path.cwd")
-    def test_init_passes_terminal_handler_to_terraform_handler(
+    def test_init_passes_display_manager_to_terraform_handler(
         self, mock_cwd: Mock, mock_retrieve_manifest: Mock, mock_tf_handler_cls: Mock
     ) -> None:
-        """Test that a non-None terminal_handler is passed through to TerraformUpHandler."""
+        """Test that a non-None display_manager is passed through to TerraformUpHandler."""
         mock_cwd.return_value = Path("/mock/cwd")
         mock_retrieve_manifest.return_value = self.mock_manifest
         mock_tf_handler = Mock()
@@ -55,16 +56,16 @@ class TestUpHandler(unittest.TestCase):
         mock_tf_handler.engine_dir_path = Path("/mock/cwd/engine")
 
         # Create a mock terminal handler
-        mock_terminal_handler = Mock()
+        mock_display_manager = Mock()
 
-        handler = UpHandler(terminal_handler=mock_terminal_handler)
+        handler = UpHandler(display_manager=mock_display_manager)
 
-        # Verify TerraformUpHandler was called with the terminal_handler
+        # Verify TerraformUpHandler was called with the display_manager
         call_args = mock_tf_handler_cls.call_args
         self.assertEqual(call_args.kwargs["project_path"], Path("/mock/cwd"))
         self.assertEqual(call_args.kwargs["project_manifest"], self.mock_manifest)
         self.assertIsNotNone(call_args.kwargs["command_history_handler"])
-        self.assertEqual(call_args.kwargs["terminal_handler"], mock_terminal_handler)
+        self.assertEqual(call_args.kwargs["display_manager"], mock_display_manager)
         self.assertEqual(handler._handler, mock_tf_handler)
 
     @patch("jupyter_deploy.engine.terraform.tf_up.TerraformUpHandler")
@@ -80,7 +81,7 @@ class TestUpHandler(unittest.TestCase):
         mock_tf_handler_cls.return_value = mock_tf_handler
         mock_tf_handler.engine_dir_path = Path("/mock/cwd/engine")
 
-        handler = UpHandler()
+        handler = UpHandler(display_manager=NullDisplay())
         handler.apply(path, auto_approve=False)
 
         mock_tf_handler.apply.assert_called_once_with(path, False)
@@ -99,7 +100,7 @@ class TestUpHandler(unittest.TestCase):
         mock_tf_handler.engine_dir_path = Path("/mock/cwd/engine")
         mock_tf_handler_cls.return_value = mock_tf_handler
 
-        handler = UpHandler()
+        handler = UpHandler(display_manager=NullDisplay())
 
         with self.assertRaises(Exception) as context:
             handler.apply(path)
@@ -120,7 +121,7 @@ class TestUpHandler(unittest.TestCase):
         mock_tf_handler.get_default_config_filename.return_value = "jdout-tfplan"
         mock_tf_handler_cls.return_value = mock_tf_handler
 
-        handler = UpHandler()
+        handler = UpHandler(display_manager=NullDisplay())
         result = handler.get_default_config_filename()
 
         mock_tf_handler.get_default_config_filename.assert_called_once()
@@ -136,7 +137,7 @@ class TestUpHandler(unittest.TestCase):
         mock_retrieve_manifest.return_value = mock_manifest
 
         with self.assertRaises(ValueError):
-            UpHandler()
+            UpHandler(display_manager=NullDisplay())
 
     @patch("jupyter_deploy.engine.terraform.tf_up.TerraformUpHandler")
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
@@ -155,7 +156,7 @@ class TestUpHandler(unittest.TestCase):
         mock_tf_handler_cls.return_value = mock_tf_handler
 
         with patch.object(Path, "exists", return_value=True):
-            handler = UpHandler()
+            handler = UpHandler(display_manager=NullDisplay())
             result = handler.get_config_file_path("test-config")
 
         self.assertEqual(result, Path("/mock/cwd/engine/test-config"))
@@ -179,7 +180,7 @@ class TestUpHandler(unittest.TestCase):
         mock_tf_handler_cls.return_value = mock_tf_handler
 
         with patch.object(Path, "exists", return_value=False):
-            handler = UpHandler()
+            handler = UpHandler(display_manager=NullDisplay())
             with self.assertRaises(FileNotFoundError) as context:
                 handler.get_config_file_path("test-config")
 

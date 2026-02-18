@@ -32,7 +32,7 @@ class TestTerraformDownHandler(unittest.TestCase):
         mock_manifest.get_engine = mock_get_engine
         return mock_manifest, {"get_engine": mock_get_engine}
 
-    def get_mock_terminal_handler(self) -> Mock:
+    def get_mock_display_manager(self) -> Mock:
         """Return a mock terminal handler (non-pass-through mode)."""
         mock_handler = Mock()
         mock_handler.is_pass_through.return_value = False
@@ -50,7 +50,7 @@ class TestTerraformDownHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
-            terminal_handler=self.get_mock_terminal_handler(),
+            display_manager=self.get_mock_display_manager(),
         )
 
         self.assertEqual(handler.project_path, project_path)
@@ -68,7 +68,7 @@ class TestTerraformDownHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
-            terminal_handler=self.get_mock_terminal_handler(),
+            display_manager=self.get_mock_display_manager(),
         )
 
         # Mock the executor
@@ -92,7 +92,7 @@ class TestTerraformDownHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
-            terminal_handler=self.get_mock_terminal_handler(),
+            display_manager=self.get_mock_display_manager(),
         )
 
         # Mock the executor to return error
@@ -117,7 +117,7 @@ class TestTerraformDownHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
-            terminal_handler=self.get_mock_terminal_handler(),
+            display_manager=self.get_mock_display_manager(),
         )
 
         # Mock the executor to raise an exception
@@ -141,7 +141,7 @@ class TestTerraformDownHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
-            terminal_handler=self.get_mock_terminal_handler(),
+            display_manager=self.get_mock_display_manager(),
         )
 
         # Mock the executor
@@ -164,12 +164,12 @@ class TestTerraformDownHandler(unittest.TestCase):
         mock_manifest, _ = self.get_mock_manifest_and_fns()
         mock_history_handler = Mock()
         mock_history_handler.create_log_file.return_value = Path("/mock/log.log")
-        mock_terminal_handler = self.get_mock_terminal_handler()
+        mock_display_manager = self.get_mock_display_manager()
         handler = TerraformDownHandler(
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
-            terminal_handler=mock_terminal_handler,
+            display_manager=mock_display_manager,
         )
 
         # Mock the get_persisting_resources method to return resources
@@ -189,10 +189,10 @@ class TestTerraformDownHandler(unittest.TestCase):
         # Verify dry-run was NOT called (fail fast)
         mock_cmd_utils.run_cmd_and_capture_output.assert_not_called()
 
-        # Verify terminal_handler calls were NOT made (fails before dry-run)
-        mock_terminal_handler.info.assert_not_called()
-        mock_terminal_handler.warning.assert_not_called()
-        mock_terminal_handler.success.assert_not_called()
+        # Verify display_manager calls were NOT made (fails before dry-run)
+        mock_display_manager.info.assert_not_called()
+        mock_display_manager.warning.assert_not_called()
+        mock_display_manager.success.assert_not_called()
 
     @patch("jupyter_deploy.engine.terraform.tf_down.tf_supervised_executor_factory.create_terraform_executor")
     @patch("jupyter_deploy.engine.terraform.tf_down.cmd_utils")
@@ -205,12 +205,12 @@ class TestTerraformDownHandler(unittest.TestCase):
         mock_manifest, _ = self.get_mock_manifest_and_fns()
         mock_history_handler = Mock()
         mock_history_handler.create_log_file.return_value = Path("/mock/log.log")
-        mock_terminal_handler = self.get_mock_terminal_handler()
+        mock_display_manager = self.get_mock_display_manager()
         handler = TerraformDownHandler(
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
-            terminal_handler=mock_terminal_handler,
+            display_manager=mock_display_manager,
         )
 
         # Mock the get_persisting_resources method to return resources
@@ -251,11 +251,11 @@ class TestTerraformDownHandler(unittest.TestCase):
         self.assertIn("destroy", destroy_call_args)
         self.assertIn("-auto-approve", destroy_call_args)
 
-        # Verify terminal_handler calls
-        mock_terminal_handler.info.assert_any_call("Running dry-run to detach resources from terraform state...")
-        mock_terminal_handler.success.assert_any_call("Dry-run succeeded.")
-        mock_terminal_handler.info.assert_any_call("Removing persisting resources from the Terraform state...")
-        mock_terminal_handler.success.assert_any_call("Removed the persisting resources from the Terraform state.")
+        # Verify display_manager calls
+        mock_display_manager.info.assert_any_call("Running dry-run to detach resources from terraform state...")
+        mock_display_manager.success.assert_any_call("Dry-run succeeded.")
+        mock_display_manager.info.assert_any_call("Removing persisting resources from the Terraform state...")
+        mock_display_manager.success.assert_any_call("Removed the persisting resources from the Terraform state.")
 
     @patch("jupyter_deploy.engine.terraform.tf_down.cmd_utils")
     def test_destroy_raises_on_failed_dryrun(self, mock_cmd_utils: Mock) -> None:
@@ -264,12 +264,12 @@ class TestTerraformDownHandler(unittest.TestCase):
         mock_manifest, _ = self.get_mock_manifest_and_fns()
         mock_history_handler = Mock()
         mock_history_handler.create_log_file.return_value = Path("/mock/log.log")
-        mock_terminal_handler = self.get_mock_terminal_handler()
+        mock_display_manager = self.get_mock_display_manager()
         handler = TerraformDownHandler(
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
-            terminal_handler=mock_terminal_handler,
+            display_manager=mock_display_manager,
         )
 
         # Mock the get_persisting_resources method to return resources
@@ -292,14 +292,12 @@ class TestTerraformDownHandler(unittest.TestCase):
         # Verify we don't proceed with terraform state rm or destroy
         mock_cmd_utils.run_cmd_and_pipe_to_terminal.assert_not_called()
 
-        # Verify terminal_handler calls
-        mock_terminal_handler.info.assert_called_once_with(
-            "Running dry-run to detach resources from terraform state..."
-        )
-        mock_terminal_handler.warning.assert_any_call(
+        # Verify display_manager calls
+        mock_display_manager.info.assert_called_once_with("Running dry-run to detach resources from terraform state...")
+        mock_display_manager.warning.assert_any_call(
             "Error performing dry-run of removing resources from Terraform state."
         )
-        self.assertEqual(mock_terminal_handler.warning.call_count, 2)  # Called twice (error + details)
+        self.assertEqual(mock_display_manager.warning.call_count, 2)  # Called twice (error + details)
 
     @patch("jupyter_deploy.engine.terraform.tf_down.tf_supervised_executor_factory.create_terraform_executor")
     @patch("jupyter_deploy.engine.terraform.tf_down.cmd_utils")
@@ -312,12 +310,12 @@ class TestTerraformDownHandler(unittest.TestCase):
         mock_manifest, _ = self.get_mock_manifest_and_fns()
         mock_history_handler = Mock()
         mock_history_handler.create_log_file.return_value = Path("/mock/log.log")
-        mock_terminal_handler = self.get_mock_terminal_handler()
+        mock_display_manager = self.get_mock_display_manager()
         handler = TerraformDownHandler(
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
-            terminal_handler=mock_terminal_handler,
+            display_manager=mock_display_manager,
         )
 
         # Mock the get_persisting_resources method to return resources
@@ -347,10 +345,10 @@ class TestTerraformDownHandler(unittest.TestCase):
         self.assertEqual(context.exception.retcode, 1)
         self.assertEqual(context.exception.command, "down")
 
-        # Verify terminal_handler calls (dry-run succeeded, but removal failed)
-        mock_terminal_handler.info.assert_any_call("Running dry-run to detach resources from terraform state...")
-        mock_terminal_handler.success.assert_any_call("Dry-run succeeded.")
-        mock_terminal_handler.info.assert_any_call("Removing persisting resources from the Terraform state...")
+        # Verify display_manager calls (dry-run succeeded, but removal failed)
+        mock_display_manager.info.assert_any_call("Running dry-run to detach resources from terraform state...")
+        mock_display_manager.success.assert_any_call("Dry-run succeeded.")
+        mock_display_manager.info.assert_any_call("Removing persisting resources from the Terraform state...")
 
     @patch("jupyter_deploy.engine.terraform.tf_down.tf_supervised_executor_factory.create_terraform_executor")
     @patch("jupyter_deploy.engine.terraform.tf_down.fs_utils")
@@ -365,7 +363,7 @@ class TestTerraformDownHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
-            terminal_handler=self.get_mock_terminal_handler(),
+            display_manager=self.get_mock_display_manager(),
         )
         engine_path = project_path / "engine"
 
@@ -407,7 +405,7 @@ class TestTerraformDownHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
-            terminal_handler=self.get_mock_terminal_handler(),
+            display_manager=self.get_mock_display_manager(),
         )
 
         # Mock fs_utils to indicate that destroy.tfvars does NOT exist
@@ -432,10 +430,10 @@ class TestTerraformDownHandler(unittest.TestCase):
 
     @patch("jupyter_deploy.engine.terraform.tf_down.TerraformSupervisedExecutionCallback")
     @patch("jupyter_deploy.engine.terraform.tf_down.tf_supervised_executor_factory.create_terraform_executor")
-    def test_destroy_with_terminal_handler_uses_supervised_callback(
+    def test_destroy_with_display_manager_uses_supervised_callback(
         self, mock_create_executor: Mock, mock_callback_cls: Mock
     ) -> None:
-        """Test that destroy with terminal_handler uses TerraformSupervisedExecutionCallback."""
+        """Test that destroy with display_manager uses TerraformSupervisedExecutionCallback."""
         project_path = Path("/mock/project")
         mock_manifest, _ = self.get_mock_manifest_and_fns()
         mock_history_handler = Mock()
@@ -450,13 +448,13 @@ class TestTerraformDownHandler(unittest.TestCase):
         mock_callback = Mock()
         mock_callback_cls.return_value = mock_callback
 
-        # Create handler WITH terminal_handler
-        mock_terminal_handler = self.get_mock_terminal_handler()
+        # Create handler WITH display_manager
+        mock_display_manager = self.get_mock_display_manager()
         handler = TerraformDownHandler(
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
-            terminal_handler=mock_terminal_handler,
+            display_manager=mock_display_manager,
         )
 
         # Act
@@ -465,7 +463,7 @@ class TestTerraformDownHandler(unittest.TestCase):
         # Assert
         # Verify TerraformSupervisedExecutionCallback was created (once for destroy)
         mock_callback_cls.assert_called_once_with(
-            terminal_handler=mock_terminal_handler,
+            display_manager=mock_display_manager,
             sequence_id=TerraformSequenceId.down_destroy,
         )
 
@@ -475,10 +473,10 @@ class TestTerraformDownHandler(unittest.TestCase):
 
     @patch("jupyter_deploy.engine.terraform.tf_down.TerraformSupervisedExecutionCallback")
     @patch("jupyter_deploy.engine.terraform.tf_down.tf_supervised_executor_factory.create_terraform_executor")
-    def test_destroy_with_terminal_handler_handles_error(
+    def test_destroy_with_display_manager_handles_error(
         self, mock_create_executor: Mock, mock_callback_cls: Mock
     ) -> None:
-        """Test that destroy with terminal_handler properly raises ExecutionError on failure."""
+        """Test that destroy with display_manager properly raises ExecutionError on failure."""
         project_path = Path("/mock/project")
         mock_manifest, _ = self.get_mock_manifest_and_fns()
         mock_history_handler = Mock()
@@ -493,13 +491,13 @@ class TestTerraformDownHandler(unittest.TestCase):
         mock_callback = Mock()
         mock_callback_cls.return_value = mock_callback
 
-        # Create handler WITH terminal_handler
-        mock_terminal_handler = self.get_mock_terminal_handler()
+        # Create handler WITH display_manager
+        mock_display_manager = self.get_mock_display_manager()
         handler = TerraformDownHandler(
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
-            terminal_handler=mock_terminal_handler,
+            display_manager=mock_display_manager,
         )
 
         # Act & Assert
@@ -511,7 +509,7 @@ class TestTerraformDownHandler(unittest.TestCase):
 
         # Verify TerraformSupervisedExecutionCallback was created
         mock_callback_cls.assert_called_once_with(
-            terminal_handler=mock_terminal_handler,
+            display_manager=mock_display_manager,
             sequence_id=TerraformSequenceId.down_destroy,
         )
 
@@ -544,7 +542,7 @@ class TestTerraformDownHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
-            terminal_handler=self.get_mock_terminal_handler(),
+            display_manager=self.get_mock_display_manager(),
         )
 
         # Act
@@ -578,7 +576,7 @@ class TestTerraformDownHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
-            terminal_handler=self.get_mock_terminal_handler(),
+            display_manager=self.get_mock_display_manager(),
         )
 
         # Act & Assert - should raise ExecutionError
@@ -613,7 +611,7 @@ class TestTerraformDownHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
-            terminal_handler=self.get_mock_terminal_handler(),
+            display_manager=self.get_mock_display_manager(),
         )
 
         # Act & Assert - should raise LogCleanupError from clear_logs

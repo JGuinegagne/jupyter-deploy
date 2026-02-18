@@ -1,7 +1,7 @@
 from jupyter_deploy import verify_utils
 from jupyter_deploy.engine.engine_config import EngineConfigHandler
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.engine.supervised_execution import CompletionContext, TerminalHandler
+from jupyter_deploy.engine.supervised_execution import CompletionContext, DisplayManager
 from jupyter_deploy.engine.terraform import tf_config
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
 from jupyter_deploy.exceptions import InvalidPresetError
@@ -11,9 +11,9 @@ from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
 class ConfigHandler(BaseProjectHandler):
     _handler: EngineConfigHandler
 
-    def __init__(self, output_filename: str | None = None, terminal_handler: TerminalHandler | None = None) -> None:
+    def __init__(self, display_manager: DisplayManager, output_filename: str | None = None) -> None:
         """Base class to manage the configuration of a jupyter-deploy project."""
-        super().__init__(terminal_handler=terminal_handler)
+        super().__init__(display_manager=display_manager)
         self.preset_name: str | None = None
 
         if self.engine == EngineType.TERRAFORM:
@@ -22,7 +22,7 @@ class ConfigHandler(BaseProjectHandler):
                 project_manifest=self.project_manifest,
                 command_history_handler=self.command_history_handler,
                 output_filename=output_filename,
-                terminal_handler=terminal_handler,
+                display_manager=display_manager,
             )
         else:
             raise NotImplementedError(f"ConfigHandler implementation not found for engine: {self.engine}")

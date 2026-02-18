@@ -120,7 +120,7 @@ class TestManifestCommandRunner(unittest.TestCase):
             return_value=mock_runner,
         ):
             runner = ManifestCommandRunner(
-                terminal_handler=console_mock,
+                display_manager=console_mock,
                 output_handler=output_handler_mock,
                 variable_handler=variable_handler_mock,
             )
@@ -135,11 +135,11 @@ class TestManifestCommandRunner(unittest.TestCase):
 
         # Act
         runner = ManifestCommandRunner(
-            terminal_handler=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
+            display_manager=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
         )
 
         # Assert
-        self.assertEqual(runner._terminal_handler, console_mock)
+        self.assertEqual(runner._display_manager, console_mock)
         self.assertEqual(runner._output_handler, output_handler_mock)
 
     @patch("jupyter_deploy.provider.manifest_command_runner.InstructionRunnerFactory.get_provider_instruction_runner")
@@ -166,7 +166,7 @@ class TestManifestCommandRunner(unittest.TestCase):
 
         # Act
         runner = ManifestCommandRunner(
-            terminal_handler=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
+            display_manager=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
         )
         success, results = runner.run_command_sequence(cmd, mock_cliparam_defs)
 
@@ -204,7 +204,7 @@ class TestManifestCommandRunner(unittest.TestCase):
 
         # Act
         runner = ManifestCommandRunner(
-            terminal_handler=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
+            display_manager=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
         )
         success, results = runner.run_command_sequence(cmd, mock_cliparam_defs)
 
@@ -259,7 +259,7 @@ class TestManifestCommandRunner(unittest.TestCase):
 
         # Act
         runner = ManifestCommandRunner(
-            terminal_handler=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
+            display_manager=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
         )
         success, results = runner.run_command_sequence(cmd, mock_cliparam_defs)
 
@@ -268,8 +268,12 @@ class TestManifestCommandRunner(unittest.TestCase):
 
         # Assert
         # Verify that the factory was called with the correct API names
-        mock_get_provider_instruction_runner.assert_any_call("hr.questions.ask-nicely", output_handler_mock)
-        mock_get_provider_instruction_runner.assert_any_call("life.celebration.create-event", output_handler_mock)
+        mock_get_provider_instruction_runner.assert_any_call(
+            "hr.questions.ask-nicely", output_handler_mock, console_mock
+        )
+        mock_get_provider_instruction_runner.assert_any_call(
+            "life.celebration.create-event", output_handler_mock, console_mock
+        )
         self.assertEqual(mock_get_provider_instruction_runner.call_count, 2)
 
     @patch("jupyter_deploy.provider.manifest_command_runner.InstructionRunnerFactory.get_provider_instruction_runner")
@@ -291,7 +295,7 @@ class TestManifestCommandRunner(unittest.TestCase):
 
         # Act
         runner = ManifestCommandRunner(
-            terminal_handler=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
+            display_manager=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
         )
         success, results = runner.run_command_sequence(cmd, mock_cliparam_defs)
 
@@ -336,7 +340,7 @@ class TestManifestCommandRunner(unittest.TestCase):
 
         # Act
         runner = ManifestCommandRunner(
-            terminal_handler=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
+            display_manager=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
         )
         success, results = runner.run_command_sequence(cmd, mock_cliparam_defs)
 
@@ -388,7 +392,7 @@ class TestManifestCommandRunner(unittest.TestCase):
 
         # Act
         runner = ManifestCommandRunner(
-            terminal_handler=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
+            display_manager=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
         )
         success, results = runner.run_command_sequence(cmd, mock_cliparam_defs)
 
@@ -425,7 +429,7 @@ class TestManifestCommandRunner(unittest.TestCase):
 
         # Act
         runner = ManifestCommandRunner(
-            terminal_handler=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
+            display_manager=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
         )
         success, results = runner.run_command_sequence(cmd, mock_cliparam_defs)
 
@@ -466,7 +470,7 @@ class TestManifestCommandRunner(unittest.TestCase):
 
         # Act
         runner = ManifestCommandRunner(
-            terminal_handler=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
+            display_manager=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
         )
         success, results = runner.run_command_sequence(cmd, mock_cliparam_defs)
         self.assertTrue(success)
@@ -510,7 +514,7 @@ class TestManifestCommandRunner(unittest.TestCase):
 
         # Act
         runner = ManifestCommandRunner(
-            terminal_handler=console_mock, output_handler=output_handler_mock, variable_handler=variable_handler_mock
+            display_manager=console_mock, output_handler=output_handler_mock, variable_handler=variable_handler_mock
         )
         success, results = runner.run_command_sequence(cmd, mock_cliparam_defs)
         self.assertTrue(success)
@@ -548,7 +552,7 @@ class TestManifestCommandRunner(unittest.TestCase):
 
         # Act
         runner = ManifestCommandRunner(
-            terminal_handler=console_mock, output_handler=output_handler_mock, variable_handler=variable_handler_mock
+            display_manager=console_mock, output_handler=output_handler_mock, variable_handler=variable_handler_mock
         )
         success, results = runner.run_command_sequence(cmd, mock_cliparam_defs)
         self.assertTrue(success)
@@ -595,7 +599,7 @@ class TestManifestCommandRunner(unittest.TestCase):
 
         # Act
         runner = ManifestCommandRunner(
-            terminal_handler=console_mock, output_handler=output_handler_mock, variable_handler=variable_handler_mock
+            display_manager=console_mock, output_handler=output_handler_mock, variable_handler=variable_handler_mock
         )
         success, results = runner.run_command_sequence(cmd, mock_cliparam_defs)
 
@@ -624,7 +628,7 @@ class TestManifestCommandRunner(unittest.TestCase):
 
         # Act & Assert - exception should bubble up
         runner = ManifestCommandRunner(
-            terminal_handler=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
+            display_manager=console_mock, output_handler=output_handler_mock, variable_handler=Mock()
         )
         with self.assertRaises(InstructionError):
             runner.run_command_sequence(cmd, mock_cliparam_defs)

@@ -14,6 +14,7 @@ from jupyter_deploy.api.aws.ec2.ec2_instance import (
     start_instance,
     stop_instance,
 )
+from jupyter_deploy.engine.supervised_execution import NullDisplay
 
 
 class TestEc2InstanceStateEnum(unittest.TestCase):
@@ -211,7 +212,9 @@ class TestPollInstanceStatus(unittest.TestCase):
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "running", "Code": 16}}
 
         # Execute
-        poll_for_instance_status(mock_ec2_client, "i-123", Ec2InstanceState.RUNNING, wait_after_seconds=5)
+        poll_for_instance_status(
+            mock_ec2_client, "i-123", Ec2InstanceState.RUNNING, NullDisplay(), wait_after_seconds=5
+        )
 
         # Verify
         mock_sleep.assert_called_with(5)
@@ -224,7 +227,7 @@ class TestPollInstanceStatus(unittest.TestCase):
         mock_describe_instance_status.return_value = {"InstanceState": {"Name": "running", "Code": 16}}
 
         # Execute
-        poll_for_instance_status(mock_ec2_client, "i-123", Ec2InstanceState.RUNNING)
+        poll_for_instance_status(mock_ec2_client, "i-123", Ec2InstanceState.RUNNING, NullDisplay())
 
         # Verify
         mock_sleep.assert_called_once()
@@ -241,7 +244,7 @@ class TestPollInstanceStatus(unittest.TestCase):
         mock_describe_instance_status.return_value = instance_status
 
         # Execute
-        result = poll_for_instance_status(mock_ec2_client, "i-123", Ec2InstanceState.RUNNING)
+        result = poll_for_instance_status(mock_ec2_client, "i-123", Ec2InstanceState.RUNNING, NullDisplay())
 
         # Verify
         self.assertEqual(result, instance_status)
@@ -256,7 +259,7 @@ class TestPollInstanceStatus(unittest.TestCase):
 
         # Execute & Assert
         with self.assertRaises(ValueError) as context:
-            poll_for_instance_status(mock_ec2_client, "i-123", Ec2InstanceState.RUNNING)
+            poll_for_instance_status(mock_ec2_client, "i-123", Ec2InstanceState.RUNNING, NullDisplay())
 
         mock_sleep.assert_called_once()
         self.assertIn("Unexpected terminal state", str(context.exception))
@@ -278,6 +281,7 @@ class TestPollInstanceStatus(unittest.TestCase):
                 mock_ec2_client,
                 "i-123",
                 Ec2InstanceState.RUNNING,
+                NullDisplay(),
                 timeout_seconds=10,  # Less than the time difference (100)
             )
 
@@ -307,6 +311,7 @@ class TestPollInstanceStatus(unittest.TestCase):
             mock_ec2_client,
             "i-123",
             Ec2InstanceState.RUNNING,
+            NullDisplay(),
             timeout_seconds=100,
             poll_interval_seconds=2,
         )

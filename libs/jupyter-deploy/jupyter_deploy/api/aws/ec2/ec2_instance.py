@@ -15,7 +15,7 @@ from mypy_boto3_ec2.type_defs import (
     StopInstancesRequestTypeDef,
 )
 
-from jupyter_deploy.engine.supervised_execution import TerminalHandler
+from jupyter_deploy.engine.supervised_execution import DisplayManager
 
 
 class Ec2InstanceState(str, Enum):
@@ -137,7 +137,7 @@ def poll_for_instance_status(
     ec2_client: EC2Client,
     instance_id: str,
     desired_state: Ec2InstanceState,
-    terminal_handler: TerminalHandler | None = None,
+    display_manager: DisplayManager,
     timeout_seconds: int = 60,
     wait_after_seconds: int = 2,
     poll_interval_seconds: int = 5,
@@ -148,7 +148,7 @@ def poll_for_instance_status(
         ec2_client: EC2 client to use
         instance_id: Instance ID to poll
         desired_state: Desired instance state
-        terminal_handler: Optional terminal handler for status updates
+        display_manager: Display manager for status updates
         timeout_seconds: Timeout in seconds
         wait_after_seconds: Wait time after first API call
         poll_interval_seconds: Polling interval in seconds
@@ -168,16 +168,14 @@ def poll_for_instance_status(
         curr_time = time.time()
 
         if state == desired_state:
-            if terminal_handler:
-                terminal_handler.success(f"Instance reached desired state: '{desired_state.value}'")
+            display_manager.success(f"Instance reached desired state: '{desired_state.value}'")
             return response
         elif state.is_terminal():
             raise ValueError(f"Unexpected terminal state for instance '{instance_id}': '{state.value}'")
         elif curr_time - start_time > timeout_seconds:
             raise TimeoutError(f"Timed out polling state of instance '{instance_id}', end state '{state.value}'")
         else:
-            if terminal_handler:
-                terminal_handler.info(f"Polling status of instance '{instance_id}', current state: '{state.value}'...")
+            display_manager.info(f"Polling status of instance '{instance_id}', current state: '{state.value}'...")
             time.sleep(poll_interval_seconds)
 
 

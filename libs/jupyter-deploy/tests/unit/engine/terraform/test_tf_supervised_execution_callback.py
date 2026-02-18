@@ -4,6 +4,7 @@ import unittest
 from collections import deque
 from unittest.mock import Mock
 
+from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.engine.terraform.tf_enums import TerraformSequenceId
 from jupyter_deploy.engine.terraform.tf_supervised_execution_callback import (
     ANSI_ESCAPE,
@@ -19,7 +20,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_detect_interaction_positive_simple_prompt(self) -> None:
         """Test that _detect_interaction detects simple 'Enter a value:' prompt."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -31,7 +32,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_detect_interaction_positive_with_ansi_codes(self) -> None:
         """Test that _detect_interaction detects prompt with ANSI codes."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -44,7 +45,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_detect_interaction_positive_prompt_with_leading_whitespace(self) -> None:
         """Test that _detect_interaction detects prompt with leading whitespace."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -56,7 +57,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_detect_interaction_positive_prompt_with_ansi_and_spaces(self) -> None:
         """Test that _detect_interaction detects prompt with ANSI codes and spaces."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -68,7 +69,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_detect_interaction_negative_no_prompt(self) -> None:
         """Test that _detect_interaction returns False for normal output."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -80,7 +81,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_detect_interaction_negative_prompt_in_middle(self) -> None:
         """Test that _detect_interaction returns False when prompt is not at end."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -92,7 +93,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_detect_interaction_negative_partial_prompt(self) -> None:
         """Test that _detect_interaction returns False for partial prompt text."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -104,7 +105,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_detect_interaction_negative_similar_text(self) -> None:
         """Test that _detect_interaction returns False for similar but different text."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -116,7 +117,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_detect_interaction_negative_empty_line(self) -> None:
         """Test that _detect_interaction returns False for empty line."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -128,7 +129,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_detect_interaction_negative_whitespace_only(self) -> None:
         """Test that _detect_interaction returns False for whitespace-only line."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -141,7 +142,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_extract_variable_context_positive_finds_var(self) -> None:
         """Test that _extract_variable_context finds and extracts variable description."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -168,7 +169,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_extract_variable_context_positive_finds_var_with_ansi(self) -> None:
         """Test that _extract_variable_context finds variable with ANSI codes."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -193,7 +194,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_extract_variable_context_positive_multiple_vars_finds_most_recent(self) -> None:
         """Test that _extract_variable_context finds the most recent var when multiple exist."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -219,7 +220,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_extract_variable_context_positive_var_at_beginning_of_buffer(self) -> None:
         """Test that _extract_variable_context handles var at start of buffer."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -241,7 +242,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_extract_variable_context_negative_no_var_found(self) -> None:
         """Test that _extract_variable_context falls back when no var. found."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -264,7 +265,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_extract_variable_context_negative_empty_buffer(self) -> None:
         """Test that _extract_variable_context handles empty buffer gracefully."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -278,7 +279,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_extract_variable_context_negative_large_buffer_fallback(self) -> None:
         """Test that _extract_variable_context caps fallback at 10 lines."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -296,7 +297,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_extract_variable_context_negative_var_in_middle_of_line(self) -> None:
         """Test that _extract_variable_context ignores 'var.' in middle of line."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -317,7 +318,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_extract_variable_context_positive_preserves_ansi_codes(self) -> None:
         """Test that _extract_variable_context preserves ANSI codes in returned lines."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -340,7 +341,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_extract_variable_context_negative_var_with_special_characters(self) -> None:
         """Test that _extract_variable_context handles lines with var-like patterns."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -361,7 +362,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_extract_variable_context_positive_buffer_maxlen_respected(self) -> None:
         """Test that _extract_variable_context respects buffer maxlen in fallback."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_init,
         )
 
@@ -379,7 +380,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_extract_variable_context_negative_none_maxlen_uses_default(self) -> None:
         """Test that _extract_variable_context handles None maxlen."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -433,7 +434,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_get_completion_context_config_plan_finds_plan_summary(self) -> None:
         """Test that completion context finds Plan: summary in buffer for config_plan."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -460,7 +461,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_get_completion_context_config_plan_handles_ansi_codes(self) -> None:
         """Test that completion context handles ANSI codes in Plan line."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -486,7 +487,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_get_completion_context_up_apply_finds_apply_complete(self) -> None:
         """Test that completion context finds Apply complete in buffer for up_apply."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.up_apply,
         )
 
@@ -515,7 +516,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_get_completion_context_returns_none_for_other_sequences(self) -> None:
         """Test that completion context returns None for sequences without completion patterns."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_init,  # Not config_plan or up_apply
         )
 
@@ -527,7 +528,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_get_completion_context_returns_none_when_pattern_not_found(self) -> None:
         """Test that completion context is None when pattern not in buffer."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -542,7 +543,7 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
     def test_get_completion_context_limits_lines_returned(self) -> None:
         """Test that completion context caps at max lines for sequence."""
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=Mock(),  # type: ignore[arg-type]
+            display_manager=Mock(),  # type: ignore[arg-type]
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -560,9 +561,9 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
 
     def test_on_execution_error_finds_error_line(self) -> None:
         """Test that on_execution_error finds and displays from Error: line."""
-        mock_terminal_handler: Mock = Mock()  # type: ignore[assignment]
+        mock_display_manager: Mock = Mock()  # type: ignore[assignment]
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=mock_terminal_handler,
+            display_manager=mock_display_manager,
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -584,17 +585,17 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
         callback.on_execution_error(retcode=1)
 
         # Should call display_error_context with lines from "Error: " onwards
-        mock_terminal_handler.display_error_context.assert_called_once()
-        error_lines = mock_terminal_handler.display_error_context.call_args[0][0]
+        mock_display_manager.display_error_context.assert_called_once()
+        error_lines = mock_display_manager.display_error_context.call_args[0][0]
         self.assertEqual(len(error_lines), 6)
         self.assertIn("Error: Invalid configuration", error_lines[0])
         self.assertIn("This configuration is not valid.", error_lines[-1])
 
     def test_on_execution_error_handles_ansi_codes(self) -> None:
         """Test that on_execution_error strips ANSI codes when searching for errors."""
-        mock_terminal_handler: Mock = Mock()  # type: ignore[assignment]
+        mock_display_manager: Mock = Mock()  # type: ignore[assignment]
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=mock_terminal_handler,
+            display_manager=mock_display_manager,
             sequence_id=TerraformSequenceId.up_apply,
         )
 
@@ -611,8 +612,8 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
         callback.on_execution_error(retcode=1)
 
         # Should find the error despite ANSI codes
-        mock_terminal_handler.display_error_context.assert_called_once()
-        error_lines = mock_terminal_handler.display_error_context.call_args[0][0]
+        mock_display_manager.display_error_context.assert_called_once()
+        error_lines = mock_display_manager.display_error_context.call_args[0][0]
         self.assertEqual(len(error_lines), 2)
         # Should preserve ANSI codes in output
         self.assertIn("\x1b[1m", error_lines[0])
@@ -620,9 +621,9 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
 
     def test_on_execution_error_limits_to_50_lines(self) -> None:
         """Test that on_execution_error limits output to 50 lines from error."""
-        mock_terminal_handler: Mock = Mock()  # type: ignore[assignment]
+        mock_display_manager: Mock = Mock()  # type: ignore[assignment]
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=mock_terminal_handler,
+            display_manager=mock_display_manager,
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -633,17 +634,17 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
         callback.on_execution_error(retcode=1)
 
         # Should limit to 50 lines from the error
-        mock_terminal_handler.display_error_context.assert_called_once()
-        error_lines = mock_terminal_handler.display_error_context.call_args[0][0]
+        mock_display_manager.display_error_context.assert_called_once()
+        error_lines = mock_display_manager.display_error_context.call_args[0][0]
         self.assertEqual(len(error_lines), 50)
         self.assertIn("Error: Something went wrong", error_lines[0])
         self.assertEqual("Line 48", error_lines[-1])
 
     def test_on_execution_error_fallback_when_no_error_found(self) -> None:
         """Test that on_execution_error falls back to default behavior when no Error: found."""
-        mock_terminal_handler: Mock = Mock()  # type: ignore[assignment]
+        mock_display_manager: Mock = Mock()  # type: ignore[assignment]
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=mock_terminal_handler,
+            display_manager=mock_display_manager,
             sequence_id=TerraformSequenceId.config_plan,
         )
 
@@ -660,16 +661,16 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
         callback.on_execution_error(retcode=1)
 
         # Should fall back to base class behavior (last 50 lines)
-        mock_terminal_handler.display_error_context.assert_called_once()
-        error_lines = mock_terminal_handler.display_error_context.call_args[0][0]
+        mock_display_manager.display_error_context.assert_called_once()
+        error_lines = mock_display_manager.display_error_context.call_args[0][0]
         # Base class takes last N lines from buffer
         self.assertEqual(len(error_lines), 3)
 
     def test_on_execution_error_finds_last_error_when_multiple(self) -> None:
         """Test that on_execution_error finds the last Error: when there are multiple."""
-        mock_terminal_handler: Mock = Mock()  # type: ignore[assignment]
+        mock_display_manager: Mock = Mock()  # type: ignore[assignment]
         callback = TerraformSupervisedExecutionCallback(
-            terminal_handler=mock_terminal_handler,
+            display_manager=mock_display_manager,
             sequence_id=TerraformSequenceId.up_apply,
         )
 
@@ -689,8 +690,8 @@ class TestTerraformSupervisedExecutionCallback(unittest.TestCase):
         callback.on_execution_error(retcode=1)
 
         # Should start from the last error (searching backwards finds most recent)
-        mock_terminal_handler.display_error_context.assert_called_once()
-        error_lines = mock_terminal_handler.display_error_context.call_args[0][0]
+        mock_display_manager.display_error_context.assert_called_once()
+        error_lines = mock_display_manager.display_error_context.call_args[0][0]
         self.assertEqual(len(error_lines), 2)
         self.assertIn("Second error", error_lines[0])
         self.assertIn("Details about second error", error_lines[1])
@@ -701,7 +702,7 @@ class TestTerraformNoopExecutionCallback(unittest.TestCase):
 
     def test_is_requesting_user_input_detects_terraform_prompts(self) -> None:
         """Test that is_requesting_user_input detects terraform prompts."""
-        callback = TerraformNoopExecutionCallback()
+        callback = TerraformNoopExecutionCallback(NullDisplay())
 
         # Should detect terraform prompts
         self.assertTrue(callback.is_requesting_user_input("Enter a value:"))
@@ -710,7 +711,7 @@ class TestTerraformNoopExecutionCallback(unittest.TestCase):
 
     def test_is_requesting_user_input_handles_ansi_codes(self) -> None:
         """Test that is_requesting_user_input handles ANSI codes in prompts."""
-        callback = TerraformNoopExecutionCallback()
+        callback = TerraformNoopExecutionCallback(NullDisplay())
 
         # Terraform wraps prompts with ANSI codes
         ansi_prompt = "\x1b[1m  Enter a value:\x1b[0m"
@@ -718,7 +719,7 @@ class TestTerraformNoopExecutionCallback(unittest.TestCase):
 
     def test_is_requesting_user_input_rejects_non_prompts(self) -> None:
         """Test that is_requesting_user_input rejects non-prompt patterns."""
-        callback = TerraformNoopExecutionCallback()
+        callback = TerraformNoopExecutionCallback(NullDisplay())
 
         # Should not detect other patterns
         self.assertFalse(callback.is_requesting_user_input("PROMPT:"))
@@ -729,14 +730,14 @@ class TestTerraformNoopExecutionCallback(unittest.TestCase):
 
     def test_is_requesting_user_input_handles_empty_input(self) -> None:
         """Test that is_requesting_user_input handles empty/whitespace input."""
-        callback = TerraformNoopExecutionCallback()
+        callback = TerraformNoopExecutionCallback(NullDisplay())
 
         self.assertFalse(callback.is_requesting_user_input(""))
         self.assertFalse(callback.is_requesting_user_input("   "))
 
     def test_handle_interaction_prints_to_stdout(self) -> None:
         """Test that handle_interaction prints prompt lines to stdout without newline."""
-        callback = TerraformNoopExecutionCallback()
+        callback = TerraformNoopExecutionCallback(NullDisplay())
 
         # Capture stdout
         captured_output = io.StringIO()
@@ -753,7 +754,7 @@ class TestTerraformNoopExecutionCallback(unittest.TestCase):
 
     def test_handle_interaction_adds_trailing_space(self) -> None:
         """Test that handle_interaction adds trailing space if not present."""
-        callback = TerraformNoopExecutionCallback()
+        callback = TerraformNoopExecutionCallback(NullDisplay())
 
         # Capture stdout
         captured_output = io.StringIO()

@@ -3,7 +3,7 @@ from typing import Any
 
 from jupyter_deploy import fs_utils
 from jupyter_deploy.engine.engine_variables import EngineVariablesHandler
-from jupyter_deploy.engine.supervised_execution import TerminalHandler
+from jupyter_deploy.engine.supervised_execution import DisplayManager
 from jupyter_deploy.engine.terraform import tf_varfiles
 from jupyter_deploy.engine.terraform.tf_constants import (
     TF_CUSTOM_PRESET_FILENAME,
@@ -25,11 +25,9 @@ class TerraformVariablesHandler(EngineVariablesHandler):
         self,
         project_path: Path,
         project_manifest: JupyterDeployManifest,
-        terminal_handler: TerminalHandler | None = None,
+        display_manager: DisplayManager,
     ) -> None:
-        super().__init__(
-            project_path=project_path, project_manifest=project_manifest, terminal_handler=terminal_handler
-        )
+        super().__init__(project_path=project_path, project_manifest=project_manifest, display_manager=display_manager)
         self._template_vars: dict[str, TemplateVariableDefinition] | None = None
         self.engine_dir_path = project_path / TF_ENGINE_DIR
 

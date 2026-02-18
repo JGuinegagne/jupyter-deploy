@@ -30,7 +30,7 @@ def add(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = team_handler.TeamsHandler(terminal_handler=simple_display_manager)
+        handler = team_handler.TeamsHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Adding teams..."):
             handler.add_teams(teams)
@@ -52,7 +52,7 @@ def remove(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = team_handler.TeamsHandler(terminal_handler=simple_display_manager)
+        handler = team_handler.TeamsHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Removing teams..."):
             handler.remove_teams(teams)
@@ -74,7 +74,7 @@ def set(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = team_handler.TeamsHandler(terminal_handler=simple_display_manager)
+        handler = team_handler.TeamsHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Setting teams..."):
             handler.set_teams(teams)
@@ -96,7 +96,7 @@ def list_teams(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = team_handler.TeamsHandler(terminal_handler=simple_display_manager)
+        handler = team_handler.TeamsHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Fetching teams..."):
             teams = handler.list_teams()

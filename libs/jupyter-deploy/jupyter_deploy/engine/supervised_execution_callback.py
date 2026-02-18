@@ -2,7 +2,7 @@
 
 This module provides the base class for implementing engine-specific
 callbacks that handle output buffering, prompt detection, and context
-extraction while delegating display to a TerminalHandler.
+extraction while delegating display to a DisplayManager.
 """
 
 from abc import ABC, abstractmethod
@@ -10,9 +10,9 @@ from collections import deque
 
 from jupyter_deploy.engine.supervised_execution import (
     CompletionContext,
+    DisplayManager,
     ExecutionProgress,
     InteractionContext,
-    TerminalHandler,
 )
 
 
@@ -120,7 +120,7 @@ class EngineExecutionCallback(ExecutionCallbackInterface):
 
     def __init__(
         self,
-        terminal_handler: TerminalHandler,
+        display_manager: DisplayManager,
         buffer_size: int = 200,
         log_display_lines: int = 2,
         error_display_lines: int = 50,
@@ -128,7 +128,7 @@ class EngineExecutionCallback(ExecutionCallbackInterface):
         """Initialize the engine callback.
 
         Args:
-            terminal_handler: Handler for terminal display (progress, logs, prompts)
+            display_manager: Handler for terminal display (progress, logs, prompts)
             buffer_size: Number of output lines to keep in buffer for context extraction
             log_display_lines: Number of lines to display in log box during normal operation
             error_display_lines: Number of lines to display when execution fails
@@ -141,7 +141,7 @@ class EngineExecutionCallback(ExecutionCallbackInterface):
         if buffer_size < error_display_lines:
             raise ValueError(f"buffer_size ({buffer_size}) must be >= error_display_lines ({error_display_lines})")
 
-        self._terminal_handler = terminal_handler
+        self._display_manager = display_manager
         self._line_buffer: deque[str] = deque(maxlen=buffer_size)  # For context extraction
         self._display_buffer: deque[str] = deque(maxlen=log_display_lines)  # For display
         self._error_display_lines = error_display_lines
@@ -190,16 +190,16 @@ class EngineExecutionCallback(ExecutionCallbackInterface):
             # This line triggered the interaction - extract context and notify
             context = self._extract_interaction_context(line)
             self._waiting_for_interaction = True
-            self._terminal_handler.on_interaction_start(context)
+            self._display_manager.on_interaction_start(context)
             # Don't check for completion on the same line that started interaction
         else:
             # We're in interaction mode - check if interaction is complete
             if self._is_interaction_complete(line):
                 self._waiting_for_interaction = False
-                self._terminal_handler.on_interaction_end()
+                self._display_manager.on_interaction_end()
 
                 # Update log box back to normal size using display buffer
-                self._terminal_handler.update_log_box(list(self._display_buffer))
+                self._display_manager.update_log_box(list(self._display_buffer))
 
     def on_log_line(self, line: str) -> None:
         """Handle a normal log line (not part of interaction).
@@ -214,14 +214,14 @@ class EngineExecutionCallback(ExecutionCallbackInterface):
         self._display_buffer.append(line)  # For normal display (e.g. 2 lines)
 
         # Update log box with display buffer
-        self._terminal_handler.update_log_box(list(self._display_buffer))
+        self._display_manager.update_log_box(list(self._display_buffer))
 
     def on_progress(self, progress: ExecutionProgress) -> None:
         """Handle a progress update.
 
         Delegates directly to terminal handler.
         """
-        self._terminal_handler.on_progress(progress)
+        self._display_manager.on_progress(progress)
 
     def on_execution_error(self, retcode: int) -> None:
         """Handle command execution failure.
@@ -233,7 +233,7 @@ class EngineExecutionCallback(ExecutionCallbackInterface):
         """
         # Extract error context from buffer using configured line count
         error_context_lines = list(self._line_buffer)[-self._error_display_lines :]
-        self._terminal_handler.display_error_context(error_context_lines)
+        self._display_manager.display_error_context(error_context_lines)
 
     def get_completion_context(self) -> CompletionContext | None:
         """Return CompletionContext with lines to display, or None if no context captured.
@@ -293,11 +293,17 @@ class EngineExecutionCallback(ExecutionCallbackInterface):
 class NoopExecutionCallback(ExecutionCallbackInterface, ABC):
     """Abstract base class for no-op execution callbacks in verbose mode.
 
-    This callback provides default no-op implementations for most methods, but requires
-    subclasses to implement engine-specific prompt detection for stdin coordination.
-    Used when terminal_handler is None (verbose mode).
-    SupervisedExecutor will still print to stdout and write to log file.
+    This callback delegates output to a DisplayManager for testability and consistency.
+    Requires subclasses to implement engine-specific prompt detection for stdin coordination.
     """
+
+    def __init__(self, display_manager: DisplayManager) -> None:
+        """Initialize with a display manager.
+
+        Args:
+            display_manager: DisplayManager for handling output
+        """
+        self.display_manager = display_manager
 
     def should_parse_progress(self) -> bool:
         """Progress parsing is disabled for NoopExecutionCallback."""
@@ -327,8 +333,8 @@ class NoopExecutionCallback(ExecutionCallbackInterface, ABC):
         pass
 
     def on_log_line(self, line: str) -> None:
-        """Print to stdout for verbose mode."""
-        print(line, flush=True)
+        """Delegate line output to display manager."""
+        self.display_manager.on_log_line(line)
 
     def on_progress(self, progress: ExecutionProgress) -> None:
         """No-op - no progress tracking in verbose mode."""

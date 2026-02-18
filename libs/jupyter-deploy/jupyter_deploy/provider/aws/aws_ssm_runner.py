@@ -5,7 +5,7 @@ from mypy_boto3_ssm.client import SSMClient
 
 from jupyter_deploy import cmd_utils, verify_utils
 from jupyter_deploy.api.aws.ssm import ssm_command, ssm_session
-from jupyter_deploy.engine.supervised_execution import TerminalHandler
+from jupyter_deploy.engine.supervised_execution import DisplayManager
 from jupyter_deploy.enum import JupyterDeployTool
 from jupyter_deploy.exceptions import (
     HostCommandInstructionError,
@@ -46,33 +46,31 @@ class AwsSsmRunner(InstructionRunner):
 
     client: SSMClient
 
-    def __init__(self, region_name: str | None) -> None:
+    def __init__(self, display_manager: DisplayManager, region_name: str | None) -> None:
         """Instantiates the SSM boto3 client."""
+        super().__init__(display_manager)
         self.client: SSMClient = boto3.client("ssm", region_name=region_name)
 
     def _verify_ec2_instance_accessible(
         self,
         instance_id: str,
-        terminal_handler: TerminalHandler | None = None,
         silent_success: bool = True,
     ) -> None:
         """Call SSM API and verify instance is accessible.
 
         Args:
             instance_id: The EC2 instance ID to verify
-            terminal_handler: Optional terminal handler for status updates
             silent_success: If True, don't display success message
 
         Raises:
             UnreachableHostError: If SSM agent is not reachable
         """
-
         instance_info_response = ssm_session.describe_instance_information(self.client, instance_id=instance_id)
         ping_status = instance_info_response.get("PingStatus")
 
         if ping_status == "Online":
-            if terminal_handler and not silent_success:
-                terminal_handler.info(f"SSM agent running on instance '{instance_id}'")
+            if not silent_success:
+                self.display_manager.info(f"SSM agent running on instance '{instance_id}'")
             return
         elif ping_status == "ConnectionLost":
             last_ping_date = instance_info_response.get("LastPingDateTime", "unknown")
@@ -89,7 +87,6 @@ class AwsSsmRunner(InstructionRunner):
     def _send_cmd_to_one_instance_and_wait_sync(
         self,
         resolved_arguments: dict[str, ResolvedInstructionArgument],
-        terminal_handler: TerminalHandler | None = None,
     ) -> dict[str, ResolvedInstructionResult]:
         # retrieve required parameters
         doc_name_arg = require_arg(resolved_arguments, "document_name", StrResolvedInstructionArgument)
@@ -114,15 +111,14 @@ class AwsSsmRunner(InstructionRunner):
                 parameters[n] = [v.value]
 
         # verify SSM agent connection status
-        self._verify_ec2_instance_accessible(instance_id=instance_id_arg.value, terminal_handler=terminal_handler)
+        self._verify_ec2_instance_accessible(instance_id=instance_id_arg.value)
 
         # provide information to the user
-        if terminal_handler:
-            info = f"Executing SSM document '{doc_name_arg.value}' on instance '{instance_id_arg.value}'"
-            if not parameters:
-                terminal_handler.info(f"{info}...")
-            else:
-                terminal_handler.info(f"{info} with parameters: {parameters}...")
+        info = f"Executing SSM document '{doc_name_arg.value}' on instance '{instance_id_arg.value}'"
+        if not parameters:
+            self.display_manager.info(f"{info}...")
+        else:
+            self.display_manager.info(f"{info} with parameters: {parameters}...")
 
         response = ssm_command.send_cmd_to_one_instance_and_wait_sync(
             self.client,
@@ -160,7 +156,6 @@ class AwsSsmRunner(InstructionRunner):
     def _send_cmd_to_one_instance_using_default_shell_doc_and_wait_sync(
         self,
         resolved_arguments: dict[str, ResolvedInstructionArgument],
-        terminal_handler: TerminalHandler | None = None,
     ) -> dict[str, ResolvedInstructionResult]:
         # retrieve required parameters
         instance_id_arg = require_arg(resolved_arguments, "instance_id", StrResolvedInstructionArgument)
@@ -177,11 +172,10 @@ class AwsSsmRunner(InstructionRunner):
         commands_arg = require_arg(resolved_arguments, "commands", ListStrResolvedInstructionArgument)
 
         # verify SSM agent connection status
-        self._verify_ec2_instance_accessible(instance_id=instance_id_arg.value, terminal_handler=terminal_handler)
+        self._verify_ec2_instance_accessible(instance_id=instance_id_arg.value)
 
         # provide information to the user
-        if terminal_handler:
-            terminal_handler.info(f"Executing command on instance '{instance_id_arg.value}'...")
+        self.display_manager.info(f"Executing command on instance '{instance_id_arg.value}'...")
 
         response = ssm_command.send_cmd_to_one_instance_and_wait_sync(
             self.client,
@@ -219,7 +213,6 @@ class AwsSsmRunner(InstructionRunner):
     def _start_session(
         self,
         resolved_arguments: dict[str, ResolvedInstructionArgument],
-        terminal_handler: TerminalHandler | None = None,
     ) -> dict[str, ResolvedInstructionResult]:
         # retrieve required parameters
         target_id_arg = require_arg(resolved_arguments, "target_id", StrResolvedInstructionArgument)
@@ -238,15 +231,12 @@ class AwsSsmRunner(InstructionRunner):
         )
 
         # verify that the SSM agent status on the instance
-        self._verify_ec2_instance_accessible(
-            instance_id=target_id_arg.value, terminal_handler=terminal_handler, silent_success=False
-        )
+        self._verify_ec2_instance_accessible(instance_id=target_id_arg.value, silent_success=False)
 
         # provide information to the user
-        if terminal_handler:
-            terminal_handler.hint("Type 'exit' to disconnect the SSM session.")
-            # Stop spinner before starting interactive session
-            terminal_handler.stop_spinning()
+        self.display_manager.hint("Type 'exit' to disconnect the SSM session.")
+        # Stop spinner before starting interactive session
+        self.display_manager.stop_spinning()
 
         # start the session
         start_session_cmds = START_SESSION_CMD.copy()
@@ -282,22 +272,18 @@ class AwsSsmRunner(InstructionRunner):
         self,
         instruction_name: str,
         resolved_arguments: dict[str, ResolvedInstructionArgument],
-        terminal_handler: TerminalHandler | None = None,
     ) -> dict[str, ResolvedInstructionResult]:
         if instruction_name == AwsSsmInstruction.SEND_CMD_AND_WAIT_SYNC:
             return self._send_cmd_to_one_instance_and_wait_sync(
                 resolved_arguments=resolved_arguments,
-                terminal_handler=terminal_handler,
             )
         elif instruction_name == AwsSsmInstruction.SEND_DFT_SHELL_DOC_CMD_AND_WAIT_SYNC:
             return self._send_cmd_to_one_instance_using_default_shell_doc_and_wait_sync(
                 resolved_arguments=resolved_arguments,
-                terminal_handler=terminal_handler,
             )
         elif instruction_name == AwsSsmInstruction.START_SESSION:
             return self._start_session(
                 resolved_arguments=resolved_arguments,
-                terminal_handler=terminal_handler,
             )
 
         raise InstructionNotFoundError(f"No execution implementation for command: aws.ssm.{instruction_name}")

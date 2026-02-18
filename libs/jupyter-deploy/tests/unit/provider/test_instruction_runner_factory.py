@@ -3,10 +3,11 @@ import sys
 import unittest
 from collections.abc import Generator
 from contextlib import contextmanager
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 from jupyter_deploy.engine.engine_outputs import EngineOutputsHandler
 from jupyter_deploy.engine.outdefs import StrTemplateOutputDefinition
+from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.provider import instruction_runner_factory
 from jupyter_deploy.provider.enum import ProviderType
 from jupyter_deploy.provider.instruction_runner import InstructionRunner
@@ -69,7 +70,9 @@ class TestInstructionRunnerFactory(unittest.TestCase):
             InstructionRunnerFactory = instruction_runner_factory.InstructionRunnerFactory
             InstructionRunnerFactory._provider_runner_map = {}
 
-            runner = InstructionRunnerFactory.get_provider_instruction_runner("aws", self.mock_outputs_handler)
+            runner = InstructionRunnerFactory.get_provider_instruction_runner(
+                "aws", self.mock_outputs_handler, NullDisplay()
+            )
 
             # Verify
             self.mock_get_declared_output_def.assert_called_once_with("aws_region", StrTemplateOutputDefinition)
@@ -78,7 +81,9 @@ class TestInstructionRunnerFactory(unittest.TestCase):
             self.assertEqual(
                 {ProviderType.AWS: self.mock_aws_api_runner}, InstructionRunnerFactory._provider_runner_map
             )
-            self.mock_aws_api_runner_cls.assert_called_once_with(region_name="us-west-2")
+            # Verify the runner was called with display_manager and region_name
+            # Note: ANY is used for display_manager since it's a NullDisplay() instance
+            self.mock_aws_api_runner_cls.assert_called_once_with(display_manager=ANY, region_name="us-west-2")
 
     def test_aws_provider_raises_if_output_provider_cannot_get_the_region(self) -> None:
         # Setup
@@ -91,7 +96,7 @@ class TestInstructionRunnerFactory(unittest.TestCase):
             InstructionRunnerFactory = instruction_runner_factory.InstructionRunnerFactory
             InstructionRunnerFactory._provider_runner_map = {}
 
-            InstructionRunnerFactory.get_provider_instruction_runner("aws", mock_outputs_handler)
+            InstructionRunnerFactory.get_provider_instruction_runner("aws", mock_outputs_handler, NullDisplay())
 
             self.assertEqual("Region not found", str(context.exception))
             self.mock_get_declared_output_def.assert_called_once_with("aws_region", StrTemplateOutputDefinition)
@@ -104,10 +109,14 @@ class TestInstructionRunnerFactory(unittest.TestCase):
             InstructionRunnerFactory._provider_runner_map = {}
 
             # First call
-            first_result = InstructionRunnerFactory.get_provider_instruction_runner("aws", self.mock_outputs_handler)
+            first_result = InstructionRunnerFactory.get_provider_instruction_runner(
+                "aws", self.mock_outputs_handler, NullDisplay()
+            )
 
             # Second call with same output handler
-            second_result = InstructionRunnerFactory.get_provider_instruction_runner("aws", self.mock_outputs_handler)
+            second_result = InstructionRunnerFactory.get_provider_instruction_runner(
+                "aws", self.mock_outputs_handler, NullDisplay()
+            )
 
             # Verify
             self.assertEqual(first_result, second_result)
@@ -129,10 +138,14 @@ class TestInstructionRunnerFactory(unittest.TestCase):
             InstructionRunnerFactory._provider_runner_map = {}
 
             # First call
-            first_result = InstructionRunnerFactory.get_provider_instruction_runner("aws", self.mock_outputs_handler)
+            first_result = InstructionRunnerFactory.get_provider_instruction_runner(
+                "aws", self.mock_outputs_handler, NullDisplay()
+            )
 
             # Second call with same output handler
-            second_result = InstructionRunnerFactory.get_provider_instruction_runner("aws", mock_outputs_handler2)
+            second_result = InstructionRunnerFactory.get_provider_instruction_runner(
+                "aws", mock_outputs_handler2, NullDisplay()
+            )
 
             # Verify
             self.assertEqual(first_result, second_result)
@@ -152,6 +165,6 @@ class TestInstructionRunnerFactory(unittest.TestCase):
             InstructionRunnerFactory = instruction_runner_factory.InstructionRunnerFactory
             InstructionRunnerFactory._provider_runner_map = {}
 
-            InstructionRunnerFactory.get_provider_instruction_runner("onpremises", mock_outputs_handler)
+            InstructionRunnerFactory.get_provider_instruction_runner("onpremises", mock_outputs_handler, NullDisplay())
             self.mock_aws_api_runner_cls.assert_not_called()
             self.mock_get_declared_output_def.assert_not_called()

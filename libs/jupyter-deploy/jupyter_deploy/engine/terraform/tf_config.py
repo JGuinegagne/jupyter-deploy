@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from jupyter_deploy import cmd_utils, fs_utils
 from jupyter_deploy.engine.engine_config import EngineConfigHandler
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.engine.supervised_execution import CompletionContext, TerminalHandler
+from jupyter_deploy.engine.supervised_execution import CompletionContext, DisplayManager
 from jupyter_deploy.engine.supervised_execution_callback import ExecutionCallbackInterface
 from jupyter_deploy.engine.terraform import (
     tf_plan,
@@ -52,11 +52,11 @@ class TerraformConfigHandler(EngineConfigHandler):
         project_path: Path,
         project_manifest: JupyterDeployManifest,
         command_history_handler: CommandHistoryHandler,
+        display_manager: DisplayManager,
         output_filename: str | None = None,
-        terminal_handler: TerminalHandler | None = None,
     ) -> None:
         variables_handler = tf_variables.TerraformVariablesHandler(
-            project_path=project_path, project_manifest=project_manifest, terminal_handler=terminal_handler
+            project_path=project_path, project_manifest=project_manifest, display_manager=display_manager
         )
         super().__init__(
             project_path=project_path,
@@ -67,7 +67,7 @@ class TerraformConfigHandler(EngineConfigHandler):
         )
         self.engine_dir_path = project_path / TF_ENGINE_DIR
         self.plan_out_path = self.engine_dir_path / (output_filename or TF_DEFAULT_PLAN_FILENAME)
-        self.terminal_handler = terminal_handler
+        self.display_manager = display_manager
         self._log_file: Path | None = None
 
         # use a different name from parent attribute to not confuse mypy
@@ -115,13 +115,13 @@ class TerraformConfigHandler(EngineConfigHandler):
 
         # Choose callback: full featured with progress tracking, or no-op for verbose mode
         init_callback: ExecutionCallbackInterface
-        if self.terminal_handler:
+        if self.display_manager.is_pass_through():
+            init_callback = TerraformNoopExecutionCallback(display_manager=self.display_manager)
+        else:
             init_callback = TerraformSupervisedExecutionCallback(
-                terminal_handler=self.terminal_handler,
+                display_manager=self.display_manager,
                 sequence_id=TerraformSequenceId.config_init,
             )
-        else:
-            init_callback = TerraformNoopExecutionCallback()
         init_executor = tf_supervised_executor_factory.create_terraform_executor(
             sequence_id=TerraformSequenceId.config_init,
             exec_dir=self.engine_dir_path,
@@ -167,13 +167,13 @@ class TerraformConfigHandler(EngineConfigHandler):
 
         # 2.5/ call terraform plan with supervised execution
         plan_callback: ExecutionCallbackInterface
-        if self.terminal_handler:
+        if self.display_manager.is_pass_through():
+            plan_callback = TerraformNoopExecutionCallback(display_manager=self.display_manager)
+        else:
             plan_callback = TerraformSupervisedExecutionCallback(
-                terminal_handler=self.terminal_handler,
+                display_manager=self.display_manager,
                 sequence_id=TerraformSequenceId.config_plan,
             )
-        else:
-            plan_callback = TerraformNoopExecutionCallback()
 
         plan_executor = tf_supervised_executor_factory.create_terraform_executor(
             sequence_id=TerraformSequenceId.config_plan,

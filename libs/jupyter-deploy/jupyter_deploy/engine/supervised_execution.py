@@ -1,5 +1,6 @@
 """Core types and protocols for supervised execution with progress tracking."""
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
@@ -109,10 +110,11 @@ class ExecutionCallback(Protocol):
         ...
 
 
-class TerminalHandler(Protocol):
-    """Protocol for terminal interaction during supervised execution.
+class DisplayManager(Protocol):
+    """Protocol for display management during supervised execution.
 
-    This unified protocol handles all terminal display concerns:
+    This unified protocol handles all display concerns across different interfaces
+    (terminal, web UI, API, etc.):
     - Progress updates with progress bars (for process-wrapping commands)
     - Live log boxes (for process output)
     - Interactive prompts (for user input)
@@ -240,3 +242,74 @@ class TerminalHandler(Protocol):
         without buffering or progress display (verbose mode behavior).
         """
         ...
+
+    def on_log_line(self, line: str) -> None:
+        """Handle a subprocess output line.
+
+        Called for each line of subprocess output in verbose/pass-through mode.
+        In pass-through mode, prints directly; otherwise may be buffered or ignored.
+
+        Args:
+            line: A single line of output (without trailing newline)
+        """
+        ...
+
+
+class NullDisplay:
+    """No-op display manager for programmatic/test usage.
+
+    Implements DisplayManager protocol with all methods as no-ops.
+    Use when you don't want any display output (e.g., in tests, programmatic API usage).
+    """
+
+    def on_progress(self, progress: ExecutionProgress) -> None:
+        """No-op implementation."""
+        pass
+
+    def update_log_box(self, lines: list[str]) -> None:
+        """No-op implementation."""
+        pass
+
+    def on_interaction_start(self, context: InteractionContext) -> None:
+        """No-op implementation."""
+        pass
+
+    def on_interaction_end(self) -> None:
+        """No-op implementation."""
+        pass
+
+    def display_error_context(self, lines: list[str]) -> None:
+        """No-op implementation."""
+        pass
+
+    def info(self, message: str) -> None:
+        """No-op implementation."""
+        pass
+
+    def warning(self, message: str) -> None:
+        """No-op implementation."""
+        pass
+
+    def success(self, message: str) -> None:
+        """No-op implementation."""
+        pass
+
+    def hint(self, message: str) -> None:
+        """No-op implementation."""
+        pass
+
+    def spinner(self, initial_message: str) -> Any:
+        """No-op spinner - returns nullcontext."""
+        return nullcontext()
+
+    def stop_spinning(self) -> None:
+        """No-op implementation."""
+        pass
+
+    def is_pass_through(self) -> bool:
+        """Always returns False."""
+        return False
+
+    def on_log_line(self, line: str) -> None:
+        """No-op implementation."""
+        pass

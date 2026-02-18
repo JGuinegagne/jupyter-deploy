@@ -5,7 +5,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from jupyter_deploy import constants, fs_utils
-from jupyter_deploy.engine.supervised_execution import TerminalHandler
+from jupyter_deploy.engine.supervised_execution import DisplayManager
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
 from jupyter_deploy.exceptions import InvalidVariablesDotYamlError
 from jupyter_deploy.handlers import base_project_handler
@@ -23,18 +23,18 @@ class EngineVariablesHandler(ABC):
         self,
         project_path: Path,
         project_manifest: JupyterDeployManifest,
-        terminal_handler: TerminalHandler | None = None,
+        display_manager: DisplayManager,
     ) -> None:
         """Instantiate the base handler for the decorator.
 
         Args:
             project_path: Path to the project directory
             project_manifest: The project manifest
-            terminal_handler: Optional terminal handler for status updates
+            display_manager: Display manager for status updates
         """
         self.project_path = project_path
         self.project_manifest = project_manifest
-        self.terminal_handler = terminal_handler
+        self.display_manager = display_manager
         self._variables_config: JupyterDeployVariablesConfig | None = None
 
     def get_variables_config_path(self) -> Path:
@@ -67,8 +67,8 @@ class EngineVariablesHandler(ABC):
             return variables_config
         except FileNotFoundError:
             # the user has deleted their variables.yaml, reset it to a fallback
-            if self.terminal_handler:
-                self.terminal_handler.warning(
+            if self.display_manager:
+                self.display_manager.warning(
                     f"Variables config not found at: {variables_config_path.absolute()}, resetting to defaults"
                 )
             reset_variables_config = self._get_reset_variables_config()
@@ -76,15 +76,15 @@ class EngineVariablesHandler(ABC):
             return self._variables_config
         except InvalidVariablesDotYamlError:
             # the user has corrupted their variables.yaml, reset to a fallback
-            if self.terminal_handler:
-                self.terminal_handler.warning("Variables config was not a dict, resetting to defaults")
+            if self.display_manager:
+                self.display_manager.warning("Variables config was not a dict, resetting to defaults")
             reset_variables_config = self._get_reset_variables_config()
             self._variables_config = reset_variables_config
             return self._variables_config
         except ValidationError as e:
             # the user has corrupted their variables.yaml, reset to a fallback
-            if self.terminal_handler:
-                self.terminal_handler.warning(f"Variables config is invalid, resetting to defaults: {e}")
+            if self.display_manager:
+                self.display_manager.warning(f"Variables config is invalid, resetting to defaults: {e}")
             reset_variables_config = self._get_reset_variables_config()
             self._variables_config = reset_variables_config
             return self._variables_config

@@ -1,7 +1,7 @@
 """Simple terminal handler for SDK-style operations.
 
 This module provides the SimpleDisplayManager class that implements
-the TerminalHandler protocol with lightweight display (spinner, info, warnings, success).
+the DisplayManager protocol with lightweight display (spinner, info, warnings, success).
 No progress bars or complex UI elements.
 """
 
@@ -18,7 +18,7 @@ from jupyter_deploy.engine.supervised_execution import ExecutionProgress, Intera
 class SimpleDisplayManager:
     """Lightweight terminal handler for SDK-style operations.
 
-    Implements TerminalHandler protocol with simple display elements:
+    Implements DisplayManager protocol with simple display elements:
     spinner, info messages, warnings, and success messages.
     No progress bars or log boxes.
 
@@ -135,7 +135,7 @@ class SimpleDisplayManager:
         """
         return self._pass_through
 
-    # Stub implementations for TerminalHandler protocol methods we don't use:
+    # Stub implementations for DisplayManager protocol methods we don't use:
 
     def on_progress(self, progress: ExecutionProgress) -> None:
         """Stub implementation (not used for SDK-style operations).
@@ -173,3 +173,14 @@ class SimpleDisplayManager:
         """
         for line in lines:
             self.console.print(line, style="red")
+
+    def on_log_line(self, line: str) -> None:
+        """Handle subprocess output line.
+
+        Prints line if in pass-through mode (verbose), otherwise ignores.
+
+        Args:
+            line: A single line of output (without trailing newline)
+        """
+        if self._pass_through:
+            print(line, flush=True)

@@ -7,6 +7,7 @@ from yaml.parser import ParserError
 
 from jupyter_deploy.constants import MANIFEST_FILENAME
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.exceptions import (
     InvalidManifestError,
     InvalidVariablesDotYamlError,
@@ -33,7 +34,7 @@ class TestBaseProjectHandler(unittest.TestCase):
         mock_retrieve.return_value = mock_manifest
 
         # Execute
-        handler = BaseProjectHandler()
+        handler = BaseProjectHandler(display_manager=NullDisplay())
 
         # Assert
         mock_retrieve.assert_called_once_with(Path("/fake/path/manifest.yaml"))
@@ -49,7 +50,7 @@ class TestBaseProjectHandler(unittest.TestCase):
 
         # Execute and Assert
         with self.assertRaises(ManifestNotFoundError):
-            BaseProjectHandler()
+            BaseProjectHandler(display_manager=NullDisplay())
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("pathlib.Path.cwd")
@@ -60,7 +61,7 @@ class TestBaseProjectHandler(unittest.TestCase):
 
         # Execute and Assert
         with self.assertRaises(InvalidManifestError):
-            BaseProjectHandler()
+            BaseProjectHandler(display_manager=NullDisplay())
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("pathlib.Path.cwd")
@@ -71,7 +72,7 @@ class TestBaseProjectHandler(unittest.TestCase):
 
         # Execute and Assert
         with self.assertRaises(InvalidManifestError):
-            BaseProjectHandler()
+            BaseProjectHandler(display_manager=NullDisplay())
 
 
 class TestRetrieveProjectManifestIfAvailable(unittest.TestCase):

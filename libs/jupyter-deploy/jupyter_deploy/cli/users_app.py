@@ -30,7 +30,7 @@ def add(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = user_handler.UsersHandler(terminal_handler=simple_display_manager)
+        handler = user_handler.UsersHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Adding users..."):
             handler.add_users(users)
@@ -52,7 +52,7 @@ def remove(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = user_handler.UsersHandler(terminal_handler=simple_display_manager)
+        handler = user_handler.UsersHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Removing users..."):
             handler.remove_users(users)
@@ -74,7 +74,7 @@ def set(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = user_handler.UsersHandler(terminal_handler=simple_display_manager)
+        handler = user_handler.UsersHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Setting users..."):
             handler.set_users(users)
@@ -96,7 +96,7 @@ def list_users(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = user_handler.UsersHandler(terminal_handler=simple_display_manager)
+        handler = user_handler.UsersHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Fetching users..."):
             users = handler.list_users()

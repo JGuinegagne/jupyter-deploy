@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import ANY, Mock, patch
 
+from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.exceptions import InvalidPresetError
 from jupyter_deploy.handlers.project.config_handler import ConfigHandler
 from jupyter_deploy.manifest import JupyterDeployManifestV1
@@ -61,7 +62,7 @@ class TestConfigHandler(unittest.TestCase):
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     def test_config_handler_reads_the_manifest(self, mock_retrieve_manifest: Mock) -> None:
         mock_retrieve_manifest.return_value = self.mock_manifest
-        handler = ConfigHandler()
+        handler = ConfigHandler(display_manager=NullDisplay())
         mock_retrieve_manifest.assert_called_once()
         self.assertEqual(handler.project_manifest, self.mock_manifest)
         self.assertEqual(handler.engine, self.mock_manifest.get_engine())
@@ -78,7 +79,7 @@ class TestConfigHandler(unittest.TestCase):
 
         # right now, it defaults to terraform
         # in the future, it should infer it from the project
-        handler = ConfigHandler()
+        handler = ConfigHandler(display_manager=NullDisplay())
 
         tf_mock_handler_instance, tf_fns = self.get_mock_handler_and_fns()
         tf_mock_configure = tf_fns["configure"]
@@ -90,7 +91,7 @@ class TestConfigHandler(unittest.TestCase):
             project_manifest=self.mock_manifest,
             command_history_handler=ANY,
             output_filename=None,
-            terminal_handler=None,
+            display_manager=ANY,
         )
         tf_mock_configure.assert_not_called()
 
@@ -105,7 +106,7 @@ class TestConfigHandler(unittest.TestCase):
         tf_mock_has_recorded.return_value = True
         mock_tf_handler.return_value = tf_mock_handler_instance
 
-        handler = ConfigHandler()
+        handler = ConfigHandler(display_manager=NullDisplay())
         result = handler.has_recorded_variables()
 
         self.assertTrue(result)
@@ -122,7 +123,7 @@ class TestConfigHandler(unittest.TestCase):
         tf_mock_verify_preset.return_value = True
         mock_tf_handler.return_value = tf_mock_handler_instance
 
-        handler = ConfigHandler()
+        handler = ConfigHandler(display_manager=NullDisplay())
         result = handler.verify_preset_exists("all")
 
         self.assertTrue(result)
@@ -137,7 +138,7 @@ class TestConfigHandler(unittest.TestCase):
         tf_mock_list_presets.return_value = ["all", "base", "none"]
         mock_tf_handler.return_value = tf_mock_handler_instance
 
-        handler = ConfigHandler()
+        handler = ConfigHandler(display_manager=NullDisplay())
         result = handler.list_presets()
 
         self.assertEqual(result, ["all", "base", "none"])
@@ -150,7 +151,7 @@ class TestConfigHandler(unittest.TestCase):
         tf_mock_handler_instance, _ = self.get_mock_handler_and_fns()
         mock_tf_handler.return_value = tf_mock_handler_instance
 
-        handler = ConfigHandler()
+        handler = ConfigHandler(display_manager=NullDisplay())
         self.assertIsNone(handler.preset_name)
 
         handler.set_preset("all")
@@ -170,7 +171,7 @@ class TestConfigHandler(unittest.TestCase):
         tf_mock_verify_preset.return_value = True
         mock_tf_handler.return_value = tf_mock_handler_instance
 
-        handler = ConfigHandler()
+        handler = ConfigHandler(display_manager=NullDisplay())
         # Should not raise
         handler.validate_preset("all")
         tf_mock_verify_preset.assert_called_once_with("all")
@@ -188,7 +189,7 @@ class TestConfigHandler(unittest.TestCase):
         tf_mock_list_presets.return_value = ["all", "base", "none"]
         mock_tf_handler.return_value = tf_mock_handler_instance
 
-        handler = ConfigHandler()
+        handler = ConfigHandler(display_manager=NullDisplay())
         with self.assertRaises(InvalidPresetError) as context:
             handler.validate_preset("invalid")
 
@@ -212,7 +213,7 @@ class TestConfigHandler(unittest.TestCase):
             tf_mock_configure = tf_fns["configure"]
             mock_tf_handler.return_value = tf_mock_handler_instance
 
-            handler = ConfigHandler()
+            handler = ConfigHandler(display_manager=NullDisplay())
             handler.verify_requirements()
 
             mock_verify.assert_called_once_with([mock_req1, mock_req2])
@@ -229,7 +230,7 @@ class TestConfigHandler(unittest.TestCase):
         mock_tf_handler.return_value = tf_mock_handler_instance
         mock_verify.side_effect = ToolRequiredError("terraform", None, None)
 
-        handler = ConfigHandler()
+        handler = ConfigHandler(display_manager=NullDisplay())
         with self.assertRaises(ToolRequiredError):
             handler.verify_requirements()
 
@@ -239,14 +240,14 @@ class TestConfigHandler(unittest.TestCase):
         self, mock_tf_handler: Mock, mock_retrieve_manifest: Mock
     ) -> None:
         mock_retrieve_manifest.return_value = self.mock_manifest
-        ConfigHandler()
+        ConfigHandler(display_manager=NullDisplay())
 
         tf_mock_handler_instance, tf_fns = self.get_mock_handler_and_fns()
         tf_mock_reset_vars = tf_fns["reset_recorded_variables"]
         tf_mock_reset_secrets = tf_fns["reset_recorded_secrets"]
         mock_tf_handler.return_value = tf_mock_handler_instance
 
-        handler = ConfigHandler()
+        handler = ConfigHandler(display_manager=NullDisplay())
         handler.reset_recorded_variables()
 
         tf_mock_reset_vars.assert_called_once()
@@ -263,7 +264,7 @@ class TestConfigHandler(unittest.TestCase):
         tf_mock_reset_secrets = tf_fns["reset_recorded_secrets"]
         mock_tf_handler.return_value = tf_mock_handler_instance
 
-        handler = ConfigHandler()
+        handler = ConfigHandler(display_manager=NullDisplay())
         handler.reset_recorded_secrets()
 
         tf_mock_reset_vars.assert_not_called()
@@ -279,7 +280,7 @@ class TestConfigHandler(unittest.TestCase):
         tf_mock_configure = tf_fns["configure"]
         mock_tf_handler.return_value = tf_mock_handler_instance
 
-        handler = ConfigHandler()
+        handler = ConfigHandler(display_manager=NullDisplay())
         result = handler.configure()
 
         self.assertTrue(result)
@@ -293,7 +294,7 @@ class TestConfigHandler(unittest.TestCase):
         tf_mock_configure = tf_fns["configure"]
         mock_tf_handler.return_value = tf_mock_handler_instance
 
-        handler = ConfigHandler()
+        handler = ConfigHandler(display_manager=NullDisplay())
         handler.set_preset("all")
         result = handler.configure()
 
@@ -308,7 +309,7 @@ class TestConfigHandler(unittest.TestCase):
         tf_mock_configure = tf_fns["configure"]
         mock_tf_handler.return_value = tf_mock_handler_instance
 
-        handler = ConfigHandler()
+        handler = ConfigHandler(display_manager=NullDisplay())
         handler.set_preset("all")
 
         overrides = {"var1": Mock()}
@@ -330,7 +331,7 @@ class TestConfigHandler(unittest.TestCase):
         error = RuntimeError("another-error")
         tf_mock_configure.side_effect = error
 
-        handler = ConfigHandler()
+        handler = ConfigHandler(display_manager=NullDisplay())
 
         with self.assertRaisesRegex(RuntimeError, "another-error"):
             handler.configure()
@@ -343,7 +344,7 @@ class TestConfigHandler(unittest.TestCase):
         tf_mock_record = tf_fns["record"]
         mock_tf_handler.return_value = tf_mock_handler_instance
 
-        handler = ConfigHandler()
+        handler = ConfigHandler(display_manager=NullDisplay())
         handler.record()
         tf_mock_record.assert_called_once_with(record_vars=False, record_secrets=False)
 
@@ -368,6 +369,6 @@ class TestConfigHandler(unittest.TestCase):
         mock_tf_handler.return_value = tf_mock_handler_instance
         tf_mock_record.side_effect = RuntimeError("Cannot record!")
 
-        handler = ConfigHandler()
+        handler = ConfigHandler(display_manager=NullDisplay())
         with self.assertRaises(RuntimeError):
             handler.record(record_vars=True)

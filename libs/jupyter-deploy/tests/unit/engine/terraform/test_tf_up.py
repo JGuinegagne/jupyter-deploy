@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.engine.terraform.tf_enums import TerraformSequenceId
 from jupyter_deploy.engine.terraform.tf_plan_metadata import TerraformPlanMetadata
 from jupyter_deploy.engine.terraform.tf_up import TerraformUpHandler
@@ -20,6 +21,7 @@ class TestTerraformUpHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
+            display_manager=NullDisplay(),
         )
 
         self.assertEqual(handler.project_path, project_path)
@@ -33,6 +35,7 @@ class TestTerraformUpHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
+            display_manager=NullDisplay(),
         )
 
         result = handler.get_default_config_filename()
@@ -52,6 +55,7 @@ class TestTerraformUpHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
+            display_manager=NullDisplay(),
         )
 
         # Mock the executor
@@ -77,6 +81,7 @@ class TestTerraformUpHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
+            display_manager=NullDisplay(),
         )
 
         # Mock the executor to return error
@@ -103,6 +108,7 @@ class TestTerraformUpHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
+            display_manager=NullDisplay(),
         )
 
         # Mock the executor
@@ -119,10 +125,10 @@ class TestTerraformUpHandler(unittest.TestCase):
 
     @patch("jupyter_deploy.engine.terraform.tf_up.TerraformSupervisedExecutionCallback")
     @patch("jupyter_deploy.engine.terraform.tf_up.tf_supervised_executor_factory.create_terraform_executor")
-    def test_apply_with_terminal_handler_uses_supervised_callback(
+    def test_apply_with_display_manager_uses_supervised_callback(
         self, mock_create_executor: Mock, mock_callback_cls: Mock
     ) -> None:
-        """Test that apply with terminal_handler uses TerraformSupervisedExecutionCallback."""
+        """Test that apply with display_manager uses TerraformSupervisedExecutionCallback."""
         path = Path("/mock/path")
         project_path = Path("/mock/project")
         mock_manifest = Mock()
@@ -138,13 +144,14 @@ class TestTerraformUpHandler(unittest.TestCase):
         mock_callback = Mock()
         mock_callback_cls.return_value = mock_callback
 
-        # Create handler WITH terminal_handler
-        mock_terminal_handler = Mock()
+        # Create handler WITH display_manager
+        mock_display_manager = Mock()
+        mock_display_manager.is_pass_through.return_value = False  # Use supervised callbacks
         handler = TerraformUpHandler(
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
-            terminal_handler=mock_terminal_handler,
+            display_manager=mock_display_manager,
         )
 
         # Act
@@ -153,7 +160,7 @@ class TestTerraformUpHandler(unittest.TestCase):
         # Assert
         # Verify TerraformSupervisedExecutionCallback was created
         mock_callback_cls.assert_called_once_with(
-            terminal_handler=mock_terminal_handler,
+            display_manager=mock_display_manager,
             sequence_id=TerraformSequenceId.up_apply,
         )
 
@@ -163,10 +170,10 @@ class TestTerraformUpHandler(unittest.TestCase):
 
     @patch("jupyter_deploy.engine.terraform.tf_up.TerraformSupervisedExecutionCallback")
     @patch("jupyter_deploy.engine.terraform.tf_up.tf_supervised_executor_factory.create_terraform_executor")
-    def test_apply_with_terminal_handler_handles_error(
+    def test_apply_with_display_manager_handles_error(
         self, mock_create_executor: Mock, mock_callback_cls: Mock
     ) -> None:
-        """Test that apply with terminal_handler properly raises ExecutionError on failure."""
+        """Test that apply with display_manager properly raises ExecutionError on failure."""
         path = Path("/mock/path")
         project_path = Path("/mock/project")
         mock_manifest = Mock()
@@ -182,13 +189,14 @@ class TestTerraformUpHandler(unittest.TestCase):
         mock_callback = Mock()
         mock_callback_cls.return_value = mock_callback
 
-        # Create handler WITH terminal_handler
-        mock_terminal_handler = Mock()
+        # Create handler WITH display_manager
+        mock_display_manager = Mock()
+        mock_display_manager.is_pass_through.return_value = False  # Use supervised callbacks
         handler = TerraformUpHandler(
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
-            terminal_handler=mock_terminal_handler,
+            display_manager=mock_display_manager,
         )
 
         # Act & Assert
@@ -200,7 +208,7 @@ class TestTerraformUpHandler(unittest.TestCase):
 
         # Verify TerraformSupervisedExecutionCallback was created
         mock_callback_cls.assert_called_once_with(
-            terminal_handler=mock_terminal_handler,
+            display_manager=mock_display_manager,
             sequence_id=TerraformSequenceId.up_apply,
         )
 
@@ -227,6 +235,7 @@ class TestTerraformUpHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
+            display_manager=NullDisplay(),
         )
 
         # Act
@@ -254,6 +263,7 @@ class TestTerraformUpHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
+            display_manager=NullDisplay(),
         )
 
         # Act & Assert - should raise ExecutionError
@@ -282,6 +292,7 @@ class TestTerraformUpHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
+            display_manager=NullDisplay(),
         )
 
         # Act & Assert - should raise LogCleanupError from clear_logs
@@ -314,6 +325,7 @@ class TestTerraformUpHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
+            display_manager=NullDisplay(),
         )
 
         # Act
@@ -352,6 +364,7 @@ class TestTerraformUpHandler(unittest.TestCase):
             project_path=project_path,
             project_manifest=mock_manifest,
             command_history_handler=mock_history_handler,
+            display_manager=NullDisplay(),
         )
 
         # Act

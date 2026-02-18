@@ -1,6 +1,6 @@
 from enum import Enum
 
-from jupyter_deploy.engine.supervised_execution import TerminalHandler
+from jupyter_deploy.engine.supervised_execution import DisplayManager
 from jupyter_deploy.exceptions import InstructionNotFoundError
 from jupyter_deploy.provider.aws.aws_ec2_runner import AwsEc2Runner
 from jupyter_deploy.provider.aws.aws_ssm_runner import AwsSsmRunner
@@ -22,8 +22,9 @@ class AwsApiRunner(InstructionRunner):
     Requires the user to install jupyter-deploy[aws].
     """
 
-    def __init__(self, region_name: str | None) -> None:
+    def __init__(self, display_manager: DisplayManager, region_name: str | None) -> None:
         """Instantiate the map of AWS services runner."""
+        super().__init__(display_manager)
         self.region_name = region_name
         self.service_runners: dict[str, InstructionRunner] = {}
 
@@ -47,11 +48,11 @@ class AwsApiRunner(InstructionRunner):
             return service_runner
 
         if service_name == AwsService.SSM:
-            service_runner = AwsSsmRunner(region_name=self.region_name)
+            service_runner = AwsSsmRunner(self.display_manager, region_name=self.region_name)
             self.service_runners[service_name] = service_runner
             return service_runner
         elif service_name == AwsService.EC2:
-            service_runner = AwsEc2Runner(region_name=self.region_name)
+            service_runner = AwsEc2Runner(self.display_manager, region_name=self.region_name)
             self.service_runners[service_name] = service_runner
             return service_runner
 
@@ -61,12 +62,10 @@ class AwsApiRunner(InstructionRunner):
         self,
         instruction_name: str,
         resolved_arguments: dict[str, ResolvedInstructionArgument],
-        terminal_handler: TerminalHandler | None = None,
     ) -> dict[str, ResolvedInstructionResult]:
         service_name, sub_instruction_name = AwsApiRunner._get_service_and_sub_instruction_name(instruction_name)
         service_runner = self._get_service_runner(service_name)
         return service_runner.execute_instruction(
             instruction_name=sub_instruction_name,
             resolved_arguments=resolved_arguments,
-            terminal_handler=terminal_handler,
         )

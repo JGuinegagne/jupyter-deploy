@@ -2,6 +2,7 @@ from pathlib import Path
 
 from jupyter_deploy.engine.engine_variables import EngineVariablesHandler
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.engine.terraform import tf_variables
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
 from jupyter_deploy.manifest import JupyterDeployManifest
@@ -18,7 +19,7 @@ class VariablesHandler:
 
         if engine == EngineType.TERRAFORM:
             self._handler = tf_variables.TerraformVariablesHandler(
-                project_path=project_path, project_manifest=project_manifest
+                project_path=project_path, project_manifest=project_manifest, display_manager=NullDisplay()
             )
         else:
             raise NotImplementedError(f"VariablesHandler implementation not found for engine: {engine}")

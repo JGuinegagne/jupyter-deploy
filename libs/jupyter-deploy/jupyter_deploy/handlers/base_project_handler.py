@@ -6,7 +6,7 @@ from yaml.parser import ParserError
 from yaml.scanner import ScannerError
 
 from jupyter_deploy import constants, fs_utils, manifest, variables_config
-from jupyter_deploy.engine.supervised_execution import TerminalHandler
+from jupyter_deploy.engine.supervised_execution import DisplayManager
 from jupyter_deploy.exceptions import (
     InvalidManifestError,
     InvalidVariablesDotYamlError,
@@ -24,18 +24,18 @@ class BaseProjectHandler:
     otherwise this class will raise a typer.Exit().
     """
 
-    def __init__(self, terminal_handler: TerminalHandler | None = None) -> None:
+    def __init__(self, display_manager: DisplayManager) -> None:
         """Attempts to identify the engine associated with the project.
 
         Args:
-            terminal_handler: Optional terminal handler for status updates
+            display_manager: Display manager for status updates
 
         Raises:
             ManifestNotFoundError: If project manifest not found
             ReadManifestError: If manifest cannot be read due to I/O error
             InvalidManifestError: If manifest cannot be parsed or validated
         """
-        self.terminal_handler = terminal_handler
+        self.display_manager = display_manager
         self.project_path = Path.cwd()
         self.command_history_handler = CommandHistoryHandler(self.project_path)
         manifest_path = self.project_path / constants.MANIFEST_FILENAME

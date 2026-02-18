@@ -15,6 +15,45 @@ Then module `provider/instruction_runner_factory` handles these optional imports
 You MUST NOT break that pattern with import statements to cloud-provider or infrastructure-as-code specific libraries
 outside of the instruction runner code paths.
 
+### Three-Layer Architecture
+
+**1. Core Layer** (handlers, engine, provider):
+- Handlers provide abstraction for each `jupyter-deploy` commands
+- Raise exceptions from `jupyter_deploy/exceptions.py` for errors
+- Accept `DisplayManager` instance from CLI, then use its method: `info()`, `warning()`, `success()`, `hint()`
+- Defines `SupervisedExecutor` class for managing infrastructure-as-code subprocesses
+  - Located in `engine/supervised_execution`
+  - Emits progress events that `DisplayManager` handles
+  - Supports switching between `stdin` and `stdout` when subprocess prompts for input
+- Defines the abstract, provider-agnostic command runner: `/provider/manifest_command_runner`
+  - Run commands declared in a template manifest
+  - Use a specific provider module (e.g. `/provider/aws`), which calls provider-SDK (e.g. `boto3`)
+  - Optional install thanks to lazy import in factory module `/provider/instruction_runner_factory`
+
+**2. Provider and Engine Implementations** (unified abstraction):
+- Engine implement specific command Handlers for a specific infrastructure-as-code engine; current engines:
+  - `terraform`
+- Engine {Config|Up|Down}Handlers leverage `SupervisedExecutor` to run the infrastructure-as-code subprocess calls
+- Provider instruction runners implement the `InstructionRunner` interface to make API calls with the specific provider SDK; current providers:
+  - `aws`
+
+**3. CLI Layer** (cli/):
+- Instantiate Console and error handler
+- Call core handlers and catch exceptions
+- Format and display results using rich/typer
+- Implement `DisplayManager` protocol with display managers; implementations:
+  - `SimpleDisplayManager` (cli/simple_display.py) - Spinners, status messages for SDK-style operations
+  - `ProgressDisplayManager` (cli/progress_display.py) - Progress bars, log boxes for long operations
+  - `NullDisplay` (engine/supervised_execution.py) - No-op for programmatic/test usage
+
+### Key Principles
+
+1. **Exception Handling**: All custom exceptions in `jupyter_deploy/exceptions.py`
+2. **Keep Core Generic**: Core defines interfaces, instantiates engine-specific and provider-specific instance as needed
+3. **No Terminal-specific Dependencies in Core**: rich/typer only in cli/ module
+4. **No Engine-specific implementation in Core**: use the `/engine/<engine-name>` module
+5. **Not Provider-specific implementation in Core**: use the `/provider/<provider-name>` or `/api/<api-name>` modules
+
 ## Base template package
 Code: `./libs/jupyter-deploy-tf-ec2-base`
 
@@ -112,7 +151,7 @@ This will:
 ## Running E2E Tests
 Run E2E tests against an existing deployment: `just test-e2e <project-dir> TEST-SELECTOR`
 
-Examples:
+Examples (for project-dir == sandbox3):
 - Run all E2E tests without mutating the project: `just test-e2e sandbox3 ""`
 - Run all E2E tests: `just test-e2e sandbox3 "" mutate=true`
 - Run specific test file: `just test-e2e sandbox3 test_users` (possibly needs `mutate=true`)
@@ -120,39 +159,20 @@ Examples:
 **NOTE:** mutate tests are long, pipe to log stream to file: `just test-e2e <project-dir> TEST-SELECTOR mutate=true 2>&1 | tee results.log`   
 The test container saves screenshots of failed tests to `./test-results`, use the read image tool.
 
-# Debugging and Investing Deployments
+# Debugging and Investigating Deployments
 
-## Useful jd commands
-Essential commands for debugging a deployed instance that uses the base template.
-- `jd server status` - Check server health status (IN_SERVICE, OUT_OF_SERVICE, etc.)
-- `jd server restart` - Restart all services
-- `jd host status` - Check EC2 instance status
-- `jd host exec -- "command"` - Execute commands on the instance
-- `jd server exec -s SERVICE -- CMD` - Execute commands in the container on the instance
-- `jd host exec -- tail -50 /var/log/jupyter-deploy/LOG-FILENAME` - View command logs (e.g. `update-server.log` for `jd server restart` logs)
-- `jd host exec -- tail -50 /var/log/services/LOG-FILENAME` - View historic service logs (survives container restart)
-- `jd server logs -s SERVICE` - View service logs
-- `jd config` - Reconfigure deployment (generates terraform plan)
-- `jd up` - Apply infrastructure changes
+**Important:** Most `jd` commands (`init` excepted) assume the `cwd` is a particular project; change dir, or use the `--path` attribute (most commands support it).
+
+Essential commands for debugging a deploy project:
+- `jd --help` or `jd CMD SUB-CMD --help` - Find out about API shapes
 - `jd show --variables --list` - Display list of available variables
 - `jd show --outputs --list` - Display list of available outputs
 - `jd show -v VARIABLE-NAME --text` - Display the variable value (careful: it does not guarantee it was applied with `jd up`)
 - `jd show -o OUTPUT-NAME --text` - Display the output value
+- `jd config` - Reconfigure deployment
+- `jd up` - Apply infrastructure changes
 - `jd history show CMD` - Display the content of the latest CMD (`config` or `up`) run (pass `-n 2` for the second-to-latest, etc)
 - `jd history show up -n 100 -s 100` - Display lines [-200:-100] of the latest `up` run
-- `jd --help` or `jd CMD SUB-CMD --help` - Find out about API shapes 
 
-## Key file locations on instance in the base template
-
-### Deployment scripts (downloaded from S3 by SSM association)
-- `/usr/local/bin/check-status-internal.sh` - Status checking logic
-- `/usr/local/bin/get-status.sh` - Status code mapping
-- `/usr/local/bin/update-server.sh` - Service management (start/stop/restart)
-- `/usr/local/bin/update-auth.sh` - OAuth configuration updates
-- `/usr/local/bin/sync-acme.sh` - TLS certificate sync from Secrets Manager
-
-### Docker configuration files
-- `/opt/docker/docker-compose.yml` - Docker Compose configuration
-- `/opt/docker/docker-startup.sh` - Docker services startup script
-- `/opt/docker/dockerfile.jupyter` - Jupyter container Dockerfile
-- `/opt/docker/traefik.yml` - Traefik reverse proxy configuration
+More specific commands are template-dependent.
+Read the `AGENT.md` in the project directory for detailed instructions.

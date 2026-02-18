@@ -29,7 +29,7 @@ def status(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = host_handler.HostHandler(terminal_handler=simple_display_manager)
+        handler = host_handler.HostHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Checking host status..."):
             status = handler.get_host_status()
@@ -52,7 +52,7 @@ def stop(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = host_handler.HostHandler(terminal_handler=simple_display_manager)
+        handler = host_handler.HostHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Stopping host..."):
             handler.stop_host()
@@ -73,7 +73,7 @@ def start(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = host_handler.HostHandler(terminal_handler=simple_display_manager)
+        handler = host_handler.HostHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Starting host..."):
             handler.start_host()
@@ -94,7 +94,7 @@ def restart(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = host_handler.HostHandler(terminal_handler=simple_display_manager)
+        handler = host_handler.HostHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Restarting host..."):
             handler.restart_host()
@@ -115,7 +115,7 @@ def connect(
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = host_handler.HostHandler(terminal_handler=simple_display_manager)
+        handler = host_handler.HostHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Connecting to host..."):
             handler.connect()
@@ -151,7 +151,7 @@ def exec(
 
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
         simple_display_manager = SimpleDisplayManager(console=console)
-        handler = host_handler.HostHandler(terminal_handler=simple_display_manager)
+        handler = host_handler.HostHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Executing command..."):
             stdout, stderr, returncode = handler.exec_command(command_args)
