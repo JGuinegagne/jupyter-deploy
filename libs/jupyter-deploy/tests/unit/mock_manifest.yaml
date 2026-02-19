@@ -149,27 +149,27 @@ commands:
             source-key: "service"
   - cmd: server.logs
     sequence:
-    - api-name: aws.ssm.wait-command-sync
-      arguments:
-      - api-attribute: document_name
-        source: output
-        source-key: server_logs_document
-      - api-attribute: instance_id
-        source: output
-        source-key: instance_id
-      - api-attribute: service
-        source: cli
-        source-key: service
-      - api-attribute: extra
-        source: cli
-        source-key: extra
+      - api-name: aws.ssm.wait-command-sync
+        arguments:
+          - api-attribute: document_name
+            source: output
+            source-key: server_logs_document
+          - api-attribute: instance_id
+            source: output
+            source-key: instance_id
+          - api-attribute: service
+            source: cli
+            source-key: service
+          - api-attribute: extra
+            source: cli
+            source-key: extra
     results:
-    - result-name: server.logs
-      source: result
-      source-key: '[0].StandardOutputContent'
-    - result-name: server.errors
-      source: result
-      source-key: '[0].StandardErrorContent'
+      - result-name: server.logs
+        source: result
+        source-key: '[0].StandardOutputContent'
+      - result-name: server.errors
+        source: result
+        source-key: '[0].StandardErrorContent'
   - cmd: "server.exec"
     sequence:
       - api-name: "aws.ssm.wait-command-sync"
@@ -479,7 +479,7 @@ supervised-execution:
       default-phase:
         label: "Mutating resources"
         progress-pattern: "(Creation complete after|Modifications complete after|Destruction complete after)"
-        progress-events-estimate-dynamic-source: "plan.to_mutate"     
+        progress-events-estimate-dynamic-source: "plan.to_mutate"
       phases:
         - enter-pattern: "null_resource.wait_for_instance_ready: Creating"
           exit-pattern: "null_resource.wait_for_instance_ready: Creation complete"

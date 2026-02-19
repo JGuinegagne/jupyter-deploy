@@ -37,14 +37,19 @@ jobs:
 
       - name: Run ruff check
         run: |
-          uv run ruff check
+          uv run ruff check --preview
         working-directory: ${{ inputs.working-directory }}
 
       - name: Verify formatting
         run: |
           uv run --script $GITHUB_WORKSPACE/scripts/verify_format.py .
         working-directory: ${{ inputs.working-directory }}
-        
+
+      - name: Run yamllint
+        run: |
+          uv run yamllint .
+        working-directory: ${{ inputs.working-directory }}
+
   lint-tf:
     name: Lint Terraform templates
     runs-on: ubuntu-latest

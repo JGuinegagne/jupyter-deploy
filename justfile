@@ -8,6 +8,7 @@ lint:
     uv run ruff check --preview --fix
     uv run mypy
     terraform fmt -recursive -write=true
+    uv run yamllint .
 
 # Run unit tests
 unit-test:

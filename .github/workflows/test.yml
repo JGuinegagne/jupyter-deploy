@@ -24,7 +24,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           working-directory: ${{ inputs.working-directory }}
-      
+
       - name: Install dependencies
         run: |
           uv sync --all-extras
@@ -47,7 +47,7 @@ jobs:
         with:
           python-version: '3.13'
           working-directory: ${{ inputs.working-directory }}
-      
+
       - name: Install dependencies
         run: |
           uv sync --all-extras

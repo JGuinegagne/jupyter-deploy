@@ -80,7 +80,7 @@ A set of pytest fixtures to run end-to-end tests for templates, referred to as "
 ## After code changes
 Always run from the root of the repository:
 1. Run linting and formatting: `just lint`
-   - Runs `ruff format`, `ruff check --fix`, `mypy`, and `terraform fmt`
+   - Runs `ruff format`, `ruff check --fix`, `mypy`, `terraform fmt`, and `yamllint`
 2. Run unit tests: `just unit-test`
    - Runs `uv run pytest`
 
