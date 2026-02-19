@@ -4,6 +4,7 @@ from unittest.mock import Mock
 import botocore.exceptions
 
 from jupyter_deploy.api.aws.ssm.ssm_session import describe_instance_information
+from jupyter_deploy.exceptions import UnreachableHostError
 
 
 class TestDescribeInstanceInformation(unittest.TestCase):
@@ -41,15 +42,15 @@ class TestDescribeInstanceInformation(unittest.TestCase):
         self.assertEqual(result, instance_info)
 
     def test_empty_instance_information_list(self) -> None:
-        """Test that describe_instance_information raises ValueError when no information is available."""
+        """Test that describe_instance_information raises UnreachableHostError when no information is available."""
         # Setup
         self.mock_ssm_client.describe_instance_information.return_value = {"InstanceInformationList": []}
 
         # Execute & Assert
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(UnreachableHostError) as context:
             describe_instance_information(self.mock_ssm_client, self.instance_id)
 
-        self.assertEqual(str(context.exception), "SSM:DescribeInstanceInformation returned an empty list")
+        self.assertIn("not reporting to SSM", str(context.exception))
         self.mock_ssm_client.describe_instance_information.assert_called_once_with(
             Filters=[{"Key": "InstanceIds", "Values": [self.instance_id]}]
         )

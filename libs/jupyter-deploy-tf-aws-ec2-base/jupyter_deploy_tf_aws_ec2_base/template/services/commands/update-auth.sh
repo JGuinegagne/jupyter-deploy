@@ -1,4 +1,9 @@
 #!/bin/bash
+# Return code handling:
+# - Uses 'set -e' to fail fast if any command fails
+# - If script exits non-zero, SSM marks the command as Failed
+# - CLI error handler catches HostCommandInstructionError and displays stdout/stderr
+# - Currently, jd exits with code 1 (generic error) regardless of the underlying exit code
 set -e
 
 # Script to update the file containing the list of authorized GitHub entities (users, teams, orgs)
@@ -266,8 +271,8 @@ sed -i "s/^AUTHED_USERS_CONTENT=.*/AUTHED_USERS_CONTENT=${AUTHED_USERS_CONTENT}/
 sed -i "s/^AUTHED_ORG_CONTENT=.*/AUTHED_ORG_CONTENT=${AUTHED_ORG_CONTENT}/" /opt/docker/.env
 sed -i "s/^AUTHED_TEAMS_CONTENT=.*/AUTHED_TEAMS_CONTENT=${AUTHED_TEAMS_CONTENT}/" /opt/docker/.env
 
-# The oauth sidecar vends cookies stored on user's webbrowser. 
-# Such cookies are opaque to the users, they are encrypted with a secret string. 
+# The oauth sidecar vends cookies stored on user's webbrowser.
+# Such cookies are opaque to the users, they are encrypted with a secret string.
 # When we remove a user from the allowlist, we need to invalidate the cookie/session immediately.
 # We update the cookie secret. Note that this action invalidates all sessions/cookies.
 if [ "$REFRESH_OAUTH_COOKIE" = true ]; then
@@ -279,9 +284,24 @@ fi
 if [ "$AUTH_CHANGED" = true ]; then
     log_message "Recreating OAuth container to apply changes..."
     cd /opt/docker
-    OUTPUT=$(docker compose up -d oauth 2>&1)
+    # Use --wait to ensure oauth container is ready before returning
+    # This prevents 404 errors from rapid successive auth mutations
+    OUTPUT=$(docker compose up -d oauth --wait --wait-timeout 30 2>&1)
     log_message "Docker compose output:"
     log_message "$OUTPUT"
+    log_message "OAuth container restart complete."
 else
     log_message "No changes detected, no need to restart oauth container."
+fi
+
+# Output the updated state for the modified entity type to stdout.
+# This is consumed by the manifest runner to update the corresponding terraform variable,
+# keeping terraform state in sync with the live system state.
+# The user does not see this output; they use the list/get commands to query state.
+if [ "$ENTITY_TYPE" == "org" ]; then
+    echo "$AUTHED_ORG_CONTENT"
+elif [ "$ENTITY_TYPE" == "users" ]; then
+    echo "$AUTHED_USERS_CONTENT"
+elif [ "$ENTITY_TYPE" == "teams" ]; then
+    echo "$AUTHED_TEAMS_CONTENT"
 fi

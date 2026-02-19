@@ -90,8 +90,8 @@ class ServerHandler(BaseProjectHandler):
             },
         )
 
-    def get_server_logs(self, service: str, extra: list[str]) -> tuple[str, str]:
-        """Sends a logs command to the host for the service, return the stdout, stderr."""
+    def get_server_logs(self, service: str, extra: list[str]) -> tuple[str, str, int]:
+        """Sends a logs command to the host for the service, return the stdout, stderr, and exit code."""
         command = self.project_manifest.get_command("server.logs")
         validated_service = self.project_manifest.get_validated_service(service, allow_all=False)
         runner = cmd_runner.ManifestCommandRunner(
@@ -109,7 +109,8 @@ class ServerHandler(BaseProjectHandler):
         )
         stdout = runner.get_result_value(command, "server.logs", str)
         stderr = runner.get_result_value(command, "server.errors", str)
-        return stdout, stderr
+        returncode = runner.get_result_value_with_fallback(command, "server.logs.returncode", int, 0)
+        return stdout, stderr, returncode
 
     def exec_command(self, service: str, command_args: list[str]) -> tuple[str, str, int]:
         """Execute a command inside a service container, return the stdout, stderr, and exit code."""

@@ -88,6 +88,12 @@ services:
         tag: "docker.oauth"
     depends_on:
       - fluent-bit
+    healthcheck:
+      test: ["CMD", "/bin/oauth2-proxy", "--version"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
     volumes:
       - ./static:/var/www/static:ro
     labels:

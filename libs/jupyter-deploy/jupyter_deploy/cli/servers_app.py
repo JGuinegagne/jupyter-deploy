@@ -168,7 +168,7 @@ def logs(
         handler = server_handler.ServerHandler(display_manager=simple_display_manager)
 
         with simple_display_manager.spinner("Fetching logs..."):
-            logs, err_logs = handler.get_server_logs(service=service, extra=extra)
+            logs, err_logs, returncode = handler.get_server_logs(service=service, extra=extra)
 
         if logs:
             console.rule("stdout")
@@ -182,6 +182,13 @@ def logs(
             console.rule("stderr")
             console.print(err_logs)
             console.rule()
+
+        # Note: the command runner SHOULD raise a HostCommandInstructionError instead of returning
+        # a non-zero error code. Such HostCommandInstructionError would be caught and handled by
+        # the error context manager so that users do not see a long, unhelpful stack trace.
+        # However, just in case the instruction runner setup is incorrect, handle it here as well.
+        if returncode != 0:
+            raise typer.Exit(code=returncode)
 
 
 @servers_app.command(context_settings={"allow_extra_args": True, "allow_interspersed_args": False})

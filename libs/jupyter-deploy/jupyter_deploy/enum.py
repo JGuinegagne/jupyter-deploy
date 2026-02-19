@@ -151,3 +151,22 @@ class JupyterDeployTool(str, Enum):
                 return source
 
         raise ValueError(f"No tool found for '{target_str}'")
+
+
+class ProviderType(str, Enum):
+    """Cloud provider types."""
+
+    AWS = "AWS"
+
+    @classmethod
+    def from_string(cls, value: str) -> "ProviderType":
+        """Return enum from string value, ignoring case.
+
+        Raises:
+            ValueError: If no matching enum value is found.
+        """
+        value_lower = value.lower()
+        for member in cls:
+            if member.value.lower() == value_lower:
+                return member
+        raise ValueError(f"Unknown provider type: {value}")

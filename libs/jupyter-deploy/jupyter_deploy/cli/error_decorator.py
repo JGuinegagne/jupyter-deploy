@@ -7,6 +7,7 @@ import typer
 from rich.console import Console
 
 from jupyter_deploy.exceptions import (
+    CommandNotImplementedError,
     ConfigurationError,
     DownAutoApproveRequiredError,
     HostCommandInstructionError,
@@ -19,6 +20,7 @@ from jupyter_deploy.exceptions import (
     InvalidManifestError,
     InvalidPresetError,
     InvalidProjectPathError,
+    InvalidProviderCredentialsError,
     InvalidServiceError,
     InvalidVariablesDotYamlError,
     JupyterDeployError,
@@ -27,6 +29,7 @@ from jupyter_deploy.exceptions import (
     ManifestNotFoundError,
     OpenWebBrowserError,
     OutputNotFoundError,
+    ProviderPermissionError,
     ReadConfigurationError,
     ReadManifestError,
     SupervisedExecutionError,
@@ -80,7 +83,25 @@ def handle_cli_errors(console: Console) -> Generator[None, None, None]:
     except InvalidManifestError as e:
         console.print(f":x: {e}", style="bold red")
         console.line()
-        console.print(":bulb: Check your manifest.yaml file for syntax errors or missing required fields")
+        console.print(":bulb: Review your manifest.yaml file for syntax errors or missing required fields")
+        raise typer.Exit(code=1) from None
+
+    except CommandNotImplementedError as e:
+        console.print(f":x: {e}", style="bold red")
+        raise typer.Exit(code=1) from None
+
+    except InvalidProviderCredentialsError as e:
+        console.print(f":x: {e}", style="bold red")
+        if e.original_message:
+            console.line()
+            console.print(e.original_message, style="dim")
+        raise typer.Exit(code=1) from None
+
+    except ProviderPermissionError as e:
+        console.print(f":x: {e}", style="bold red")
+        if e.original_message:
+            console.line()
+            console.print(e.original_message, style="dim")
         raise typer.Exit(code=1) from None
 
     except ToolRequiredError as e:
@@ -114,9 +135,14 @@ def handle_cli_errors(console: Console) -> Generator[None, None, None]:
 
     except (UnreachableHostError, IncompatibleHostStateError) as e:
         console.print(f":x: {e}", style="bold red")
+        console.line()
         if e.hint:
-            console.line()
+            # Use the specific hint if provided (e.g., from IncompatibleHostStateError)
             console.print(f":bulb: {e.hint}")
+        else:
+            # Generic hint for accessibility issues (e.g., UnreachableHostError with no hint)
+            console.print(":bulb: verify that your host is running: [bold cyan]jd host status[/]")
+            console.print(":wrench: or try restarting it: [bold cyan]jd host restart[/]")
         raise typer.Exit(code=1) from None
 
     except HostCommandInstructionError as e:
@@ -135,13 +161,13 @@ def handle_cli_errors(console: Console) -> Generator[None, None, None]:
     except InvalidVariablesDotYamlError as e:
         console.print(f":x: {e}", style="bold red")
         console.line()
-        console.print(":bulb: Check your variables.yaml file for syntax errors")
+        console.print(":bulb: Review your variables.yaml file for syntax errors")
         raise typer.Exit(code=1) from None
 
     except LogNotFoundError as e:
         console.print(f":x: {e}", style="bold red")
         console.line()
-        console.print(":bulb: Use [bold cyan]jd history list[/] to see available logs")
+        console.print(":bulb: To see available logs: [bold cyan]jd history list CMD[/]")
         raise typer.Exit(code=1) from None
 
     except (
