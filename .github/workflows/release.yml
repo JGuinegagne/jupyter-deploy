@@ -39,7 +39,7 @@ jobs:
         run: |
           cd ${{ inputs.working-directory }}
           uv build
-        
+
       - name: Get package version
         id: get-version
         run: |
@@ -56,7 +56,7 @@ jobs:
 
   lint:
     name: Run linters
-    needs: 
+    needs:
       - build
     uses: ./.github/workflows/lint.yml
     with:
@@ -64,7 +64,7 @@ jobs:
 
   test:
     name: Run tests
-    needs: 
+    needs:
       - lint
     uses: ./.github/workflows/test.yml
     with:
@@ -84,20 +84,20 @@ jobs:
         with:
           name: dist
           path: dist
-          
+
       - name: List build artifacts
         run: ls -la dist/
-        
+
       - name: Setup UV
         uses: astral-sh/setup-uv@v3
-        
+
       - name: Publish to Test PyPI
         run: |
           uv publish \
             --publish-url https://test.pypi.org/legacy/ \
             --check-url https://test.pypi.org/simple \
             --trusted-publishing always
-    
+
   test-pypi-install:
     name: Check installation of the Test PyPI build
     needs: [test-pypi-publish, build]
@@ -108,7 +108,7 @@ jobs:
     steps:
       - name: Setup UV
         uses: astral-sh/setup-uv@v3
-        
+
       - name: Test installation from Test PyPi
         run: |
           uv venv
@@ -133,17 +133,17 @@ jobs:
         with:
           name: dist
           path: dist
-          
+
       - name: List build artifacts
         run: ls -la dist/
-        
+
       - name: Setup UV
         uses: astral-sh/setup-uv@v3
-        
+
       - name: Publish to PyPI
         run: |
           uv publish \
-            --trusted-publishing always 
+            --trusted-publishing always
 
   mark-release:
     name: Create GitHub Release

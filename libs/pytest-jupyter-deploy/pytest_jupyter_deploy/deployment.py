@@ -320,7 +320,7 @@ class EndToEndDeployment:
                 return  # Success - SSM is ready
             except JDCliError as e:
                 error_str = str(e)
-                if "SSM:DescribeInstanceInformation returned an empty list" in error_str:
+                if "is not reporting to SSM" in error_str:
                     if attempt < max_retries - 1:
                         # Exponential backoff with cap: 2, 4, 8, 16, 30, 30... (max ~90s total)
                         delay = min(2 ** (attempt + 1), 30)

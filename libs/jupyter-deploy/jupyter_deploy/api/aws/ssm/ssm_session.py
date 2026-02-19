@@ -16,6 +16,7 @@ def describe_instance_information(ssm_client: SSMClient, instance_id: str) -> In
     information_list = response["InstanceInformationList"]
 
     if not information_list:
+        # NOTE: pytest-jupyter-deploy depends on this error message for retry logic
         raise UnreachableHostError(f"Instance '{instance_id}' is not reporting to SSM")
 
     return information_list[0]
