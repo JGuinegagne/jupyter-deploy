@@ -473,15 +473,17 @@ class TestServerHandler(unittest.TestCase):
 
         mock_cmd_runner, mock_cmd_runner_fns = self.get_mock_manifest_cmd_runner_and_fns()
         mock_cmd_runner_fns["get_result_value"].side_effect = ["some\nlogs", "some\nerrors"]
+        mock_cmd_runner_fns["get_result_value_with_fallback"].return_value = 0
         mock_cmd_runner_class.return_value = mock_cmd_runner
 
         # Act
         handler = ServerHandler(display_manager=NullDisplay())
-        logs, error_logs = handler.get_server_logs("oauth", ["-n", "200"])
+        logs, error_logs, returncode = handler.get_server_logs("oauth", ["-n", "200"])
 
         # Assert results
         self.assertEqual(logs, "some\nlogs")
         self.assertEqual(error_logs, "some\nerrors")
+        self.assertEqual(returncode, 0)
 
         # Verify
         mock_cmd_runner_class.assert_called_once()
@@ -492,6 +494,7 @@ class TestServerHandler(unittest.TestCase):
         self.assertEqual(mock_cmd_runner_class.call_args[1]["variable_handler"], mock_variable_handler)
         self.assertEqual(mock_cmd_runner_fns["get_result_value"].mock_calls[0][1][1], "server.logs")
         self.assertEqual(mock_cmd_runner_fns["get_result_value"].mock_calls[1][1][1], "server.errors")
+        mock_cmd_runner_fns["get_result_value_with_fallback"].assert_called_once()
 
         # Check CLI parameters
         cli_paramdefs = mock_cmd_runner_fns["run_command_sequence"].call_args[1]["cli_paramdefs"]

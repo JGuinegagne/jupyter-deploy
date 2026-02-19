@@ -1,4 +1,9 @@
 #!/bin/bash
+# Return code handling:
+# - Uses 'set -e' to fail fast if any command fails
+# - If script exits non-zero, SSM marks the command as Failed
+# - CLI error handler catches HostCommandInstructionError and displays stdout/stderr
+# - Currently, jd exits with code 1 (generic error) regardless of the underlying exit code
 set -e
 
 # Script to control the Jupyter server container and related services

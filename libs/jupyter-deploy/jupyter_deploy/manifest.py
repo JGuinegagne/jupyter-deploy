@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.enum import InstructionArgumentSource, ResultSource, TransformType, UpdateSource, ValueSource
-from jupyter_deploy.exceptions import InvalidServiceError
+from jupyter_deploy.exceptions import CommandNotImplementedError, InvalidServiceError
 
 
 class JupyterDeployTemplateV1(BaseModel):
@@ -240,12 +240,11 @@ class JupyterDeployManifestV1(BaseModel):
         """Return the command details.
 
         Raises:
-            NotImplementedError if the manifest has no declared command.
-            NotImplementedError if the command is not found.
+            CommandNotImplementedError if the command is not found in the manifest.
         """
         command = next((cmd for cmd in (self.commands or []) if cmd.cmd == cmd_name), None)
         if not command:
-            raise NotImplementedError(f"No implementation found for command: {cmd_name}")
+            raise CommandNotImplementedError(cmd_name)
         return command
 
     def get_services(self) -> list[str]:

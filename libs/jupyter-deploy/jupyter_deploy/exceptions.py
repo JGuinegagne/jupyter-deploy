@@ -5,6 +5,8 @@ across interfaces (CLI, API, etc.), while also preserving their original excepti
 types (ValueError, RuntimeError, etc.) for backwards compatibility.
 """
 
+from jupyter_deploy.enum import ProviderType
+
 
 class JupyterDeployError(Exception):
     """Base exception for all jupyter-deploy errors."""
@@ -21,6 +23,18 @@ class ManifestNotFoundError(JupyterDeployError, FileNotFoundError):
     """Raised when manifest file is missing or project cannot be found."""
 
     pass
+
+
+class CommandNotImplementedError(JupyterDeployError, NotImplementedError):
+    """Raised when a command is not found in the project manifest.
+
+    Attributes:
+        command_name: The name of the command that was not found
+    """
+
+    def __init__(self, command_name: str) -> None:
+        self.command_name = command_name
+        super().__init__(f"Command '{command_name}' is not implemented in this template.")
 
 
 class ReadManifestError(JupyterDeployError, OSError):
@@ -192,6 +206,39 @@ class InstructionError(JupyterDeployError, RuntimeError):
     """Base exception for instruction execution errors."""
 
     pass
+
+
+class InvalidProviderCredentialsError(InstructionError, RuntimeError):
+    """Raised when provider credentials are missing or invalid.
+
+    Attributes:
+        provider_name: Cloud provider type
+        original_message: Original error message from the provider SDK
+    """
+
+    def __init__(self, provider_name: ProviderType, original_message: str) -> None:
+        self.provider_name = provider_name
+        self.original_message = original_message
+        super().__init__(f"Invalid or missing {provider_name.value} credentials")
+
+
+class ProviderPermissionError(InstructionError, RuntimeError):
+    """Raised when operation is denied due to insufficient permissions.
+
+    Attributes:
+        provider_name: Cloud provider type
+        operation: The operation that was attempted (e.g., 'ec2:StartInstance')
+        original_message: Original error message from the provider SDK
+    """
+
+    def __init__(self, provider_name: ProviderType, operation: str | None, original_message: str) -> None:
+        self.provider_name = provider_name
+        self.operation = operation
+        self.original_message = original_message
+        if operation:
+            super().__init__(f"Permission error for {provider_name.value} operation: {operation}")
+        else:
+            super().__init__(f"Permission error for {provider_name.value} operation")
 
 
 class InteractiveSessionError(InstructionError, RuntimeError):

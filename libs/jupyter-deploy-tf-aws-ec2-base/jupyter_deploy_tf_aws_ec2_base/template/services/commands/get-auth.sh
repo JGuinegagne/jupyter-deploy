@@ -1,4 +1,9 @@
 #!/bin/bash
+# Return code handling:
+# - Uses 'set -e' but should always succeed for valid inputs
+# - Exits 0 on success after outputting the requested entity list
+# - Exits non-zero (1) only if invalid entity type provided
+# - This is a query command: successfully retrieving the value (even if empty) exits 0
 set -e
 
 # Script to read the file containing the authorized GitHub entities (users, teams, orgs)

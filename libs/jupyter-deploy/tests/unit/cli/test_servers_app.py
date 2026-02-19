@@ -588,7 +588,7 @@ class TestServerLogsCmd(unittest.TestCase):
 
         mock_console = Mock()
         mock_console_class.return_value = mock_console
-        mock_handler_fns["get_server_logs"].return_value = "some-logs", "some-errors"
+        mock_handler_fns["get_server_logs"].return_value = "some-logs", "some-errors", 0
 
         # Execute
         runner = CliRunner()
@@ -665,7 +665,7 @@ class TestServerLogsCmd(unittest.TestCase):
         # Set up the console mock
         mock_console = Mock()
         mock_console_class.return_value = mock_console
-        mock_handler_fns["get_server_logs"].return_value = "", ""
+        mock_handler_fns["get_server_logs"].return_value = "", "", 0
 
         mock_spinner = Mock()
         mock_spinner.__enter__ = Mock(return_value=None)

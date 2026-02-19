@@ -181,6 +181,9 @@ commands:
   - result-name: server.errors
     source: result
     source-key: '[0].StandardErrorContent'
+  - result-name: server.logs.returncode
+    source: result
+    source-key: '[0].ResponseCode'
 - cmd: server.exec
   sequence:
   - api-name: aws.ssm.wait-command-sync
@@ -236,21 +239,10 @@ commands:
     - api-attribute: action
       source: cli
       source-key: action
-  - api-name: aws.ssm.wait-command-sync
-    arguments:
-    - api-attribute: document_name
-      source: output
-      source-key: auth_check_document
-    - api-attribute: instance_id
-      source: output
-      source-key: instance_id
-    - api-attribute: category
-      source: cli
-      source-key: category
   updates:
   - variable-name: oauth_allowed_usernames
     source: result
-    source-key: '[1].StandardOutputContent'
+    source-key: '[0].StandardOutputContent'
     transform: comma-separated-str-to-list-str
 - cmd: users.remove
   sequence:
@@ -268,21 +260,10 @@ commands:
     - api-attribute: action
       source: cli
       source-key: action
-  - api-name: aws.ssm.wait-command-sync
-    arguments:
-    - api-attribute: document_name
-      source: output
-      source-key: auth_check_document
-    - api-attribute: instance_id
-      source: output
-      source-key: instance_id
-    - api-attribute: category
-      source: cli
-      source-key: category
   updates:
   - variable-name: oauth_allowed_usernames
     source: result
-    source-key: '[1].StandardOutputContent'
+    source-key: '[0].StandardOutputContent'
     transform: comma-separated-str-to-list-str
 - cmd: users.set
   sequence:
@@ -300,21 +281,10 @@ commands:
     - api-attribute: action
       source: cli
       source-key: action
-  - api-name: aws.ssm.wait-command-sync
-    arguments:
-    - api-attribute: document_name
-      source: output
-      source-key: auth_check_document
-    - api-attribute: instance_id
-      source: output
-      source-key: instance_id
-    - api-attribute: category
-      source: cli
-      source-key: category
   updates:
   - variable-name: oauth_allowed_usernames
     source: result
-    source-key: '[1].StandardOutputContent'
+    source-key: '[0].StandardOutputContent'
     transform: comma-separated-str-to-list-str
 - cmd: users.list
   sequence:
@@ -350,21 +320,10 @@ commands:
     - api-attribute: action
       source: cli
       source-key: action
-  - api-name: aws.ssm.wait-command-sync
-    arguments:
-    - api-attribute: document_name
-      source: output
-      source-key: auth_check_document
-    - api-attribute: instance_id
-      source: output
-      source-key: instance_id
-    - api-attribute: category
-      source: cli
-      source-key: category
   updates:
   - variable-name: oauth_allowed_teams
     source: result
-    source-key: '[1].StandardOutputContent'
+    source-key: '[0].StandardOutputContent'
     transform: comma-separated-str-to-list-str
 - cmd: teams.remove
   sequence:
@@ -382,21 +341,10 @@ commands:
     - api-attribute: action
       source: cli
       source-key: action
-  - api-name: aws.ssm.wait-command-sync
-    arguments:
-    - api-attribute: document_name
-      source: output
-      source-key: auth_check_document
-    - api-attribute: instance_id
-      source: output
-      source-key: instance_id
-    - api-attribute: category
-      source: cli
-      source-key: category
   updates:
   - variable-name: oauth_allowed_teams
     source: result
-    source-key: '[1].StandardOutputContent'
+    source-key: '[0].StandardOutputContent'
     transform: comma-separated-str-to-list-str
 - cmd: teams.set
   sequence:
@@ -414,21 +362,10 @@ commands:
     - api-attribute: action
       source: cli
       source-key: action
-  - api-name: aws.ssm.wait-command-sync
-    arguments:
-    - api-attribute: document_name
-      source: output
-      source-key: auth_check_document
-    - api-attribute: instance_id
-      source: output
-      source-key: instance_id
-    - api-attribute: category
-      source: cli
-      source-key: category
   updates:
   - variable-name: oauth_allowed_teams
     source: result
-    source-key: '[1].StandardOutputContent'
+    source-key: '[0].StandardOutputContent'
     transform: comma-separated-str-to-list-str
 - cmd: teams.list
   sequence:
@@ -461,21 +398,10 @@ commands:
     - api-attribute: organization
       source: cli
       source-key: organization
-  - api-name: aws.ssm.wait-command-sync
-    arguments:
-    - api-attribute: document_name
-      source: output
-      source-key: auth_check_document
-    - api-attribute: instance_id
-      source: output
-      source-key: instance_id
-    - api-attribute: category
-      source: cli
-      source-key: category
   updates:
   - variable-name: oauth_allowed_org
     source: result
-    source-key: '[1].StandardOutputContent'
+    source-key: '[0].StandardOutputContent'
 - cmd: organization.unset
   sequence:
   - api-name: aws.ssm.wait-command-sync
@@ -486,21 +412,10 @@ commands:
     - api-attribute: instance_id
       source: output
       source-key: instance_id
-  - api-name: aws.ssm.wait-command-sync
-    arguments:
-    - api-attribute: document_name
-      source: output
-      source-key: auth_check_document
-    - api-attribute: instance_id
-      source: output
-      source-key: instance_id
-    - api-attribute: category
-      source: cli
-      source-key: category
   updates:
   - variable-name: oauth_allowed_org
     source: result
-    source-key: '[1].StandardOutputContent'
+    source-key: '[0].StandardOutputContent'
 - cmd: organization.get
   sequence:
   - api-name: aws.ssm.wait-command-sync
