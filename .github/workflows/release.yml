@@ -121,7 +121,7 @@ jobs:
 
   prod-pypi-publish:
     name: Publish to PyPI
-    needs: [test-pypi-install, build]
+    needs: [build]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
