@@ -5,6 +5,7 @@ import shutil
 import stat
 from pathlib import Path
 
+import pathspec
 import yaml
 
 DEFAULT_IGNORE_PATTERNS: list[str] = []
@@ -241,3 +242,22 @@ def write_yaml_file_with_comments(
 
         with open(file_path, "w") as f:
             f.writelines(modified_lines)
+
+
+def walk_local_files_with_gitignore_rules(local_path: Path, gitignore_path: Path | None = None) -> list[Path]:
+    """Walk local directory and return files, respecting .gitignore patterns."""
+    spec: pathspec.PathSpec | None = None
+    if gitignore_path and gitignore_path.exists():
+        with open(gitignore_path) as f:
+            spec = pathspec.PathSpec.from_lines("gitignore", f)
+
+    files: list[Path] = []
+    for file_path in sorted(local_path.rglob("*")):
+        if not file_path.is_file():
+            continue
+        relative = file_path.relative_to(local_path)
+        if spec and spec.match_file(str(relative)):
+            continue
+        files.append(file_path)
+
+    return files

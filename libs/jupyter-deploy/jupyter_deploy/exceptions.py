@@ -371,3 +371,14 @@ class LogCleanupError(JupyterDeployError, Exception):
     """Raised when log cleanup fails."""
 
     pass
+
+
+# ============================================================================
+# Backup and store errors
+# ============================================================================
+
+
+class BackupStoreNotFoundError(JupyterDeployError, RuntimeError):
+    """Raised when no backup store is found and cannot be created."""
+
+    pass
