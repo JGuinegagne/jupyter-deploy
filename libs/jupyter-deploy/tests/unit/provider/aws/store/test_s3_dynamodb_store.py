@@ -1,3 +1,4 @@
+import re
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
@@ -55,6 +56,25 @@ class TestEnsureStore(unittest.TestCase):
 
         mock_s3_bucket.create_bucket.assert_called_once()
         self.assertTrue(result.store_id.startswith("jupyter-deploy-projects-"))
+
+    @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.dynamodb_table")
+    @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.s3_bucket")
+    @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.boto3")
+    def test_generated_bucket_name_is_valid_s3_name(
+        self, mock_boto3: Mock, mock_s3_bucket: Mock, mock_ddb: Mock
+    ) -> None:
+        mock_s3_bucket.find_buckets_by_tag.return_value = []
+        mock_ddb.get_table_by_name.return_value = {"Table": {"TableStatus": "ACTIVE"}}
+        provider = S3DynamoDbTableStoreManager(region="us-west-2")
+
+        result = provider.ensure_store(NullDisplay())
+
+        # S3 bucket names: 3-63 chars, lowercase alphanumeric and hyphens,
+        # must start/end with letter or number.
+        # ref: https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html
+        s3_bucket_pattern = re.compile(r"^[a-z0-9][a-z0-9\-]{1,61}[a-z0-9]$")
+        self.assertRegex(result.store_id, s3_bucket_pattern)
+        self.assertLessEqual(len(result.store_id), 63)
 
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.dynamodb_table")
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.s3_bucket")

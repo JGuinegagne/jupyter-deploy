@@ -57,7 +57,10 @@ class S3DynamoDbTableStoreManager(StoreManager):
                 self._bucket_name = bucket_name
             else:
                 already_exists = False
-                bucket_name = f"{BACKUP_BUCKET_NAME_PREFIX}-{uuid.uuid4().hex[:12]}"
+                # Random suffix prevents bucket name sniping attacks. 20 hex chars = 80 bits
+                # of entropy from os.urandom (CSPRNG); birthday collision at ~2^40 (~1 trillion).
+                # Total name length: 24 (prefix) + 1 (dash) + 20 (suffix) = 45 chars (S3 max: 63).
+                bucket_name = f"{BACKUP_BUCKET_NAME_PREFIX}-{uuid.uuid4().hex[:20]}"
                 display_manager.info(f"Creating S3 bucket projects store: {bucket_name}")
                 tags = {
                     BACKUP_TAG_SOURCE_KEY: BACKUP_TAG_SOURCE_VALUE,
