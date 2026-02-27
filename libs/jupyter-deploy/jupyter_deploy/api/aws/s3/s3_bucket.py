@@ -4,10 +4,21 @@ from mypy_boto3_s3.client import S3Client
 from mypy_boto3_s3.type_defs import BucketTypeDef, TagTypeDef
 
 
-def find_buckets_by_tag(s3_client: S3Client, tag_key: str, tag_value: str) -> list[BucketTypeDef]:
-    """Return a list of all buckets matching a specific tag key/value pair.
+def find_buckets_by_tag(
+    s3_client: S3Client,
+    tag_key: str,
+    tag_value: str,
+    stop_at_first_match: bool = False,
+) -> list[BucketTypeDef]:
+    """Return a list of buckets matching a specific tag key/value pair.
 
     Uses the ListBuckets paginator to handle accounts with many buckets.
+
+    Args:
+        s3_client: S3 client.
+        tag_key: Tag key to match.
+        tag_value: Tag value to match.
+        stop_at_first_match: If True, return immediately after finding the first match.
 
     Raises:
         botocore.exceptions.ClientError on AWS API errors.
@@ -26,6 +37,8 @@ def find_buckets_by_tag(s3_client: S3Client, tag_key: str, tag_value: str) -> li
                 for tag in tag_set:
                     if tag.get("Key") == tag_key and tag.get("Value") == tag_value:
                         matched.append(bucket)
+                        if stop_at_first_match:
+                            return matched
                         break
             except s3_client.exceptions.ClientError as e:
                 # Buckets without tags return NoSuchTagSet error

@@ -102,6 +102,58 @@ class TestFindBucketsByTag(unittest.TestCase):
         self.assertEqual(result[1]["Name"], "page2-bucket")
         mock_s3.get_paginator.assert_called_once_with("list_buckets")
 
+    def test_stop_at_first_match_returns_single_result(self) -> None:
+        mock_s3 = Mock()
+        mock_paginator = Mock()
+        mock_paginator.paginate.return_value = [{"Buckets": [{"Name": "bucket-a"}, {"Name": "bucket-b"}]}]
+        mock_s3.get_paginator.return_value = mock_paginator
+        mock_s3.get_bucket_tagging.side_effect = [
+            {"TagSet": [{"Key": "Source", "Value": "jupyter-deploy-cli"}]},
+            {"TagSet": [{"Key": "Source", "Value": "jupyter-deploy-cli"}]},
+        ]
+        mock_s3.exceptions.ClientError = type("ClientError", (Exception,), {})
+
+        result = find_buckets_by_tag(mock_s3, "Source", "jupyter-deploy-cli", stop_at_first_match=True)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["Name"], "bucket-a")
+        # Should not have checked tags on bucket-b
+        self.assertEqual(mock_s3.get_bucket_tagging.call_count, 1)
+
+    def test_stop_at_first_match_across_pages(self) -> None:
+        mock_s3 = Mock()
+        mock_paginator = Mock()
+        mock_paginator.paginate.return_value = [
+            {"Buckets": [{"Name": "no-match"}]},
+            {"Buckets": [{"Name": "match"}, {"Name": "also-match"}]},
+        ]
+        mock_s3.get_paginator.return_value = mock_paginator
+        mock_s3.get_bucket_tagging.side_effect = [
+            {"TagSet": [{"Key": "Owner", "Value": "someone-else"}]},
+            {"TagSet": [{"Key": "Source", "Value": "jupyter-deploy-cli"}]},
+            {"TagSet": [{"Key": "Source", "Value": "jupyter-deploy-cli"}]},
+        ]
+        mock_s3.exceptions.ClientError = type("ClientError", (Exception,), {})
+
+        result = find_buckets_by_tag(mock_s3, "Source", "jupyter-deploy-cli", stop_at_first_match=True)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["Name"], "match")
+        # Checked no-match and match, but not also-match
+        self.assertEqual(mock_s3.get_bucket_tagging.call_count, 2)
+
+    def test_stop_at_first_match_returns_empty_when_none_found(self) -> None:
+        mock_s3 = Mock()
+        mock_paginator = Mock()
+        mock_paginator.paginate.return_value = [{"Buckets": [{"Name": "bucket-a"}]}]
+        mock_s3.get_paginator.return_value = mock_paginator
+        mock_s3.get_bucket_tagging.return_value = {"TagSet": [{"Key": "Owner", "Value": "other"}]}
+        mock_s3.exceptions.ClientError = type("ClientError", (Exception,), {})
+
+        result = find_buckets_by_tag(mock_s3, "Source", "jupyter-deploy-cli", stop_at_first_match=True)
+
+        self.assertEqual(result, [])
+
     def test_raises_on_non_tag_error(self) -> None:
         client_error = type("ClientError", (Exception,), {})
         mock_s3 = Mock()

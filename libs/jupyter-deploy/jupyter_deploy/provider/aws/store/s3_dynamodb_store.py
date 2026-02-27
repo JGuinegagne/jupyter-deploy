@@ -49,7 +49,9 @@ class S3DynamoDbTableStoreManager(StoreManager):
 
             if not bucket_name:
                 display_manager.info("Looking for existing projects store in your AWS account...")
-                matched = s3_bucket.find_buckets_by_tag(self._s3_client, BACKUP_TAG_SOURCE_KEY, BACKUP_TAG_SOURCE_VALUE)
+                matched = s3_bucket.find_buckets_by_tag(
+                    self._s3_client, BACKUP_TAG_SOURCE_KEY, BACKUP_TAG_SOURCE_VALUE, stop_at_first_match=True
+                )
                 bucket_name = matched[0].get("Name") if matched else None
 
             if bucket_name:

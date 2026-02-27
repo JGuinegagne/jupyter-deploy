@@ -42,6 +42,9 @@ class TestEnsureStore(unittest.TestCase):
         self.assertEqual(result.store_id, "existing-bucket")
         self.assertEqual(result.store_type, "s3-ddb")
         self.assertEqual(result.location, "us-west-2")
+        mock_s3_bucket.find_buckets_by_tag.assert_called_once_with(
+            mock_boto3.client.return_value, "Source", "jupyter-deploy-cli", stop_at_first_match=True
+        )
         mock_s3_bucket.create_bucket.assert_not_called()
 
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.dynamodb_table")
