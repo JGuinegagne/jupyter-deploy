@@ -17,6 +17,7 @@ from jupyter_deploy.fs_utils import (
     read_short_file,
     safe_clean_directory,
     safe_copy_tree,
+    walk_local_files_with_gitignore_rules,
     write_inline_file_content,
     write_yaml_file_with_comments,
 )
@@ -892,3 +893,114 @@ class TestListFilesSorted(unittest.TestCase):
             self.assertEqual(result[0].name, "20260100-120000.log")
             self.assertEqual(result[1].name, "20260101-120000.log")
             self.assertEqual(result[2].name, "20260102-120000.log")
+
+
+class TestWalkLocalFiles(unittest.TestCase):
+    def test_lists_files_recursively(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            (base / "a.txt").write_text("hello")
+            (base / "sub").mkdir()
+            (base / "sub" / "b.txt").write_text("world")
+
+            result = walk_local_files_with_gitignore_rules(base)
+
+            names = sorted(f.name for f in result)
+            self.assertEqual(names, ["a.txt", "b.txt"])
+
+    def test_respects_gitignore_file_pattern(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            (base / "keep.txt").write_text("keep")
+            (base / "ignore.log").write_text("ignore")
+            gitignore = base / ".gitignore"
+            gitignore.write_text("*.log\n")
+
+            result = walk_local_files_with_gitignore_rules(base, gitignore)
+
+            names = [f.name for f in result]
+            self.assertIn("keep.txt", names)
+            self.assertNotIn("ignore.log", names)
+
+    def test_respects_gitignore_directory_pattern(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            (base / "keep.txt").write_text("keep")
+            history_dir = base / ".jd-history"
+            history_dir.mkdir()
+            (history_dir / "config-20260101.log").write_text("log1")
+            (history_dir / "up-20260102.log").write_text("log2")
+            gitignore = base / ".gitignore"
+            gitignore.write_text(".jd-history/\n")
+
+            result = walk_local_files_with_gitignore_rules(base, gitignore)
+
+            names = sorted(f.name for f in result)
+            self.assertIn("keep.txt", names)
+            self.assertNotIn("config-20260101.log", names)
+            self.assertNotIn("up-20260102.log", names)
+
+    def test_respects_gitignore_nested_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            (base / "root.txt").write_text("root")
+            (base / "src").mkdir()
+            (base / "src" / "app.py").write_text("app")
+            (base / "src" / "__pycache__").mkdir()
+            (base / "src" / "__pycache__" / "app.cpython-312.pyc").write_text("bytecode")
+            (base / "build").mkdir()
+            (base / "build" / "output.js").write_text("built")
+            (base / "build" / "nested").mkdir()
+            (base / "build" / "nested" / "deep.js").write_text("deep")
+            gitignore = base / ".gitignore"
+            gitignore.write_text("__pycache__/\nbuild/\n")
+
+            result = walk_local_files_with_gitignore_rules(base, gitignore)
+
+            names = sorted(f.name for f in result)
+            self.assertIn("root.txt", names)
+            self.assertIn("app.py", names)
+            self.assertNotIn("app.cpython-312.pyc", names)
+            self.assertNotIn("output.js", names)
+            self.assertNotIn("deep.js", names)
+
+    def test_respects_gitignore_mixed_rules(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            (base / "main.py").write_text("main")
+            (base / "debug.log").write_text("log")
+            (base / ".env").write_text("SECRET=abc")
+            (base / ".terraform").mkdir()
+            (base / ".terraform" / "providers.tf").write_text("provider")
+            (base / ".terraform" / "sub").mkdir()
+            (base / ".terraform" / "sub" / "lock.json").write_text("{}")
+            (base / "src").mkdir()
+            (base / "src" / "util.py").write_text("util")
+            (base / "src" / "util.pyc").write_text("bytecode")
+            gitignore = base / ".gitignore"
+            gitignore.write_text("*.log\n.env\n.terraform/\n*.pyc\n")
+
+            result = walk_local_files_with_gitignore_rules(base, gitignore)
+
+            names = sorted(f.name for f in result)
+            self.assertIn("main.py", names)
+            self.assertIn("util.py", names)
+            self.assertNotIn("debug.log", names)
+            self.assertNotIn(".env", names)
+            self.assertNotIn("providers.tf", names)
+            self.assertNotIn("lock.json", names)
+            self.assertNotIn("util.pyc", names)
+
+    def test_returns_empty_for_empty_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = walk_local_files_with_gitignore_rules(Path(tmpdir))
+            self.assertEqual(result, [])
+
+    def test_ignores_nonexistent_gitignore(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            (base / "a.txt").write_text("hello")
+
+            result = walk_local_files_with_gitignore_rules(base, base / "nonexistent-gitignore")
+
+            self.assertEqual(len(result), 1)

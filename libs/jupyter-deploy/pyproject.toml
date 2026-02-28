@@ -21,6 +21,7 @@ dependencies = [
     "jupyter-deploy-tf-aws-ec2-base",
     "pyyaml>=6.0.2",
     "types-pyyaml>=6.0.12.20250516",
+    "pathspec>=0.12.1",
 ]
 
 [project.scripts]
@@ -36,6 +37,8 @@ aws = [
     "boto3-stubs>=1.38.23",
     "mypy-boto3-ec2>=1.40.4",
     "mypy-boto3-ssm>=1.38.5",
+    "mypy-boto3-s3>=1.38.0",
+    "mypy-boto3-dynamodb>=1.38.0",
 ]
 
 [tool.uv.sources]
@@ -96,6 +99,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # Allow lazy imports in provider factory (handles optional dependencies)
 "jupyter_deploy/provider/instruction_runner_factory.py" = ["PLC0415"]
+"jupyter_deploy/provider/store/store_manager_factory.py" = ["PLC0415"]
 
 [tool.ruff.format]
 quote-style = "double"

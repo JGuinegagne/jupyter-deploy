@@ -1,15 +1,9 @@
 from enum import Enum
 
-import botocore.exceptions
-
 from jupyter_deploy.engine.supervised_execution import DisplayManager
-from jupyter_deploy.enum import ProviderType
-from jupyter_deploy.exceptions import (
-    InstructionNotFoundError,
-    InvalidProviderCredentialsError,
-    ProviderPermissionError,
-)
+from jupyter_deploy.exceptions import InstructionNotFoundError
 from jupyter_deploy.provider.aws.aws_ec2_runner import AwsEc2Runner
+from jupyter_deploy.provider.aws.aws_error_handler import aws_error_context_manager
 from jupyter_deploy.provider.aws.aws_ssm_runner import AwsSsmRunner
 from jupyter_deploy.provider.instruction_runner import InstructionRunner
 from jupyter_deploy.provider.resolved_argdefs import ResolvedInstructionArgument
@@ -70,79 +64,10 @@ class AwsApiRunner(InstructionRunner):
         instruction_name: str,
         resolved_arguments: dict[str, ResolvedInstructionArgument],
     ) -> dict[str, ResolvedInstructionResult]:
-        try:
+        with aws_error_context_manager():
             service_name, sub_instruction_name = AwsApiRunner._get_service_and_sub_instruction_name(instruction_name)
             service_runner = self._get_service_runner(service_name)
             return service_runner.execute_instruction(
                 instruction_name=sub_instruction_name,
                 resolved_arguments=resolved_arguments,
             )
-        except botocore.exceptions.NoCredentialsError as e:
-            raise InvalidProviderCredentialsError(
-                provider_name=ProviderType.AWS,
-                original_message=str(e),
-            ) from e
-        except botocore.exceptions.PartialCredentialsError as e:
-            raise InvalidProviderCredentialsError(
-                provider_name=ProviderType.AWS,
-                original_message=str(e),
-            ) from e
-        except botocore.exceptions.ClientError as e:
-            error_code = e.response.get("Error", {}).get("Code", "")
-            error_message = e.response.get("Error", {}).get("Message", str(e))
-
-            # Permission-related error codes
-            # Sources:
-            # - UnauthorizedOperation: EC2 API
-            #   (docs.aws.amazon.com/AWSEC2/latest/APIReference/errors-overview.html)
-            # - AccessDenied, AccessDeniedException, NotAuthorized, OptInRequired: Common across AWS services
-            #   (observed in practice, need specific documentation)
-            permission_error_codes = {
-                "AccessDenied",
-                "AccessDeniedException",
-                "NotAuthorized",
-                "UnauthorizedOperation",
-                "OptInRequired",
-            }
-
-            if error_code in permission_error_codes:
-                # Extract operation from request metadata
-                operation = e.operation_name if hasattr(e, "operation_name") else None
-                raise ProviderPermissionError(
-                    provider_name=ProviderType.AWS,
-                    operation=operation,
-                    original_message=error_message,
-                ) from e
-
-            # Credential-related error codes
-            # Sources:
-            # - ExpiredToken, InvalidIdentityToken : STS API
-            #   (docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRoleWithWebIdentity.html)
-            #   (docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html)
-            # - AuthFailure, IncompleteSignature, InvalidClientTokenId, MissingAuthenticationToken
-            #   MissingAuthenticationToken: EC2 API
-            #  (docs.aws.amazon.com/AWSEC2/latest/APIReference/errors-overview.html)
-            # - AuthorizationHeaderMalformed, AuthorizationQueryParametersError: S3 Error Responses
-            #   (docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html)
-            # - ExpiredTokenException: EKS Error Responses
-            #   (https://docs.aws.amazon.com/eks/latest/APIReference/CommonErrors.html)
-            credential_error_codes = {
-                "ExpiredToken",
-                "InvalidIdentityToken",
-                "AuthFailure",
-                "IncompleteSignature",
-                "InvalidClientTokenId",
-                "MissingAuthenticationToken",
-                "AuthorizationHeaderMalformed",
-                "AuthorizationQueryParametersError",
-                "ExpiredTokenException",
-            }
-
-            if error_code in credential_error_codes:
-                raise InvalidProviderCredentialsError(
-                    provider_name=ProviderType.AWS,
-                    original_message=error_message,
-                ) from e
-
-            # For other ClientErrors, re-raise
-            raise

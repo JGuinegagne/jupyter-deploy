@@ -9,6 +9,7 @@ CLI tool for deploying Jupyter server to the cloud.
 It's cloud-provider and infrastructure-as-code agnostic. The CLI code MUST NOT:
 - depend directly on any cloud provider-specific libraries (e.g. `boto3` for AWS)
 - assume that an infrastructure-as-code engine is selected (e.g. it MUST remain extensible to other engines than `terraform`)
+- create custom dataclasses for AWS API types; use boto3 type stubs directly (e.g. `ObjectTypeDef`, `TagTypeDef`)
 
 To access cloud-provider specific dependencies, we use optional installs such as `pip install juptyer-deploy[aws]` 
 Then module `provider/instruction_runner_factory` handles these optional imports.
@@ -87,6 +88,7 @@ Always run from the root of the repository:
 ## General coding rules
 1. you MUST NOT silence linters without the user's permission
 2. you MUST NOT write docstrings that merely repeat a method name
+3. you MUST NOT use `TYPE_CHECKING` imports anywhere
 
 ## Writing unit tests
 Unit tests are located in `libs/<package-name>/tests/unit`
