@@ -1,14 +1,22 @@
 from pathlib import Path
 
+from jupyter_deploy.engine.engine_backend import EngineStoreAccessManager
 from jupyter_deploy.engine.engine_up import EngineUpHandler
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.engine.outdefs import StrTemplateOutputDefinition
 from jupyter_deploy.engine.supervised_execution import CompletionContext, DisplayManager
 from jupyter_deploy.engine.terraform import tf_up
+from jupyter_deploy.engine.terraform.tf_backend import TerraformStoreAccessManager
+from jupyter_deploy.engine.terraform.tf_constants import TF_ENGINE_DIR
+from jupyter_deploy.engine.terraform.tf_outputs import TerraformOutputsHandler
+from jupyter_deploy.exceptions import ProjectIdNotAvailableError, StoreNotFoundError
 from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
+from jupyter_deploy.provider.store.store_manager_factory import StoreManagerFactory
 
 
 class UpHandler(BaseProjectHandler):
     _handler: EngineUpHandler
+    _store_access_manager: EngineStoreAccessManager
 
     def __init__(self, display_manager: DisplayManager) -> None:
         """Base class to manage the up command of a jupyter-deploy project."""
@@ -20,6 +28,13 @@ class UpHandler(BaseProjectHandler):
                 project_manifest=self.project_manifest,
                 command_history_handler=self.command_history_handler,
                 display_manager=display_manager,
+            )
+            self._store_access_manager = TerraformStoreAccessManager(
+                engine_dir_path=self.project_path / TF_ENGINE_DIR,
+            )
+            self._outputs_handler = TerraformOutputsHandler(
+                project_path=self.project_path,
+                project_manifest=self.project_manifest,
             )
         else:
             raise NotImplementedError(f"UpHandler implementation not found for engine: {self.engine}")
@@ -59,3 +74,32 @@ class UpHandler(BaseProjectHandler):
             CompletionContext with completion summary, or None if not available.
         """
         return self._handler.apply(config_file_path, auto_approve)
+
+    def push_to_store(self, store_type: str | None = None, store_id: str | None = None) -> None:
+        """Push the project to the remote store. No-op if backup is not configured.
+
+        Args:
+            store_type: Override the store type from the manifest.
+            store_id: Override the store identifier (e.g., bucket name).
+
+        Raises:
+            ProjectIdNotAvailableError: If deployment_id output is not available.
+            StoreNotFoundError: If the remote store is not configured.
+        """
+        if store_type is None and self.project_manifest.backup is not None:
+            store_type = self.project_manifest.backup.store_type
+
+        if not store_type:
+            self.display_manager.warning("No backup store type configured. Skipping store push.")
+            return
+
+        deployment_id_def = self._outputs_handler.get_declared_output_def("deployment_id", StrTemplateOutputDefinition)
+        if deployment_id_def.value is None:
+            raise ProjectIdNotAvailableError("deployment_id output is not available. Run 'jd up' first.")
+
+        if not self._store_access_manager.is_configured():
+            raise StoreNotFoundError("Remote store is not configured. Run 'jd config' first.")
+
+        project_id = self.project_manifest.compute_project_id(deployment_id_def.value)
+        store_manager = StoreManagerFactory.get_manager(store_type=store_type, store_id=store_id)
+        store_manager.push(self.project_path, project_id, self.display_manager)

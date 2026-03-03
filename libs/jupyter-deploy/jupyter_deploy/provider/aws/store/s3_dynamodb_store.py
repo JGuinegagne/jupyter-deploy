@@ -11,6 +11,7 @@ from mypy_boto3_s3.client import S3Client
 
 from jupyter_deploy.api.aws.dynamodb import dynamodb_table
 from jupyter_deploy.api.aws.s3 import s3_bucket, s3_object, s3_sync
+from jupyter_deploy.api.aws.sts import sts_identity
 from jupyter_deploy.engine.supervised_execution import DisplayManager
 from jupyter_deploy.exceptions import BackupStoreNotFoundError
 from jupyter_deploy.provider.aws.aws_error_handler import aws_error_context_manager
@@ -41,6 +42,12 @@ class S3DynamoDbTableStoreManager(StoreManager):
         self._bucket_name = bucket_name
         self._s3_client: S3Client = boto3.client("s3", region_name=region)
         self._dynamodb_client: DynamoDBClient = boto3.client("dynamodb", region_name=region)
+
+    @staticmethod
+    def resolve_lead_region() -> str:
+        """Resolve the partition lead region from the caller's AWS credentials."""
+        sts_client = boto3.client("sts")
+        return sts_identity.get_partition_lead_region(sts_client)
 
     def ensure_store(self, display_manager: DisplayManager) -> StoreInfo:
         with aws_error_context_manager():

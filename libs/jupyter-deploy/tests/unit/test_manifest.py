@@ -7,6 +7,7 @@ import yaml
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.manifest import (
     InvalidServiceError,
+    JupyterDeployBackupV1,
     JupyterDeployManifestV1,
 )
 
@@ -105,3 +106,31 @@ class TestJupyterDeployManifestV1(unittest.TestCase):
         )
         with self.assertRaises(InvalidServiceError):
             manifest.get_validated_service("all", allow_all=False)
+
+
+class TestJupyterDeployBackupV1(unittest.TestCase):
+    def _make_manifest(self, backup: dict[str, Any] | None = None) -> JupyterDeployManifestV1:
+        data: dict[str, Any] = {
+            "schema_version": 1,
+            "template": {"name": "test-template", "engine": "terraform", "version": "1.0.0"},
+        }
+        if backup is not None:
+            data["backup"] = backup
+        return JupyterDeployManifestV1(**data)  # type: ignore
+
+    def test_parse_backup_section(self) -> None:
+        backup = JupyterDeployBackupV1(**{"store-type": "s3-ddb"})  # type: ignore
+        self.assertEqual(backup.store_type, "s3-ddb")
+
+    def test_has_backup_true(self) -> None:
+        manifest = self._make_manifest(backup={"store-type": "s3-ddb"})
+        self.assertTrue(manifest.has_backup())
+
+    def test_has_backup_false(self) -> None:
+        manifest = self._make_manifest()
+        self.assertFalse(manifest.has_backup())
+
+    def test_compute_project_id(self) -> None:
+        manifest = self._make_manifest()
+        result = manifest.compute_project_id("dep-abc123")
+        self.assertEqual(result, "test-template-dep-abc123")

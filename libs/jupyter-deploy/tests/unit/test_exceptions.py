@@ -23,11 +23,14 @@ from jupyter_deploy.exceptions import (
     ManifestNotADictError,
     ManifestNotFoundError,
     OutputNotFoundError,
+    ProjectIdNotAvailableError,
     ReadConfigurationError,
     ReadManifestError,
+    StoreNotFoundError,
     SupervisedExecutionError,
     ToolRequiredError,
     UnreachableHostError,
+    UnsupportedProviderRegionError,
     VariableNotFoundError,
     WriteConfigurationError,
 )
@@ -315,3 +318,24 @@ class TestHistoryErrors(unittest.TestCase):
         error = LogCleanupError("Cleanup failed")
         self.assertIsInstance(error, JupyterDeployError)
         self.assertIsInstance(error, Exception)
+
+
+class TestBackupAndStoreErrors(unittest.TestCase):
+    """Test cases for backup and store exceptions."""
+
+    def test_store_not_found_error(self) -> None:
+        error = StoreNotFoundError("Store not configured")
+        self.assertIsInstance(error, JupyterDeployError)
+        self.assertIsInstance(error, RuntimeError)
+
+    def test_project_id_not_available_error(self) -> None:
+        error = ProjectIdNotAvailableError("deployment_id not available")
+        self.assertIsInstance(error, JupyterDeployError)
+        self.assertIsInstance(error, RuntimeError)
+
+    def test_unsupported_provider_region_error(self) -> None:
+        error = UnsupportedProviderRegionError("aws-iso")
+        self.assertIsInstance(error, JupyterDeployError)
+        self.assertIsInstance(error, NotImplementedError)
+        self.assertEqual(error.region_or_location, "aws-iso")
+        self.assertIn("aws-iso", str(error))

@@ -273,6 +273,13 @@ def config(
 
         if run_configure:
             if verbose:
+                console.rule("Configuring the remote store...")
+                handler.ensure_store()
+            else:
+                with display_manager.spinner("Configuring the remote store..."):
+                    handler.ensure_store()
+
+            if verbose:
                 console.rule("[bold]jupyter-deploy:[/] configuring the project")
 
             completion_context = None
@@ -391,6 +398,13 @@ def up(
             for line in completion_context.lines:
                 print(line)
             console.line()
+
+        if verbose:
+            console.print("Saving configuration to the remote store")
+            handler.push_to_store()
+        else:
+            with display_manager.spinner("Saving configuration to the remote store..."):
+                handler.push_to_store()
 
         console.print("Infrastructure changes applied successfully.", style="green")
         console.line()

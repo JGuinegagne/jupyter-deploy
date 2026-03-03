@@ -11,6 +11,7 @@ TF_OUTPUT_CMD = ["terraform", "output", "-json"]
 TF_PARSE_PLAN_CMD = ["terraform", "show", "-json"]
 TF_AUTO_APPROVE_CMD_OPTION = "-auto-approve"
 TF_RM_FROM_STATE_CMD = ["terraform", "state", "rm"]
+TF_INIT_MIGRATE_CMD_OPTIONS = ["-migrate-state", "-force-copy"]
 
 
 # Directory constants
@@ -26,6 +27,7 @@ TF_CUSTOM_PRESET_FILENAME = "jdinputs.preset.override.tfvars"
 TF_DESTROY_PRESET_FILENAME = "destroy.tfvars"
 TF_VARIABLES_FILENAME = "variables.tf"
 TF_OUTPUTS_FILENAME = "outputs.tf"
+TF_BACKEND_FILENAME = "backend.tf"
 
 
 def get_preset_filename(preset_name: str = "all") -> str:
@@ -45,6 +47,7 @@ __all__ = [
     "TF_PARSE_PLAN_CMD",
     "TF_AUTO_APPROVE_CMD_OPTION",
     "TF_RM_FROM_STATE_CMD",
+    "TF_INIT_MIGRATE_CMD_OPTIONS",
     "TF_ENGINE_DIR",
     "TF_PRESETS_DIR",
     "TF_DEFAULT_PLAN_FILENAME",
@@ -55,5 +58,6 @@ __all__ = [
     "TF_DESTROY_PRESET_FILENAME",
     "TF_VARIABLES_FILENAME",
     "TF_OUTPUTS_FILENAME",
+    "TF_BACKEND_FILENAME",
     "get_preset_filename",
 ]

@@ -210,6 +210,11 @@ class JupyterDeploySupervisedExecutionV1(BaseModel):
     down: dict[str, JupyterDeploySupervisedCommandExecutionV1] | None = None
 
 
+class JupyterDeployBackupV1(BaseModel):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    store_type: str = Field(alias="store-type")
+
+
 class JupyterDeployManifestV1(BaseModel):
     model_config = ConfigDict(extra="allow")
     schema_version: Literal[1]
@@ -219,6 +224,7 @@ class JupyterDeployManifestV1(BaseModel):
     services: list[str] | None = None
     commands: list[JupyterDeployCommandV1] | None = None
     supervised_execution: JupyterDeploySupervisedExecutionV1 | None = Field(alias="supervised-execution", default=None)
+    backup: JupyterDeployBackupV1 | None = None
 
     def get_engine(self) -> EngineType:
         """Return the engine type."""
@@ -286,6 +292,14 @@ class JupyterDeployManifestV1(BaseModel):
     def get_requirements(self) -> list[JupyterDeployRequirementV1]:
         """Return the list of requirements as declared in the manifest."""
         return self.requirements or []
+
+    def has_backup(self) -> bool:
+        """Return True if the manifest declares a backup configuration."""
+        return self.backup is not None
+
+    def compute_project_id(self, deployment_id: str) -> str:
+        """Return a project identifier for use in the backup store."""
+        return f"{self.template.name}-{deployment_id}"
 
 
 # Combined type using discriminated union

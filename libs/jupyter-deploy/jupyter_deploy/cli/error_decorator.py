@@ -29,12 +29,15 @@ from jupyter_deploy.exceptions import (
     ManifestNotFoundError,
     OpenWebBrowserError,
     OutputNotFoundError,
+    ProjectIdNotAvailableError,
     ProviderPermissionError,
     ReadConfigurationError,
     ReadManifestError,
+    StoreNotFoundError,
     SupervisedExecutionError,
     ToolRequiredError,
     UnreachableHostError,
+    UnsupportedProviderRegionError,
     UrlNotAvailableError,
     UrlNotSecureError,
     VariableNotFoundError,
@@ -219,6 +222,25 @@ def handle_cli_errors(console: Console) -> Generator[None, None, None]:
     except (ReadConfigurationError, WriteConfigurationError) as e:
         console.print(f":x: {e}", style="bold red")
         console.print(f"  File: {e.file_path}", style="dim")
+        raise typer.Exit(code=1) from None
+
+    except ProjectIdNotAvailableError as e:
+        console.print(f":x: {e}", style="bold red")
+        console.line()
+        console.print(":bulb: Run [bold cyan]jd up[/] to deploy first, then retry.")
+        raise typer.Exit(code=1) from None
+
+    except StoreNotFoundError as e:
+        console.print(f":x: {e}", style="bold red")
+        console.line()
+        console.print(":bulb: Run [bold cyan]jd config[/] to set up the remote store first.")
+        raise typer.Exit(code=1) from None
+
+    except UnsupportedProviderRegionError as e:
+        console.print(f":x: {e}", style="bold red")
+        if e.hint:
+            console.line()
+            console.print(f":bulb: {e.hint}")
         raise typer.Exit(code=1) from None
 
     # Keep base classes below so that child classes special handling take precedence
