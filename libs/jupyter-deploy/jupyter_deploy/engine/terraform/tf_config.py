@@ -19,9 +19,11 @@ from jupyter_deploy.engine.terraform import (
     tf_variables,
 )
 from jupyter_deploy.engine.terraform.tf_constants import (
+    TF_BACKEND_FILENAME,
     TF_DEFAULT_PLAN_FILENAME,
     TF_ENGINE_DIR,
     TF_INIT_CMD,
+    TF_INIT_RECONFIGURE_CMD_OPTION,
     TF_PARSE_PLAN_CMD,
     TF_PLAN_CMD,
     TF_PLAN_METADATA_FILENAME,
@@ -130,7 +132,17 @@ class TerraformConfigHandler(EngineConfigHandler):
             manifest=self.project_manifest,
         )
 
-        init_retcode = init_executor.execute(TF_INIT_CMD.copy())
+        init_cmd = TF_INIT_CMD.copy()
+        # When a remote backend is configured, pass -reconfigure so that
+        # terraform re-reads backend.tf instead of relying on the cached
+        # config in .terraform/. This is needed when the terraform version
+        # differs from the one that last ran init (e.g. host vs E2E
+        # container), which otherwise fails with "Backend configuration
+        # changed".
+        if (self.engine_dir_path / TF_BACKEND_FILENAME).exists():
+            init_cmd.append(TF_INIT_RECONFIGURE_CMD_OPTION)
+
+        init_retcode = init_executor.execute(init_cmd)
         if init_retcode != 0:
             raise SupervisedExecutionError(
                 command="config",
