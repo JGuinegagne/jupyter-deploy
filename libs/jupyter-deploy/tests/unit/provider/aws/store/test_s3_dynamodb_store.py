@@ -10,7 +10,7 @@ from mypy_boto3_s3.type_defs import ObjectTypeDef
 
 from jupyter_deploy.api.aws.s3.s3_sync import S3SyncResult
 from jupyter_deploy.engine.supervised_execution import NullDisplay
-from jupyter_deploy.exceptions import BackupStoreNotFoundError, ProviderPermissionError
+from jupyter_deploy.exceptions import ProjectStoreNotFoundError, ProviderPermissionError
 from jupyter_deploy.provider.aws.store.s3_dynamodb_store import S3DynamoDbTableStoreManager
 
 
@@ -41,6 +41,38 @@ class TestResolveLeadRegion(unittest.TestCase):
         self.assertEqual(result, "us-east-1")
         mock_boto3.client.assert_called_once_with("sts")
         mock_sts_identity.get_partition_lead_region.assert_called_once_with(mock_sts_client)
+
+
+class TestFindStore(unittest.TestCase):
+    @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.s3_bucket")
+    @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.boto3")
+    def test_discovers_existing_bucket(self, mock_boto3: Mock, mock_s3_bucket: Mock) -> None:
+        mock_s3_bucket.find_buckets_by_tag.return_value = [{"Name": "existing-bucket"}]
+        provider = S3DynamoDbTableStoreManager(region="us-east-1")
+
+        result = provider.find_store()
+
+        self.assertEqual(result.store_id, "existing-bucket")
+        self.assertEqual(result.store_type, "s3-ddb")
+        self.assertEqual(result.location, "us-east-1")
+
+    @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.s3_bucket")
+    @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.boto3")
+    def test_raises_when_no_bucket_found(self, mock_boto3: Mock, mock_s3_bucket: Mock) -> None:
+        mock_s3_bucket.find_buckets_by_tag.return_value = []
+        provider = S3DynamoDbTableStoreManager(region="us-east-1")
+
+        with self.assertRaises(ProjectStoreNotFoundError):
+            provider.find_store()
+
+    @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.boto3")
+    def test_uses_provided_bucket_name(self, mock_boto3: Mock) -> None:
+        provider = S3DynamoDbTableStoreManager(region="us-west-2", bucket_name="my-bucket")
+
+        result = provider.find_store()
+
+        self.assertEqual(result.store_id, "my-bucket")
+        self.assertEqual(result.location, "us-west-2")
 
 
 class TestEnsureStore(unittest.TestCase):
@@ -203,7 +235,7 @@ class TestPush(unittest.TestCase):
     def test_raises_when_store_not_initialized(self, mock_boto3: Mock) -> None:
         provider = S3DynamoDbTableStoreManager(region="us-east-1")
 
-        with self.assertRaises(BackupStoreNotFoundError):
+        with self.assertRaises(ProjectStoreNotFoundError):
             provider.push(Path("/project"), "my-project", NullDisplay())
 
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.s3_sync")
@@ -242,7 +274,7 @@ class TestPull(unittest.TestCase):
     def test_raises_when_store_not_initialized(self, mock_boto3: Mock) -> None:
         provider = S3DynamoDbTableStoreManager(region="us-east-1")
 
-        with self.assertRaises(BackupStoreNotFoundError):
+        with self.assertRaises(ProjectStoreNotFoundError):
             provider.pull("my-project", Path("/dest"), NullDisplay())
 
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.s3_sync")
@@ -282,7 +314,7 @@ class TestListProjects(unittest.TestCase):
     def test_raises_when_store_not_initialized(self, mock_boto3: Mock) -> None:
         provider = S3DynamoDbTableStoreManager(region="us-east-1")
 
-        with self.assertRaises(BackupStoreNotFoundError):
+        with self.assertRaises(ProjectStoreNotFoundError):
             provider.list_projects(NullDisplay())
 
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.s3_bucket")
@@ -344,7 +376,7 @@ class TestDeleteProject(unittest.TestCase):
     def test_raises_when_store_not_initialized(self, mock_boto3: Mock) -> None:
         provider = S3DynamoDbTableStoreManager(region="us-east-1")
 
-        with self.assertRaises(BackupStoreNotFoundError):
+        with self.assertRaises(ProjectStoreNotFoundError):
             provider.delete_project("proj", NullDisplay())
 
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.s3_object")

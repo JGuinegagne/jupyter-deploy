@@ -2,7 +2,7 @@ from jupyter_deploy.provider.store.store_manager import StoreManager
 
 
 class StoreManagerFactory:
-    """Factory class to handle lower level imports of cloud provider specific backup dependencies.
+    """Factory class to handle lower level imports of cloud provider specific store dependencies.
 
     This ensures that the base jupyter-deploy does not depend on any cloud provider SDK.
     """

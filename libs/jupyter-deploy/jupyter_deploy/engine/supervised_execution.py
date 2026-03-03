@@ -213,6 +213,10 @@ class DisplayManager(Protocol):
         """
         ...
 
+    def line(self) -> None:
+        """Print an empty line for visual spacing."""
+        ...
+
     def spinner(self, initial_message: str) -> Any:
         """Context manager for operations with simple spinner (no progress bar).
 
@@ -295,6 +299,10 @@ class NullDisplay:
         pass
 
     def hint(self, message: str) -> None:
+        """No-op implementation."""
+        pass
+
+    def line(self) -> None:
         """No-op implementation."""
         pass
 

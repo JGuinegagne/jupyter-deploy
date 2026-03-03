@@ -94,6 +94,10 @@ class SimpleDisplayManager:
         """
         self.console.print(f":bulb: {message}", style="dim")
 
+    def line(self) -> None:
+        """Print an empty line for visual spacing."""
+        self.console.print()
+
     @contextmanager
     def spinner(self, initial_message: str) -> Iterator[Any]:
         """Simple spinner for operations.

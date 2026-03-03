@@ -273,7 +273,7 @@ def config(
 
         if run_configure:
             if verbose:
-                console.rule("Configuring the remote store...")
+                console.rule("[bold]jupyter-deploy:[/] Configuring the remote store...")
                 handler.ensure_store()
             else:
                 with display_manager.spinner("Configuring the remote store..."):

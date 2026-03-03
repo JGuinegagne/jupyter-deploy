@@ -388,18 +388,28 @@ class LogCleanupError(JupyterDeployError, Exception):
 
 
 # ============================================================================
-# Backup and store errors
+# Project store errors
 # ============================================================================
 
 
-class BackupStoreNotFoundError(JupyterDeployError, RuntimeError):
-    """Raised when no backup store is found and cannot be created."""
+class ProjectStoreNotFoundError(JupyterDeployError, RuntimeError):
+    """Raised when no project store is found.
 
-    pass
+    Attributes:
+        hint: Optional hint for resolving the error
+    """
+
+    def __init__(self, message: str = "", hint: str | None = None) -> None:
+        self.hint = hint
+        super().__init__(message)
 
 
-class StoreNotFoundError(JupyterDeployError, RuntimeError):
-    """Raised when the remote store is not configured for this project."""
+class ProjectStoreAccessConfigurationError(JupyterDeployError, RuntimeError):
+    """Raised when configuring engine access to the project store fails.
+
+    For example, in the case of terraform, when either writing backend.tf
+    or running terraform init -migrate-state fails.
+    """
 
     pass
 

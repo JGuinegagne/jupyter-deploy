@@ -24,9 +24,10 @@ from jupyter_deploy.exceptions import (
     ManifestNotFoundError,
     OutputNotFoundError,
     ProjectIdNotAvailableError,
+    ProjectStoreAccessConfigurationError,
+    ProjectStoreNotFoundError,
     ReadConfigurationError,
     ReadManifestError,
-    StoreNotFoundError,
     SupervisedExecutionError,
     ToolRequiredError,
     UnreachableHostError,
@@ -320,11 +321,16 @@ class TestHistoryErrors(unittest.TestCase):
         self.assertIsInstance(error, Exception)
 
 
-class TestBackupAndStoreErrors(unittest.TestCase):
-    """Test cases for backup and store exceptions."""
+class TestProjectStoreErrors(unittest.TestCase):
+    """Test cases for project store exceptions."""
 
     def test_store_not_found_error(self) -> None:
-        error = StoreNotFoundError("Store not configured")
+        error = ProjectStoreNotFoundError("Store not configured")
+        self.assertIsInstance(error, JupyterDeployError)
+        self.assertIsInstance(error, RuntimeError)
+
+    def test_store_access_configuration_error(self) -> None:
+        error = ProjectStoreAccessConfigurationError("migration failed")
         self.assertIsInstance(error, JupyterDeployError)
         self.assertIsInstance(error, RuntimeError)
 

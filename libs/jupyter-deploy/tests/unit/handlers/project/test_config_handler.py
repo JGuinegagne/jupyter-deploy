@@ -5,7 +5,7 @@ from unittest.mock import ANY, Mock, patch
 from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.exceptions import InvalidPresetError
 from jupyter_deploy.handlers.project.config_handler import ConfigHandler
-from jupyter_deploy.manifest import JupyterDeployBackupV1, JupyterDeployManifestV1
+from jupyter_deploy.manifest import JupyterDeployManifestV1, JupyterDeployProjectStoreV1
 from jupyter_deploy.verify_utils import ToolRequiredError
 
 
@@ -382,12 +382,12 @@ class TestConfigHandler(unittest.TestCase):
         mock_retrieve_manifest: Mock,
         mock_store_factory: Mock,
     ) -> None:
-        backup = JupyterDeployBackupV1(**{"store-type": "s3-ddb"})  # type: ignore
+        project_store = JupyterDeployProjectStoreV1(**{"store-type": "s3-ddb"})  # type: ignore
         manifest = JupyterDeployManifestV1(
             **{  # type: ignore
                 "schema_version": 1,
                 "template": {"name": "test", "engine": "terraform", "version": "1.0.0"},
-                "backup": backup,
+                "project_store": project_store,
             }
         )
         mock_retrieve_manifest.return_value = manifest
@@ -413,12 +413,12 @@ class TestConfigHandler(unittest.TestCase):
         mock_retrieve_manifest: Mock,
         mock_store_factory: Mock,
     ) -> None:
-        backup = JupyterDeployBackupV1(**{"store-type": "s3-ddb"})  # type: ignore
+        project_store = JupyterDeployProjectStoreV1(**{"store-type": "s3-ddb"})  # type: ignore
         manifest = JupyterDeployManifestV1(
             **{  # type: ignore
                 "schema_version": 1,
                 "template": {"name": "test", "engine": "terraform", "version": "1.0.0"},
-                "backup": backup,
+                "project_store": project_store,
             }
         )
         mock_retrieve_manifest.return_value = manifest

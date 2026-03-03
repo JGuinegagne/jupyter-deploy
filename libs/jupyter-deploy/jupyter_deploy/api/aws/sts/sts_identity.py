@@ -3,7 +3,12 @@ from __future__ import annotations
 from mypy_boto3_sts.client import STSClient
 
 from jupyter_deploy.exceptions import UnsupportedProviderRegionError
-from jupyter_deploy.provider.aws.store.constants import PARTITION_LEAD_REGIONS
+
+PARTITION_LEAD_REGIONS: dict[str, str] = {
+    "aws": "us-east-1",
+    "aws-cn": "cn-north-1",
+    "aws-us-gov": "us-gov-west-1",
+}
 
 
 def get_partition(sts_client: STSClient) -> str:

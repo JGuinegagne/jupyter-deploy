@@ -20,7 +20,7 @@ values:
 - name: persisting_resources
   source: output
   source-key: persisting_resources
-backup:
+project-store:
   store-type: s3-ddb
 services:
 - jupyter

@@ -5,7 +5,7 @@ from jupyter_deploy.provider.store.store_manager import StoreInfo
 
 
 class EngineStoreAccessManager(ABC):
-    """Abstract interface for managing engine-specific remote store access."""
+    """Manages engine-specific project configuration to access the remote store."""
 
     @abstractmethod
     def is_configured(self) -> bool:

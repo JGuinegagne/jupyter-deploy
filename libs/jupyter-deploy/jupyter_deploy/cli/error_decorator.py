@@ -30,10 +30,11 @@ from jupyter_deploy.exceptions import (
     OpenWebBrowserError,
     OutputNotFoundError,
     ProjectIdNotAvailableError,
+    ProjectStoreAccessConfigurationError,
+    ProjectStoreNotFoundError,
     ProviderPermissionError,
     ReadConfigurationError,
     ReadManifestError,
-    StoreNotFoundError,
     SupervisedExecutionError,
     ToolRequiredError,
     UnreachableHostError,
@@ -226,14 +227,19 @@ def handle_cli_errors(console: Console) -> Generator[None, None, None]:
 
     except ProjectIdNotAvailableError as e:
         console.print(f":x: {e}", style="bold red")
-        console.line()
-        console.print(":bulb: Run [bold cyan]jd up[/] to deploy first, then retry.")
         raise typer.Exit(code=1) from None
 
-    except StoreNotFoundError as e:
+    except ProjectStoreAccessConfigurationError as e:
         console.print(f":x: {e}", style="bold red")
         console.line()
-        console.print(":bulb: Run [bold cyan]jd config[/] to set up the remote store first.")
+        console.print(":bulb: Run [bold cyan]jd up[/] again to retry the backend migration.")
+        raise typer.Exit(code=1) from None
+
+    except ProjectStoreNotFoundError as e:
+        console.print(f":x: {e}", style="bold red")
+        if e.hint:
+            console.line()
+            console.print(f":bulb: {e.hint}")
         raise typer.Exit(code=1) from None
 
     except UnsupportedProviderRegionError as e:
