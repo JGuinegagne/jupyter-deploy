@@ -22,6 +22,7 @@ from jupyter_deploy.exceptions import (
     InvalidProjectPathError,
     InvalidProviderCredentialsError,
     InvalidServiceError,
+    InvalidStoreTypeError,
     InvalidVariablesDotYamlError,
     JupyterDeployError,
     LogCleanupError,
@@ -135,6 +136,12 @@ def handle_cli_errors(console: Console) -> Generator[None, None, None]:
         console.print(f":x: {e}", style="bold red")
         console.line()
         console.print(f"Available services: {', '.join(e.valid_services)}")
+        raise typer.Exit(code=1) from None
+
+    except InvalidStoreTypeError as e:
+        console.print(f":x: {e}", style="bold red")
+        console.line()
+        console.print(f"Available store types: {', '.join(e.valid_store_types)}")
         raise typer.Exit(code=1) from None
 
     except (UnreachableHostError, IncompatibleHostStateError) as e:

@@ -153,6 +153,26 @@ class JupyterDeployTool(str, Enum):
         raise ValueError(f"No tool found for '{target_str}'")
 
 
+class StoreType(str, Enum):
+    """Project store types."""
+
+    S3_ONLY = "s3-only"
+    S3_DDB = "s3-ddb"
+
+    @classmethod
+    def from_string(cls, value: str) -> "StoreType":
+        """Return enum from string value, ignoring case.
+
+        Raises:
+            ValueError: If no matching enum value is found.
+        """
+        value_lower = value.lower()
+        for member in cls:
+            if member.value.lower() == value_lower:
+                return member
+        raise ValueError(f"Unknown store type: '{value}'")
+
+
 class ProviderType(str, Enum):
     """Cloud provider types."""
 

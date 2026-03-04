@@ -3,8 +3,15 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from jupyter_deploy.engine.enum import EngineType
-from jupyter_deploy.enum import InstructionArgumentSource, ResultSource, TransformType, UpdateSource, ValueSource
-from jupyter_deploy.exceptions import CommandNotImplementedError, InvalidServiceError
+from jupyter_deploy.enum import (
+    InstructionArgumentSource,
+    ResultSource,
+    StoreType,
+    TransformType,
+    UpdateSource,
+    ValueSource,
+)
+from jupyter_deploy.exceptions import CommandNotImplementedError, InvalidServiceError, InvalidStoreTypeError
 
 
 class JupyterDeployTemplateV1(BaseModel):
@@ -213,6 +220,17 @@ class JupyterDeploySupervisedExecutionV1(BaseModel):
 class JupyterDeployProjectStoreV1(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
     store_type: str = Field(alias="store-type")
+
+    def get_store_type(self) -> StoreType:
+        """Return the store type as an enum.
+
+        Raises:
+            InvalidStoreTypeError: If the store type is not recognized.
+        """
+        try:
+            return StoreType.from_string(self.store_type)
+        except ValueError:
+            raise InvalidStoreTypeError(self.store_type, [t.value for t in StoreType]) from None
 
 
 class JupyterDeployManifestV1(BaseModel):

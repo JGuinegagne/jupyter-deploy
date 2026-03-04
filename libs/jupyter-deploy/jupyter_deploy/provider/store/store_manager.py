@@ -7,12 +7,13 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from jupyter_deploy.engine.supervised_execution import DisplayManager
+from jupyter_deploy.enum import StoreType
 
 
 class StoreInfo(BaseModel):
     """Information about a project store."""
 
-    store_type: str
+    store_type: StoreType
     store_id: str
     location: str
 

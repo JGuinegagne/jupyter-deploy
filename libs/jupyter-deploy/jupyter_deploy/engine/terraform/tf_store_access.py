@@ -9,10 +9,23 @@ from jupyter_deploy.engine.terraform.tf_constants import (
     TF_INIT_CMD,
     TF_INIT_MIGRATE_CMD_OPTIONS,
 )
-from jupyter_deploy.exceptions import ProjectStoreAccessConfigurationError
+from jupyter_deploy.enum import StoreType
+from jupyter_deploy.exceptions import InvalidStoreTypeError, ProjectStoreAccessConfigurationError
 from jupyter_deploy.provider.store.store_manager import StoreInfo
 
-_BACKEND_TEMPLATE = """\
+
+class TerraformStoreAccessManager(EngineStoreAccessManager):
+    _BACKEND_TEMPLATE = """\
+terraform {{
+  backend "s3" {{
+    bucket         = "{store_id}"
+    key            = "{project_id}/terraform.tfstate"
+    region         = "{region}"
+  }}
+}}
+"""
+
+    _BACKEND_TEMPLATE_WITH_LOCK = """\
 terraform {{
   backend "s3" {{
     bucket         = "{store_id}"
@@ -23,17 +36,24 @@ terraform {{
 }}
 """
 
-
-class TerraformStoreAccessManager(EngineStoreAccessManager):
     def __init__(self, engine_dir_path: Path) -> None:
         self.engine_dir_path = engine_dir_path
+
+    @staticmethod
+    def _get_backend_template(store_type: StoreType) -> str:
+        if store_type == StoreType.S3_ONLY:
+            return TerraformStoreAccessManager._BACKEND_TEMPLATE
+        if store_type == StoreType.S3_DDB:
+            return TerraformStoreAccessManager._BACKEND_TEMPLATE_WITH_LOCK
+        raise InvalidStoreTypeError(store_type, [t.value for t in StoreType])
 
     def is_configured(self) -> bool:
         return (self.engine_dir_path / TF_BACKEND_FILENAME).exists()
 
     def configure(self, store_info: StoreInfo, project_id: str, display_manager: DisplayManager) -> None:
         backend_path = self.engine_dir_path / TF_BACKEND_FILENAME
-        content = _BACKEND_TEMPLATE.format(
+        template = self._get_backend_template(store_info.store_type)
+        content = template.format(
             store_id=store_info.store_id,
             project_id=project_id,
             region=store_info.location,
