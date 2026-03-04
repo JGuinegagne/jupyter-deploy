@@ -1,3 +1,4 @@
+import subprocess
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -17,8 +18,60 @@ class TestTerraformOutputsHandler(unittest.TestCase):
         self.assertIsNone(handler._full_template_outputs)
 
 
+class TestRunOutputCmd(unittest.TestCase):
+    @patch("jupyter_deploy.engine.terraform.tf_outputs.cmd_utils.run_cmd_and_capture_output")
+    def test_returns_output_on_success(self, mock_run_cmd: Mock) -> None:
+        mock_run_cmd.return_value = '{"output1": {"value": "val"}}'
+        handler = TerraformOutputsHandler(Path("/mock/project"), Mock())
+
+        result = handler._run_output_cmd()
+
+        self.assertEqual(result, '{"output1": {"value": "val"}}')
+        mock_run_cmd.assert_called_once()
+
+    @patch("jupyter_deploy.engine.terraform.tf_outputs.cmd_utils.run_cmd_and_capture_output")
+    def test_retries_with_reconfigure_on_backend_init_error(self, mock_run_cmd: Mock) -> None:
+        backend_error = subprocess.CalledProcessError(1, "terraform output -json")
+        backend_error.stderr = 'Error: Backend initialization required: please run "terraform init"'
+        mock_run_cmd.side_effect = [backend_error, "init_output", '{"output1": {"value": "val"}}']
+
+        handler = TerraformOutputsHandler(Path("/mock/project"), Mock())
+        # Simulate backend.tf existing
+        with patch.object(Path, "exists", return_value=True):
+            result = handler._run_output_cmd()
+
+        self.assertEqual(result, '{"output1": {"value": "val"}}')
+        self.assertEqual(mock_run_cmd.call_count, 3)  # output, init, output
+        init_call = mock_run_cmd.call_args_list[1]
+        self.assertEqual(init_call[0][0], ["terraform", "init", "-reconfigure"])
+
+    @patch("jupyter_deploy.engine.terraform.tf_outputs.cmd_utils.run_cmd_and_capture_output")
+    def test_does_not_retry_without_backend_tf(self, mock_run_cmd: Mock) -> None:
+        backend_error = subprocess.CalledProcessError(1, "terraform output -json")
+        backend_error.stderr = 'Error: Backend initialization required: please run "terraform init"'
+        mock_run_cmd.side_effect = backend_error
+
+        handler = TerraformOutputsHandler(Path("/mock/project"), Mock())
+        with patch.object(Path, "exists", return_value=False), self.assertRaises(subprocess.CalledProcessError):
+            handler._run_output_cmd()
+
+        mock_run_cmd.assert_called_once()
+
+    @patch("jupyter_deploy.engine.terraform.tf_outputs.cmd_utils.run_cmd_and_capture_output")
+    def test_does_not_retry_on_unrelated_error(self, mock_run_cmd: Mock) -> None:
+        unrelated_error = subprocess.CalledProcessError(1, "terraform output -json")
+        unrelated_error.stderr = "Error: Some other terraform error"
+        mock_run_cmd.side_effect = unrelated_error
+
+        handler = TerraformOutputsHandler(Path("/mock/project"), Mock())
+        with self.assertRaises(subprocess.CalledProcessError):
+            handler._run_output_cmd()
+
+        mock_run_cmd.assert_called_once()
+
+
 class TestTerraformOuputsHanlderGetFullProject(unittest.TestCase):
-    @patch("jupyter_deploy.cmd_utils.run_cmd_and_capture_output")
+    @patch.object(TerraformOutputsHandler, "_run_output_cmd")
     @patch("jupyter_deploy.fs_utils.read_short_file")
     @patch("jupyter_deploy.engine.terraform.tf_outdefs.parse_output_cmd_result")
     @patch("jupyter_deploy.engine.terraform.tf_outfiles.extract_description_from_dot_tf_content")
@@ -58,7 +111,7 @@ class TestTerraformOuputsHanlderGetFullProject(unittest.TestCase):
         )
         mock_output_def.to_template_definition.assert_called_once()
 
-    @patch("jupyter_deploy.cmd_utils.run_cmd_and_capture_output")
+    @patch.object(TerraformOutputsHandler, "_run_output_cmd")
     @patch("jupyter_deploy.fs_utils.read_short_file")
     @patch("jupyter_deploy.engine.terraform.tf_outdefs.parse_output_cmd_result")
     @patch("jupyter_deploy.engine.terraform.tf_outfiles.extract_description_from_dot_tf_content")
@@ -106,7 +159,7 @@ class TestTerraformOuputsHanlderGetFullProject(unittest.TestCase):
         mock_extract.assert_not_called()
         mock_combine.assert_not_called()
 
-    @patch("jupyter_deploy.cmd_utils.run_cmd_and_capture_output")
+    @patch.object(TerraformOutputsHandler, "_run_output_cmd")
     def test_raise_when_tf_outputs_cmd_raise(self, mock_run_cmd: Mock) -> None:
         # Setup
         project_path = Path("/mock/project")
@@ -120,7 +173,7 @@ class TestTerraformOuputsHanlderGetFullProject(unittest.TestCase):
 
         mock_run_cmd.assert_called_once()
 
-    @patch("jupyter_deploy.cmd_utils.run_cmd_and_capture_output")
+    @patch.object(TerraformOutputsHandler, "_run_output_cmd")
     @patch("jupyter_deploy.engine.terraform.tf_outdefs.parse_output_cmd_result")
     @patch("jupyter_deploy.fs_utils.read_short_file")
     def test_raise_when_read_outputs_dot_tf_raise(self, mock_read: Mock, mock_parse: Mock, mock_run_cmd: Mock) -> None:

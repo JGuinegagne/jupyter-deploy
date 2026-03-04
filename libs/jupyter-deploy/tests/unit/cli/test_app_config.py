@@ -22,6 +22,7 @@ class TestConfigCommand(unittest.TestCase):
         mock_reset_variables = Mock()
         mock_reset_secrets = Mock()
         mock_verify = Mock()
+        mock_ensure_store = Mock()
         mock_configure = Mock()
         mock_record = Mock()
         mock_has_used_preset = Mock()
@@ -34,6 +35,7 @@ class TestConfigCommand(unittest.TestCase):
         mock_config_handler.reset_recorded_variables = mock_reset_variables
         mock_config_handler.reset_recorded_secrets = mock_reset_secrets
         mock_config_handler.verify_requirements = mock_verify
+        mock_config_handler.ensure_store = mock_ensure_store
         mock_config_handler.configure = mock_configure
         mock_config_handler.record = mock_record
         mock_config_handler.has_used_preset = mock_has_used_preset
@@ -42,6 +44,7 @@ class TestConfigCommand(unittest.TestCase):
         mock_verify_preset_exists.return_value = True
         mock_list_presets.return_value = ["all", "base", "none"]
         mock_verify.return_value = True
+        mock_ensure_store.return_value = None
         mock_configure.return_value = None
         mock_has_used_preset.return_value = False
 
@@ -54,13 +57,16 @@ class TestConfigCommand(unittest.TestCase):
             "reset_recorded_variables": mock_reset_variables,
             "reset_recorded_secrets": mock_reset_secrets,
             "verify": mock_verify,
+            "ensure_store": mock_ensure_store,
             "configure": mock_configure,
             "record": mock_record,
             "has_used_preset": mock_has_used_preset,
         }
 
     @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
-    def test_config_cmd_calls_validate_verify_configure_and_record(self, mock_config_handler: Mock) -> None:
+    def test_config_cmd_calls_validate_verify_ensure_store_configure_and_record(
+        self, mock_config_handler: Mock
+    ) -> None:
         mock_config_handler_instance, mock_config_fns = self.get_mock_config_handler()
         mock_config_handler.return_value = mock_config_handler_instance
 
@@ -75,6 +81,7 @@ class TestConfigCommand(unittest.TestCase):
         mock_config_fns["validate_preset"].assert_called_once_with("all")
         mock_config_fns["set_preset"].assert_called_once_with("all")
         mock_config_fns["verify"].assert_called_once()
+        mock_config_fns["ensure_store"].assert_called_once()
         mock_config_fns["configure"].assert_called_with(variable_overrides={})
         mock_config_fns["record"].assert_called_once_with(record_vars=True, record_secrets=False)
         mock_config_fns["reset_recorded_variables"].assert_not_called()
@@ -207,6 +214,7 @@ class TestConfigCommand(unittest.TestCase):
         mock_config_fns["validate_preset"].assert_called_once()
         mock_config_fns["set_preset"].assert_called_once()
         mock_config_fns["verify"].assert_called_once()
+        mock_config_fns["ensure_store"].assert_not_called()
         mock_config_fns["configure"].assert_not_called()
         mock_config_fns["record"].assert_not_called()
         mock_config_fns["reset_recorded_variables"].assert_not_called()
@@ -312,6 +320,7 @@ class TestConfigCommand(unittest.TestCase):
 
         mock_config_fns["reset_recorded_variables"].side_effect = lambda *a, **kw: call_order.append("reset_vars")
         mock_config_fns["reset_recorded_secrets"].side_effect = lambda *a, **kw: call_order.append("reset_secrets")
+        mock_config_fns["ensure_store"].side_effect = lambda *a, **kw: call_order.append("ensure_store")
         mock_config_fns["configure"].side_effect = configure_mock
         mock_config_fns["record"].side_effect = lambda *a, **kw: call_order.append("record")
 
@@ -321,7 +330,7 @@ class TestConfigCommand(unittest.TestCase):
 
         # Verify
         self.assertEqual(result.exit_code, 0)
-        self.assertEqual(call_order, ["reset_vars", "reset_secrets", "configure", "record"])
+        self.assertEqual(call_order, ["reset_vars", "reset_secrets", "ensure_store", "configure", "record"])
 
     @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
     def test_config_records_secrets_when_the_user_asks(self, mock_config_handler: Mock) -> None:

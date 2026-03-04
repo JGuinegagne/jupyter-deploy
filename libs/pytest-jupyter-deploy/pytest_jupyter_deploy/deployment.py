@@ -85,6 +85,13 @@ class EndToEndDeployment:
                     "Cannot run integration tests; referenced project does not exist "
                     f"at path: {self.suite_config.project_dir.absolute()}"
                 )
+            # Run jd config -s to ensure the engine is initialized in this
+            # environment. The host and the test container may run different
+            # terraform versions, and with a remote backend (e.g. backend.tf
+            # for S3), terraform requires re-initialization to connect.
+            # With a local backend this is a no-op since terraform can read
+            # the state file directly regardless of version.
+            self.cli.run_command(["jupyter-deploy", "config", "-s"])
             self._is_deployed = True
         # CASE 2: Deploy from Scratch, then Test against it
         else:

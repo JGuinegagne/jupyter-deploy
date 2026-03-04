@@ -10,7 +10,7 @@ from jupyter_deploy.engine.supervised_execution import DisplayManager
 
 
 class StoreInfo(BaseModel):
-    """Information about a backup store."""
+    """Information about a project store."""
 
     store_type: str
     store_id: str
@@ -18,7 +18,7 @@ class StoreInfo(BaseModel):
 
 
 class ProjectSummary(BaseModel):
-    """Summary of a project in the backup store."""
+    """Summary of a project in the project store."""
 
     project_id: str
     last_modified: datetime
@@ -34,11 +34,22 @@ class SyncResult(BaseModel):
 
 
 class StoreManager(ABC):
-    """Abstract interface for a remote backup store manager."""
+    """Abstract interface for a remote project store manager."""
+
+    @abstractmethod
+    def find_store(self) -> StoreInfo:
+        """Find an existing project store.
+
+        Returns:
+            StoreInfo with details about the store.
+
+        Raises:
+            ProjectStoreNotFoundError: If no project store is found.
+        """
 
     @abstractmethod
     def ensure_store(self, display_manager: DisplayManager) -> StoreInfo:
-        """Ensure all components of the backup store exist, creating them if necessary.
+        """Ensure all components of the project store exist, creating them if necessary.
 
         Returns:
             StoreInfo with details about the store.
@@ -46,7 +57,7 @@ class StoreManager(ABC):
 
     @abstractmethod
     def push(self, project_path: Path, project_id: str, display_manager: DisplayManager) -> SyncResult:
-        """Upload local project files to the remote backup store.
+        """Upload local project files to the remote project store.
 
         Returns:
             SyncResult with counts of uploaded, deleted, and unchanged files.
@@ -54,7 +65,7 @@ class StoreManager(ABC):
 
     @abstractmethod
     def pull(self, project_id: str, dest_path: Path, display_manager: DisplayManager) -> SyncResult:
-        """Download project files from the remote backup store to a local path.
+        """Download project files from the remote project store to a local path.
 
         Returns:
             SyncResult with counts of downloaded files.
@@ -62,8 +73,8 @@ class StoreManager(ABC):
 
     @abstractmethod
     def list_projects(self, display_manager: DisplayManager) -> list[ProjectSummary]:
-        """Return a list of ProjectSummaries for all projects in the backup store."""
+        """Return a list of ProjectSummaries for all projects in the project store."""
 
     @abstractmethod
     def delete_project(self, project_id: str, display_manager: DisplayManager) -> None:
-        """Delete all content of a project from the backup store."""
+        """Delete all content of a project from the project store."""

@@ -210,8 +210,13 @@ class JupyterDeploySupervisedExecutionV1(BaseModel):
     down: dict[str, JupyterDeploySupervisedCommandExecutionV1] | None = None
 
 
+class JupyterDeployProjectStoreV1(BaseModel):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    store_type: str = Field(alias="store-type")
+
+
 class JupyterDeployManifestV1(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
     schema_version: Literal[1]
     template: JupyterDeployTemplateV1
     requirements: list[JupyterDeployRequirementV1] | None = None
@@ -219,6 +224,7 @@ class JupyterDeployManifestV1(BaseModel):
     services: list[str] | None = None
     commands: list[JupyterDeployCommandV1] | None = None
     supervised_execution: JupyterDeploySupervisedExecutionV1 | None = Field(alias="supervised-execution", default=None)
+    project_store: JupyterDeployProjectStoreV1 | None = Field(alias="project-store", default=None)
 
     def get_engine(self) -> EngineType:
         """Return the engine type."""
@@ -286,6 +292,14 @@ class JupyterDeployManifestV1(BaseModel):
     def get_requirements(self) -> list[JupyterDeployRequirementV1]:
         """Return the list of requirements as declared in the manifest."""
         return self.requirements or []
+
+    def has_project_store(self) -> bool:
+        """Return True if the manifest declares a project store configuration."""
+        return self.project_store is not None
+
+    def compute_project_id(self, deployment_id: str) -> str:
+        """Return a project identifier for use in the project store."""
+        return f"{self.template.name}-{deployment_id}"
 
 
 # Combined type using discriminated union

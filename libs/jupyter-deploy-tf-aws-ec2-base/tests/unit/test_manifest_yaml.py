@@ -1,3 +1,4 @@
+import re
 import unittest
 from pathlib import Path
 from typing import Any
@@ -12,7 +13,7 @@ class TestManifest(unittest.TestCase):
     MANIFEST_PATH: Path = TEMPLATE_PATH / "manifest.yaml"
     MANIFEST: dict[str, Any] | None = None
     EXPECTED_REQUIREMENTS = ["terraform", "awscli", "jq"]
-    EXPECTED_VALUES = ["open_url", "aws_region", "persisting_resources"]
+    EXPECTED_VALUES = ["deployment_id", "open_url", "aws_region", "persisting_resources"]
     EXPECTED_SERVICES = ["jupyter", "traefik", "oauth"]
     EXPECTED_HOST_COMMANDS = ["host.status", "host.start", "host.stop", "host.restart", "host.connect", "host.exec"]
     EXPECTED_SERVER_COMMANDS = [
@@ -146,4 +147,22 @@ class TestManifest(unittest.TestCase):
         for expected_cmd in self.EXPECTED_ORGANIZATION_COMMANDS:
             self.assertIn(
                 expected_cmd, command_names, f"Expected organization command {expected_cmd} missing from manifest"
+            )
+
+    def test_output_sourced_values_have_matching_terraform_outputs(self) -> None:
+        if self.MANIFEST is None:
+            self.fail("MANIFEST is None, test setup failed")
+            return
+
+        outputs_tf = (TEMPLATE_PATH / "engine" / "outputs.tf").read_text()
+        tf_output_names = set(re.findall(r'^output "(\w+)"', outputs_tf, re.MULTILINE))
+
+        for value in self.MANIFEST.get("values", []):
+            if value.get("source") != "output":
+                continue
+            source_key = value["source-key"]
+            self.assertIn(
+                source_key,
+                tf_output_names,
+                f"Manifest value '{value['name']}' references output '{source_key}' not found in outputs.tf",
             )

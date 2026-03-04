@@ -12,6 +12,7 @@ from rich.console import Console, Group
 from rich.live import Live
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TextColumn
+from rich.status import Status
 from rich.text import Text
 
 from jupyter_deploy.engine.supervised_execution import ExecutionProgress, InteractionContext
@@ -49,6 +50,8 @@ class ProgressDisplayManager:
         self._current_phase_label = ""
         self._is_started = False
         self._in_interaction = False  # Track if we're in an interactive prompt
+        self._in_spinner = False
+        self._current_spinner: Status | None = None
 
         # Top-level messages (max 3)
         self._top_messages: list[tuple[str, str]] = []  # [(message, style), ...]
@@ -202,39 +205,67 @@ class ProgressDisplayManager:
             self.console.rule()
 
     def info(self, message: str) -> None:
-        """Display info message at top of display (only in verbose mode).
+        """Display info message.
+
+        Inside spinner context: updates spinner text.
+        Inside Live panel: adds to top messages (verbose mode only).
 
         Args:
             message: The informational message to display
         """
-        if self.verbose:
+        if self._in_spinner and self._current_spinner:
+            self._current_spinner.update(message)
+        elif self.verbose:
             self._add_top_message(message)
 
     def warning(self, message: str) -> None:
-        """Display warning message at top of display (always shown).
+        """Display warning message (always shown).
+
+        Inside spinner context: prints directly to console.
+        Inside Live panel: adds to top messages.
 
         Args:
             message: The warning message to display
         """
-        self._add_top_message(f":warning: {message}", style="yellow")
+        if self._in_spinner:
+            self.console.print(f":warning: {message}", style="yellow")
+        else:
+            self._add_top_message(f":warning: {message}", style="yellow")
 
     def success(self, message: str) -> None:
-        """Display success message at top of display (always shown).
+        """Display success message (always shown).
+
+        Inside spinner context: prints directly to console.
+        Inside Live panel: adds to top messages.
 
         Args:
             message: The success message to display
         """
-        self._add_top_message(f":white_check_mark: {message}", style="green")
+        if self._in_spinner:
+            self.console.print(f":white_check_mark: {message}", style="green")
+        else:
+            self._add_top_message(f":white_check_mark: {message}", style="green")
 
     def hint(self, message: str) -> None:
         """Display hint message to help users.
 
-        Shows helpful tips or instructions in a dimmed style.
+        Inside spinner context: prints directly to console.
+        Inside Live panel: adds to top messages.
 
         Args:
             message: The hint message to display
         """
-        self._add_top_message(message, style="dim")
+        if self._in_spinner:
+            self.console.print(f":bulb: {message}", style="dim")
+        else:
+            self._add_top_message(message, style="dim")
+
+    def line(self) -> None:
+        """Print an empty line for visual spacing."""
+        if self._in_spinner:
+            self.console.print()
+        else:
+            self._add_top_message("")
 
     def _add_top_message(self, message: str, style: str = "") -> None:
         """Add message to top display, maintaining max limit.
@@ -262,8 +293,14 @@ class ProgressDisplayManager:
         Yields:
             Rich status object with update(message: str) method
         """
-        with self.console.status(initial_message) as status:
-            yield status
+        self._in_spinner = True
+        try:
+            with self.console.status(initial_message) as status:
+                self._current_spinner = status
+                yield status
+        finally:
+            self._in_spinner = False
+            self._current_spinner = None
 
     def stop_spinning(self) -> None:
         """Stop the current spinner if one is active.
@@ -305,7 +342,7 @@ class ProgressDisplayManager:
 
         # Add top messages
         for message, style in self._top_messages:
-            content_parts.append(Text(message, style=style))
+            content_parts.append(Text.from_markup(message, style=style))
 
         if self._progress:
             content_parts.append(self._progress)

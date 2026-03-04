@@ -6,6 +6,8 @@ from jupyter_deploy.engine.terraform import tf_config
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
 from jupyter_deploy.exceptions import InvalidPresetError
 from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
+from jupyter_deploy.provider.store.store_manager import StoreInfo
+from jupyter_deploy.provider.store.store_manager_factory import StoreManagerFactory
 
 
 class ConfigHandler(BaseProjectHandler):
@@ -86,6 +88,26 @@ class ConfigHandler(BaseProjectHandler):
             bool: True if files were deleted, False otherwise
         """
         return self._handler.reset_recorded_secrets()
+
+    def ensure_store(self, store_type: str | None = None, store_id: str | None = None) -> StoreInfo | None:
+        """Ensure the remote project store exists, creating it if necessary.
+
+        Args:
+            store_type: Store type (e.g., "s3-ddb"). Inferred from manifest if not provided.
+            store_id: Store identifier (e.g., bucket name). Discovered from account if not provided.
+
+        Returns:
+            StoreInfo if the store was ensured, None if project store is not configured.
+        """
+        if store_type is None and self.project_manifest.project_store is not None:
+            store_type = self.project_manifest.project_store.store_type
+
+        if not store_type:
+            self.display_manager.warning("No project store type configured. Skipping store setup.")
+            return None
+
+        store_manager = StoreManagerFactory.get_manager(store_type=store_type, store_id=store_id)
+        return store_manager.ensure_store(self.display_manager)
 
     def configure(
         self, variable_overrides: dict[str, TemplateVariableDefinition] | None = None

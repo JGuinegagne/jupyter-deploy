@@ -241,6 +241,20 @@ class ProviderPermissionError(InstructionError, RuntimeError):
             super().__init__(f"Permission error for {provider_name.value} operation")
 
 
+class UnsupportedProviderRegionError(JupyterDeployError, NotImplementedError):
+    """Raised when the provider region or partition is not supported.
+
+    Attributes:
+        region_or_location: The unsupported region or partition identifier
+        hint: Optional hint for resolving the error
+    """
+
+    def __init__(self, region_or_location: str, hint: str | None = None) -> None:
+        self.region_or_location = region_or_location
+        self.hint = hint
+        super().__init__(f"Unsupported provider region or location: {region_or_location}")
+
+
 class InteractiveSessionError(InstructionError, RuntimeError):
     """Raised when an interactive session fails."""
 
@@ -374,11 +388,33 @@ class LogCleanupError(JupyterDeployError, Exception):
 
 
 # ============================================================================
-# Backup and store errors
+# Project store errors
 # ============================================================================
 
 
-class BackupStoreNotFoundError(JupyterDeployError, RuntimeError):
-    """Raised when no backup store is found and cannot be created."""
+class ProjectStoreNotFoundError(JupyterDeployError, RuntimeError):
+    """Raised when no project store is found.
+
+    Attributes:
+        hint: Optional hint for resolving the error
+    """
+
+    def __init__(self, message: str = "", hint: str | None = None) -> None:
+        self.hint = hint
+        super().__init__(message)
+
+
+class ProjectStoreAccessConfigurationError(JupyterDeployError, RuntimeError):
+    """Raised when configuring engine access to the project store fails.
+
+    For example, in the case of terraform, when either writing backend.tf
+    or running terraform init -migrate-state fails.
+    """
+
+    pass
+
+
+class ProjectIdNotAvailableError(JupyterDeployError, RuntimeError):
+    """Raised when the project ID cannot be resolved from deployment outputs."""
 
     pass

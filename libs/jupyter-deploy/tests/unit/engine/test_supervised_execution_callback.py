@@ -67,6 +67,9 @@ class MockPassThroughDisplay:
     def hint(self, message: str) -> None:
         pass
 
+    def line(self) -> None:
+        pass
+
     def spinner(self, initial_message: str) -> None:
         pass
 

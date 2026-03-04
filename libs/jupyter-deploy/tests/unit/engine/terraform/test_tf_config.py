@@ -238,6 +238,56 @@ class TestTerraformConfigHandler(unittest.TestCase):
 
     @patch("jupyter_deploy.engine.terraform.tf_supervised_executor_factory.create_terraform_executor")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
+    def test_configure_passes_reconfigure_when_backend_tf_exists(
+        self, mock_variable_handler_cls: Mock, mock_create_executor: Mock
+    ) -> None:
+        # Arrange
+        mock_vars_handler, _ = self.get_mock_variable_handler_and_fns()
+        mock_variable_handler_cls.return_value = mock_vars_handler
+
+        mock_executor = Mock()
+        mock_executor.execute.return_value = 0
+        mock_create_executor.return_value = mock_executor
+
+        path = Path("/fake/path")
+        handler = TerraformConfigHandler(path, Mock(), self.get_mock_command_history(), NullDisplay())
+
+        # Simulate backend.tf existing
+        with patch.object(Path, "exists", return_value=True):
+            handler.configure()
+
+        # Assert - init command should include -reconfigure
+        init_execute_call = mock_executor.execute.call_args_list[0]
+        init_cmd = init_execute_call[0][0]
+        self.assertEqual(init_cmd, ["terraform", "init", "-reconfigure"])
+
+    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor_factory.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
+    def test_configure_does_not_pass_reconfigure_without_backend_tf(
+        self, mock_variable_handler_cls: Mock, mock_create_executor: Mock
+    ) -> None:
+        # Arrange
+        mock_vars_handler, _ = self.get_mock_variable_handler_and_fns()
+        mock_variable_handler_cls.return_value = mock_vars_handler
+
+        mock_executor = Mock()
+        mock_executor.execute.return_value = 0
+        mock_create_executor.return_value = mock_executor
+
+        path = Path("/fake/path")
+        handler = TerraformConfigHandler(path, Mock(), self.get_mock_command_history(), NullDisplay())
+
+        # Simulate backend.tf NOT existing
+        with patch.object(Path, "exists", return_value=False):
+            handler.configure()
+
+        # Assert - init command should NOT include -reconfigure
+        init_execute_call = mock_executor.execute.call_args_list[0]
+        init_cmd = init_execute_call[0][0]
+        self.assertEqual(init_cmd, ["terraform", "init"])
+
+    @patch("jupyter_deploy.engine.terraform.tf_supervised_executor_factory.create_terraform_executor")
+    @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
     def test_configure_calls_tf_plan_with_a_named_plan(
         self, mock_variable_handler_cls: Mock, mock_create_executor: Mock
     ) -> None:

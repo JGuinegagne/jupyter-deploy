@@ -10,7 +10,7 @@ from mypy_boto3_s3.type_defs import ObjectTypeDef
 
 from jupyter_deploy.api.aws.s3.s3_sync import S3SyncResult
 from jupyter_deploy.engine.supervised_execution import NullDisplay
-from jupyter_deploy.exceptions import BackupStoreNotFoundError, ProviderPermissionError
+from jupyter_deploy.exceptions import ProjectStoreNotFoundError, ProviderPermissionError
 from jupyter_deploy.provider.aws.store.s3_dynamodb_store import S3DynamoDbTableStoreManager
 
 
@@ -28,6 +28,53 @@ def _obj(key: str, size: int, last_modified: datetime) -> ObjectTypeDef:
     }
 
 
+class TestResolveLeadRegion(unittest.TestCase):
+    @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.sts_identity")
+    @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.boto3")
+    def test_delegates_to_sts_identity(self, mock_boto3: Mock, mock_sts_identity: Mock) -> None:
+        mock_sts_client = Mock()
+        mock_boto3.client.return_value = mock_sts_client
+        mock_sts_identity.get_partition_lead_region.return_value = "us-east-1"
+
+        result = S3DynamoDbTableStoreManager.resolve_lead_region()
+
+        self.assertEqual(result, "us-east-1")
+        mock_boto3.client.assert_called_once_with("sts")
+        mock_sts_identity.get_partition_lead_region.assert_called_once_with(mock_sts_client)
+
+
+class TestFindStore(unittest.TestCase):
+    @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.s3_bucket")
+    @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.boto3")
+    def test_discovers_existing_bucket(self, mock_boto3: Mock, mock_s3_bucket: Mock) -> None:
+        mock_s3_bucket.find_buckets_by_tag.return_value = [{"Name": "existing-bucket"}]
+        provider = S3DynamoDbTableStoreManager(region="us-east-1")
+
+        result = provider.find_store()
+
+        self.assertEqual(result.store_id, "existing-bucket")
+        self.assertEqual(result.store_type, "s3-ddb")
+        self.assertEqual(result.location, "us-east-1")
+
+    @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.s3_bucket")
+    @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.boto3")
+    def test_raises_when_no_bucket_found(self, mock_boto3: Mock, mock_s3_bucket: Mock) -> None:
+        mock_s3_bucket.find_buckets_by_tag.return_value = []
+        provider = S3DynamoDbTableStoreManager(region="us-east-1")
+
+        with self.assertRaises(ProjectStoreNotFoundError):
+            provider.find_store()
+
+    @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.boto3")
+    def test_uses_provided_bucket_name(self, mock_boto3: Mock) -> None:
+        provider = S3DynamoDbTableStoreManager(region="us-west-2", bucket_name="my-bucket")
+
+        result = provider.find_store()
+
+        self.assertEqual(result.store_id, "my-bucket")
+        self.assertEqual(result.location, "us-west-2")
+
+
 class TestEnsureStore(unittest.TestCase):
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.dynamodb_table")
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.s3_bucket")
@@ -35,13 +82,13 @@ class TestEnsureStore(unittest.TestCase):
     def test_discovers_existing_bucket(self, mock_boto3: Mock, mock_s3_bucket: Mock, mock_ddb: Mock) -> None:
         mock_s3_bucket.find_buckets_by_tag.return_value = [{"Name": "existing-bucket"}]
         mock_ddb.get_table_by_name.return_value = {"Table": {"TableStatus": "ACTIVE"}}
-        provider = S3DynamoDbTableStoreManager(region="us-west-2")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1")
 
         result = provider.ensure_store(NullDisplay())
 
         self.assertEqual(result.store_id, "existing-bucket")
         self.assertEqual(result.store_type, "s3-ddb")
-        self.assertEqual(result.location, "us-west-2")
+        self.assertEqual(result.location, "us-east-1")
         mock_s3_bucket.find_buckets_by_tag.assert_called_once_with(
             mock_boto3.client.return_value, "Source", "jupyter-deploy-cli", stop_at_first_match=True
         )
@@ -53,7 +100,7 @@ class TestEnsureStore(unittest.TestCase):
     def test_creates_bucket_when_not_found(self, mock_boto3: Mock, mock_s3_bucket: Mock, mock_ddb: Mock) -> None:
         mock_s3_bucket.find_buckets_by_tag.return_value = []
         mock_ddb.get_table_by_name.return_value = {"Table": {"TableStatus": "ACTIVE"}}
-        provider = S3DynamoDbTableStoreManager(region="us-west-2")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1")
 
         result = provider.ensure_store(NullDisplay())
 
@@ -68,7 +115,7 @@ class TestEnsureStore(unittest.TestCase):
     ) -> None:
         mock_s3_bucket.find_buckets_by_tag.return_value = []
         mock_ddb.get_table_by_name.return_value = {"Table": {"TableStatus": "ACTIVE"}}
-        provider = S3DynamoDbTableStoreManager(region="us-west-2")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1")
 
         result = provider.ensure_store(NullDisplay())
 
@@ -86,7 +133,7 @@ class TestEnsureStore(unittest.TestCase):
         mock_s3_bucket.find_buckets_by_tag.return_value = [{"Name": "existing-bucket"}]
         error_response = cast(Any, {"Error": {"Code": "ResourceNotFoundException", "Message": "Table not found"}})
         mock_ddb.get_table_by_name.side_effect = botocore.exceptions.ClientError(error_response, "DescribeTable")
-        provider = S3DynamoDbTableStoreManager(region="us-west-2")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1")
 
         provider.ensure_store(NullDisplay())
 
@@ -99,7 +146,7 @@ class TestEnsureStore(unittest.TestCase):
     def test_raises_on_bucket_creation_failure(self, mock_boto3: Mock, mock_s3_bucket: Mock, mock_ddb: Mock) -> None:
         mock_s3_bucket.find_buckets_by_tag.return_value = []
         mock_s3_bucket.create_bucket.side_effect = RuntimeError("creation failed")
-        provider = S3DynamoDbTableStoreManager(region="us-west-2")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1")
 
         with self.assertRaises(RuntimeError):
             provider.ensure_store(NullDisplay())
@@ -109,7 +156,7 @@ class TestEnsureStore(unittest.TestCase):
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.boto3")
     def test_uses_provided_bucket_name(self, mock_boto3: Mock, mock_s3_bucket: Mock, mock_ddb: Mock) -> None:
         mock_ddb.get_table_by_name.return_value = {"Table": {"TableStatus": "ACTIVE"}}
-        provider = S3DynamoDbTableStoreManager(region="us-west-2", bucket_name="my-bucket")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1", bucket_name="my-bucket")
 
         result = provider.ensure_store(NullDisplay())
 
@@ -123,7 +170,7 @@ class TestEnsureStore(unittest.TestCase):
         mock_s3_bucket.find_buckets_by_tag.side_effect = botocore.exceptions.ClientError(
             cast(Any, {"Error": {"Code": "AccessDenied", "Message": "Forbidden"}}), "ListBuckets"
         )
-        provider = S3DynamoDbTableStoreManager(region="us-west-2")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1")
 
         with self.assertRaises(ProviderPermissionError):
             provider.ensure_store(NullDisplay())
@@ -136,7 +183,7 @@ class TestEnsureStore(unittest.TestCase):
         mock_ddb.get_table_by_name.side_effect = botocore.exceptions.ClientError(
             cast(Any, {"Error": {"Code": "AccessDeniedException", "Message": "Forbidden"}}), "DescribeTable"
         )
-        provider = S3DynamoDbTableStoreManager(region="us-west-2")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1")
 
         with self.assertRaises(ProviderPermissionError):
             provider.ensure_store(NullDisplay())
@@ -149,7 +196,7 @@ class TestEnsureStore(unittest.TestCase):
         mock_s3_bucket.create_bucket.side_effect = botocore.exceptions.ClientError(
             cast(Any, {"Error": {"Code": "AccessDenied", "Message": "Forbidden"}}), "CreateBucket"
         )
-        provider = S3DynamoDbTableStoreManager(region="us-west-2")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1")
 
         with self.assertRaises(ProviderPermissionError):
             provider.ensure_store(NullDisplay())
@@ -164,7 +211,7 @@ class TestEnsureStore(unittest.TestCase):
         mock_ddb.create_lock_table.side_effect = botocore.exceptions.ClientError(
             cast(Any, {"Error": {"Code": "AccessDeniedException", "Message": "Forbidden"}}), "CreateTable"
         )
-        provider = S3DynamoDbTableStoreManager(region="us-west-2")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1")
 
         with self.assertRaises(ProviderPermissionError):
             provider.ensure_store(NullDisplay())
@@ -175,7 +222,7 @@ class TestPush(unittest.TestCase):
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.boto3")
     def test_syncs_project_to_remote(self, mock_boto3: Mock, mock_sync: Mock) -> None:
         mock_sync.sync_to_remote.return_value = S3SyncResult(uploaded=3, deleted=1, unchanged=5)
-        provider = S3DynamoDbTableStoreManager(region="us-west-2", bucket_name="bucket")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1", bucket_name="bucket")
 
         with patch.object(Path, "exists", return_value=True):
             result = provider.push(Path("/project"), "my-project", NullDisplay())
@@ -186,16 +233,16 @@ class TestPush(unittest.TestCase):
 
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.boto3")
     def test_raises_when_store_not_initialized(self, mock_boto3: Mock) -> None:
-        provider = S3DynamoDbTableStoreManager(region="us-west-2")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1")
 
-        with self.assertRaises(BackupStoreNotFoundError):
+        with self.assertRaises(ProjectStoreNotFoundError):
             provider.push(Path("/project"), "my-project", NullDisplay())
 
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.s3_sync")
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.boto3")
     def test_raises_on_sync_failure(self, mock_boto3: Mock, mock_sync: Mock) -> None:
         mock_sync.sync_to_remote.side_effect = RuntimeError("upload failed")
-        provider = S3DynamoDbTableStoreManager(region="us-west-2", bucket_name="bucket")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1", bucket_name="bucket")
 
         with patch.object(Path, "exists", return_value=False), self.assertRaises(RuntimeError):
             provider.push(Path("/project"), "my-project", NullDisplay())
@@ -206,7 +253,7 @@ class TestPush(unittest.TestCase):
         mock_sync.sync_to_remote.side_effect = botocore.exceptions.ClientError(
             cast(Any, {"Error": {"Code": "AccessDenied", "Message": "Forbidden"}}), "PutObject"
         )
-        provider = S3DynamoDbTableStoreManager(region="us-west-2", bucket_name="bucket")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1", bucket_name="bucket")
 
         with patch.object(Path, "exists", return_value=False), self.assertRaises(ProviderPermissionError):
             provider.push(Path("/project"), "my-project", NullDisplay())
@@ -217,7 +264,7 @@ class TestPull(unittest.TestCase):
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.boto3")
     def test_syncs_from_remote(self, mock_boto3: Mock, mock_sync: Mock) -> None:
         mock_sync.sync_from_remote.return_value = S3SyncResult(uploaded=5, deleted=0, unchanged=0)
-        provider = S3DynamoDbTableStoreManager(region="us-west-2", bucket_name="bucket")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1", bucket_name="bucket")
 
         result = provider.pull("my-project", Path("/dest"), NullDisplay())
 
@@ -225,9 +272,9 @@ class TestPull(unittest.TestCase):
 
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.boto3")
     def test_raises_when_store_not_initialized(self, mock_boto3: Mock) -> None:
-        provider = S3DynamoDbTableStoreManager(region="us-west-2")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1")
 
-        with self.assertRaises(BackupStoreNotFoundError):
+        with self.assertRaises(ProjectStoreNotFoundError):
             provider.pull("my-project", Path("/dest"), NullDisplay())
 
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.s3_sync")
@@ -236,7 +283,7 @@ class TestPull(unittest.TestCase):
         mock_sync.sync_from_remote.side_effect = botocore.exceptions.ClientError(
             cast(Any, {"Error": {"Code": "AccessDenied", "Message": "Forbidden"}}), "GetObject"
         )
-        provider = S3DynamoDbTableStoreManager(region="us-west-2", bucket_name="bucket")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1", bucket_name="bucket")
 
         with self.assertRaises(ProviderPermissionError):
             provider.pull("my-project", Path("/dest"), NullDisplay())
@@ -253,7 +300,7 @@ class TestListProjects(unittest.TestCase):
             [_obj("project-a/f.txt", 10, now)],
             [],
         ]
-        provider = S3DynamoDbTableStoreManager(region="us-west-2", bucket_name="bucket")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1", bucket_name="bucket")
 
         result = provider.list_projects(NullDisplay())
 
@@ -265,9 +312,9 @@ class TestListProjects(unittest.TestCase):
 
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.boto3")
     def test_raises_when_store_not_initialized(self, mock_boto3: Mock) -> None:
-        provider = S3DynamoDbTableStoreManager(region="us-west-2")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1")
 
-        with self.assertRaises(BackupStoreNotFoundError):
+        with self.assertRaises(ProjectStoreNotFoundError):
             provider.list_projects(NullDisplay())
 
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.s3_bucket")
@@ -276,7 +323,7 @@ class TestListProjects(unittest.TestCase):
         mock_s3_bucket.list_top_level_prefixes.side_effect = botocore.exceptions.ClientError(
             cast(Any, {"Error": {"Code": "AccessDenied", "Message": "Forbidden"}}), "ListObjectsV2"
         )
-        provider = S3DynamoDbTableStoreManager(region="us-west-2", bucket_name="bucket")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1", bucket_name="bucket")
 
         with self.assertRaises(ProviderPermissionError):
             provider.list_projects(NullDisplay())
@@ -291,7 +338,7 @@ class TestListProjects(unittest.TestCase):
         mock_s3_object.list_objects.side_effect = botocore.exceptions.ClientError(
             cast(Any, {"Error": {"Code": "AccessDenied", "Message": "Forbidden"}}), "ListObjectsV2"
         )
-        provider = S3DynamoDbTableStoreManager(region="us-west-2", bucket_name="bucket")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1", bucket_name="bucket")
 
         with self.assertRaises(ProviderPermissionError):
             provider.list_projects(NullDisplay())
@@ -306,7 +353,7 @@ class TestDeleteProject(unittest.TestCase):
             _obj("proj/a.txt", 10, now),
             _obj("proj/b.txt", 20, now),
         ]
-        provider = S3DynamoDbTableStoreManager(region="us-west-2", bucket_name="bucket")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1", bucket_name="bucket")
 
         provider.delete_project("proj", NullDisplay())
 
@@ -319,7 +366,7 @@ class TestDeleteProject(unittest.TestCase):
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.boto3")
     def test_handles_empty_project(self, mock_boto3: Mock, mock_s3_object: Mock) -> None:
         mock_s3_object.list_objects.return_value = []
-        provider = S3DynamoDbTableStoreManager(region="us-west-2", bucket_name="bucket")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1", bucket_name="bucket")
 
         provider.delete_project("proj", NullDisplay())
 
@@ -327,9 +374,9 @@ class TestDeleteProject(unittest.TestCase):
 
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.boto3")
     def test_raises_when_store_not_initialized(self, mock_boto3: Mock) -> None:
-        provider = S3DynamoDbTableStoreManager(region="us-west-2")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1")
 
-        with self.assertRaises(BackupStoreNotFoundError):
+        with self.assertRaises(ProjectStoreNotFoundError):
             provider.delete_project("proj", NullDisplay())
 
     @patch("jupyter_deploy.provider.aws.store.s3_dynamodb_store.s3_object")
@@ -338,7 +385,7 @@ class TestDeleteProject(unittest.TestCase):
         mock_s3_object.list_objects.side_effect = botocore.exceptions.ClientError(
             cast(Any, {"Error": {"Code": "AccessDenied", "Message": "Forbidden"}}), "ListObjectsV2"
         )
-        provider = S3DynamoDbTableStoreManager(region="us-west-2", bucket_name="bucket")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1", bucket_name="bucket")
 
         with self.assertRaises(ProviderPermissionError):
             provider.delete_project("proj", NullDisplay())
@@ -351,7 +398,7 @@ class TestDeleteProject(unittest.TestCase):
         mock_s3_object.delete_objects.side_effect = botocore.exceptions.ClientError(
             cast(Any, {"Error": {"Code": "AccessDenied", "Message": "Forbidden"}}), "DeleteObjects"
         )
-        provider = S3DynamoDbTableStoreManager(region="us-west-2", bucket_name="bucket")
+        provider = S3DynamoDbTableStoreManager(region="us-east-1", bucket_name="bucket")
 
         with self.assertRaises(ProviderPermissionError):
             provider.delete_project("proj", NullDisplay())

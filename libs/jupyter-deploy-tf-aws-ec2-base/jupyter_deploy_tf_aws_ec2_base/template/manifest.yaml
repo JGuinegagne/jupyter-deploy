@@ -8,6 +8,9 @@ requirements:
 - name: awscli
 - name: jq
 values:
+- name: deployment_id
+  source: output
+  source-key: deployment_id
 - name: open_url
   source: output
   source-key: jupyter_url
@@ -17,6 +20,8 @@ values:
 - name: persisting_resources
   source: output
   source-key: persisting_resources
+project-store:
+  store-type: s3-ddb
 services:
 - jupyter
 - traefik

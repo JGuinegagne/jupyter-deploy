@@ -2,9 +2,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from jupyter_deploy.engine.outdefs import StrTemplateOutputDefinition
 from jupyter_deploy.engine.supervised_execution import NullDisplay
+from jupyter_deploy.exceptions import ProjectIdNotAvailableError, ProjectStoreAccessConfigurationError
 from jupyter_deploy.handlers.project.up_handler import UpHandler
-from jupyter_deploy.manifest import JupyterDeployManifestV1
+from jupyter_deploy.manifest import JupyterDeployManifestV1, JupyterDeployProjectStoreV1
 
 
 class TestUpHandler(unittest.TestCase):
@@ -187,3 +189,200 @@ class TestUpHandler(unittest.TestCase):
         # Verify error message contains helpful information
         self.assertIn("test-config", str(context.exception))
         self.assertIn("jd config", str(context.exception))
+
+
+class TestUpHandlerPushToStore(unittest.TestCase):
+    def setUp(self) -> None:
+        self.project_store = JupyterDeployProjectStoreV1(**{"store-type": "s3-ddb"})  # type: ignore
+        self.mock_manifest = JupyterDeployManifestV1(
+            **{  # type: ignore
+                "schema_version": 1,
+                "template": {"name": "test-template", "engine": "terraform", "version": "1.0.0"},
+                "values": [{"name": "deployment_id", "source": "output", "source-key": "deployment_id"}],
+                "project_store": self.project_store,
+            }
+        )
+        self.mock_manifest_no_store = JupyterDeployManifestV1(
+            **{  # type: ignore
+                "schema_version": 1,
+                "template": {"name": "test-template", "engine": "terraform", "version": "1.0.0"},
+            }
+        )
+
+    def _setup_handler(
+        self,
+        mock_cwd: Mock,
+        mock_retrieve_manifest: Mock,
+        mock_tf_handler_cls: Mock,
+        manifest: JupyterDeployManifestV1 | None = None,
+    ) -> UpHandler:
+        mock_cwd.return_value = Path("/mock/cwd")
+        mock_retrieve_manifest.return_value = manifest or self.mock_manifest
+        mock_tf_handler = Mock()
+        mock_tf_handler.engine_dir_path = Path("/mock/cwd/engine")
+        mock_tf_handler.apply.return_value = None
+        mock_tf_handler_cls.return_value = mock_tf_handler
+
+        return UpHandler(display_manager=NullDisplay())
+
+    @patch("jupyter_deploy.handlers.project.up_handler.StoreManagerFactory")
+    @patch("jupyter_deploy.handlers.project.up_handler.TerraformOutputsHandler")
+    @patch("jupyter_deploy.engine.terraform.tf_up.TerraformUpHandler")
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("pathlib.Path.cwd")
+    def test_push_to_store_pushes(
+        self,
+        mock_cwd: Mock,
+        mock_retrieve_manifest: Mock,
+        mock_tf_handler_cls: Mock,
+        mock_outputs_cls: Mock,
+        mock_store_factory: Mock,
+    ) -> None:
+        handler = self._setup_handler(mock_cwd, mock_retrieve_manifest, mock_tf_handler_cls)
+        handler._store_access_manager = Mock()
+        handler._store_access_manager.is_configured.return_value = True
+
+        mock_store_manager = Mock()
+        mock_store_factory.get_manager.return_value = mock_store_manager
+
+        mock_output_def = StrTemplateOutputDefinition(output_name="deployment_id", value="dep-001")
+        mock_outputs_cls.return_value.get_declared_output_def.return_value = mock_output_def
+
+        handler.push_to_store()
+
+        mock_store_factory.get_manager.assert_called_once_with(store_type="s3-ddb", store_id=None)
+        mock_store_manager.find_store.assert_called_once()
+        handler._store_access_manager.configure.assert_not_called()
+        mock_store_manager.push.assert_called_once()
+
+    @patch("jupyter_deploy.handlers.project.up_handler.StoreManagerFactory")
+    @patch("jupyter_deploy.handlers.project.up_handler.TerraformOutputsHandler")
+    @patch("jupyter_deploy.engine.terraform.tf_up.TerraformUpHandler")
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("pathlib.Path.cwd")
+    def test_push_to_store_with_overrides(
+        self,
+        mock_cwd: Mock,
+        mock_retrieve_manifest: Mock,
+        mock_tf_handler_cls: Mock,
+        mock_outputs_cls: Mock,
+        mock_store_factory: Mock,
+    ) -> None:
+        handler = self._setup_handler(mock_cwd, mock_retrieve_manifest, mock_tf_handler_cls)
+        handler._store_access_manager = Mock()
+        handler._store_access_manager.is_configured.return_value = True
+
+        mock_store_manager = Mock()
+        mock_store_factory.get_manager.return_value = mock_store_manager
+
+        mock_output_def = StrTemplateOutputDefinition(output_name="deployment_id", value="dep-001")
+        mock_outputs_cls.return_value.get_declared_output_def.return_value = mock_output_def
+
+        handler.push_to_store(store_type="gcs", store_id="my-bucket")
+
+        mock_store_factory.get_manager.assert_called_once_with(store_type="gcs", store_id="my-bucket")
+
+    @patch("jupyter_deploy.handlers.project.up_handler.TerraformOutputsHandler")
+    @patch("jupyter_deploy.engine.terraform.tf_up.TerraformUpHandler")
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("pathlib.Path.cwd")
+    def test_push_to_store_raises_when_deployment_id_unavailable(
+        self,
+        mock_cwd: Mock,
+        mock_retrieve_manifest: Mock,
+        mock_tf_handler_cls: Mock,
+        mock_outputs_cls: Mock,
+    ) -> None:
+        handler = self._setup_handler(mock_cwd, mock_retrieve_manifest, mock_tf_handler_cls)
+
+        mock_output_def = StrTemplateOutputDefinition(output_name="deployment_id", value=None)
+        mock_outputs_cls.return_value.get_declared_output_def.return_value = mock_output_def
+
+        with self.assertRaises(ProjectIdNotAvailableError):
+            handler.push_to_store()
+
+    @patch("jupyter_deploy.handlers.project.up_handler.StoreManagerFactory")
+    @patch("jupyter_deploy.handlers.project.up_handler.TerraformOutputsHandler")
+    @patch("jupyter_deploy.engine.terraform.tf_up.TerraformUpHandler")
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("pathlib.Path.cwd")
+    def test_push_to_store_configures_backend_on_first_run(
+        self,
+        mock_cwd: Mock,
+        mock_retrieve_manifest: Mock,
+        mock_tf_handler_cls: Mock,
+        mock_outputs_cls: Mock,
+        mock_store_factory: Mock,
+    ) -> None:
+        handler = self._setup_handler(mock_cwd, mock_retrieve_manifest, mock_tf_handler_cls)
+        handler._store_access_manager = Mock()
+        handler._store_access_manager.is_configured.return_value = False
+
+        mock_store_manager = Mock()
+        mock_store_factory.get_manager.return_value = mock_store_manager
+
+        mock_output_def = StrTemplateOutputDefinition(output_name="deployment_id", value="dep-001")
+        mock_outputs_cls.return_value.get_declared_output_def.return_value = mock_output_def
+
+        handler.push_to_store()
+
+        handler._store_access_manager.configure.assert_called_once_with(
+            mock_store_manager.find_store.return_value,
+            "test-template-dep-001",
+            handler.display_manager,
+        )
+        mock_store_manager.push.assert_called_once()
+
+    @patch("jupyter_deploy.handlers.project.up_handler.StoreManagerFactory")
+    @patch("jupyter_deploy.handlers.project.up_handler.TerraformOutputsHandler")
+    @patch("jupyter_deploy.engine.terraform.tf_up.TerraformUpHandler")
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("pathlib.Path.cwd")
+    def test_push_to_store_raises_on_migration_failure(
+        self,
+        mock_cwd: Mock,
+        mock_retrieve_manifest: Mock,
+        mock_tf_handler_cls: Mock,
+        mock_outputs_cls: Mock,
+        mock_store_factory: Mock,
+    ) -> None:
+        handler = self._setup_handler(mock_cwd, mock_retrieve_manifest, mock_tf_handler_cls)
+        handler._store_access_manager = Mock()
+        handler._store_access_manager.is_configured.return_value = False
+        handler._store_access_manager.configure.side_effect = ProjectStoreAccessConfigurationError("migration failed")
+
+        mock_store_manager = Mock()
+        mock_store_factory.get_manager.return_value = mock_store_manager
+
+        mock_output_def = StrTemplateOutputDefinition(output_name="deployment_id", value="dep-001")
+        mock_outputs_cls.return_value.get_declared_output_def.return_value = mock_output_def
+
+        with self.assertRaises(ProjectStoreAccessConfigurationError):
+            handler.push_to_store()
+
+        mock_store_manager.push.assert_not_called()
+
+    @patch("jupyter_deploy.handlers.project.up_handler.StoreManagerFactory")
+    @patch("jupyter_deploy.engine.terraform.tf_up.TerraformUpHandler")
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("pathlib.Path.cwd")
+    def test_push_to_store_without_project_store_warns_and_returns(
+        self,
+        mock_cwd: Mock,
+        mock_retrieve_manifest: Mock,
+        mock_tf_handler_cls: Mock,
+        mock_store_factory: Mock,
+    ) -> None:
+        mock_display = Mock()
+        mock_cwd.return_value = Path("/mock/cwd")
+        mock_retrieve_manifest.return_value = self.mock_manifest_no_store
+        mock_tf_handler = Mock()
+        mock_tf_handler.engine_dir_path = Path("/mock/cwd/engine")
+        mock_tf_handler.apply.return_value = None
+        mock_tf_handler_cls.return_value = mock_tf_handler
+
+        handler = UpHandler(display_manager=mock_display)
+        handler.push_to_store()
+
+        mock_display.warning.assert_called_once()
+        mock_store_factory.get_manager.assert_not_called()
