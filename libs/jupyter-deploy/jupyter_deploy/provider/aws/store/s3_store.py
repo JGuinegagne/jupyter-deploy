@@ -44,7 +44,10 @@ class S3StoreManager(StoreManager):
             if bucket_name:
                 # Verify the pinned bucket actually exists
                 if not s3_bucket.bucket_exists(self._s3_client, bucket_name):
-                    raise ProjectStoreNotFoundError(f"S3 bucket not found: {bucket_name}")
+                    raise ProjectStoreNotFoundError(
+                        f"S3 bucket not found: {bucket_name}",
+                        hint="try 'jd config --reset-store-id' to rediscover the store.",
+                    )
             else:
                 matched = s3_bucket.find_buckets_by_tag(
                     self._s3_client, STORE_TAG_SOURCE_KEY, STORE_TAG_SOURCE_VALUE, stop_at_first_match=True

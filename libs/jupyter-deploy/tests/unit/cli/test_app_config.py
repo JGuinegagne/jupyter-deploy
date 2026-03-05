@@ -28,6 +28,8 @@ class TestConfigCommand(unittest.TestCase):
         mock_record = Mock()
         mock_has_used_preset = Mock()
 
+        mock_reset_store_id = Mock()
+
         mock_config_handler.has_recorded_variables = mock_has_recorded_variables
         mock_config_handler.verify_preset_exists = mock_verify_preset_exists
         mock_config_handler.validate_preset = mock_validate_preset
@@ -40,6 +42,7 @@ class TestConfigCommand(unittest.TestCase):
         mock_config_handler.configure = mock_configure
         mock_config_handler.record = mock_record
         mock_config_handler.has_used_preset = mock_has_used_preset
+        mock_config_handler.reset_store_id = mock_reset_store_id
 
         mock_has_recorded_variables.return_value = False
         mock_verify_preset_exists.return_value = True
@@ -62,6 +65,7 @@ class TestConfigCommand(unittest.TestCase):
             "configure": mock_configure,
             "record": mock_record,
             "has_used_preset": mock_has_used_preset,
+            "reset_store_id": mock_reset_store_id,
         }
 
     @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
@@ -444,3 +448,33 @@ class TestConfigCommand(unittest.TestCase):
 
         self.assertNotEqual(result.exit_code, 0)
         mock_config_fns["ensure_store"].assert_not_called()
+
+    @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
+    def test_config_reset_store_id_calls_handler(self, mock_config_handler: Mock) -> None:
+        """Test that --reset-store-id calls reset_store_id before ensure_store."""
+        mock_config_handler_instance, mock_config_fns = self.get_mock_config_handler()
+        mock_config_handler.return_value = mock_config_handler_instance
+
+        call_order: list[str] = []
+        mock_config_fns["reset_store_id"].side_effect = lambda: call_order.append("reset_store_id")
+        mock_config_fns["ensure_store"].side_effect = lambda **kw: call_order.append("ensure_store")
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["config", "--reset-store-id"])
+
+        self.assertEqual(result.exit_code, 0)
+        mock_config_fns["reset_store_id"].assert_called_once()
+        mock_config_fns["ensure_store"].assert_called_once()
+        self.assertEqual(call_order, ["reset_store_id", "ensure_store"])
+
+    @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
+    def test_config_without_reset_store_id_does_not_call_reset(self, mock_config_handler: Mock) -> None:
+        """Test that without --reset-store-id, reset_store_id is not called."""
+        mock_config_handler_instance, mock_config_fns = self.get_mock_config_handler()
+        mock_config_handler.return_value = mock_config_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["config"])
+
+        self.assertEqual(result.exit_code, 0)
+        mock_config_fns["reset_store_id"].assert_not_called()

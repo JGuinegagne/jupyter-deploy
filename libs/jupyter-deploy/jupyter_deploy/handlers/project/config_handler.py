@@ -90,6 +90,11 @@ class ConfigHandler(BaseProjectHandler):
         """
         return self._handler.reset_recorded_secrets()
 
+    def reset_store_id(self) -> None:
+        """Clear the store-id from .jd/store.yaml, preserving store-type."""
+        store_type = self.get_store_type_from_config_or_manifest()
+        write_store_config(self.project_path, store_type=store_type.value if store_type else None, store_id=None)
+
     def ensure_store(
         self,
         store_type: StoreType | None = None,
@@ -100,7 +105,7 @@ class ConfigHandler(BaseProjectHandler):
         Resolves store type and ID from CLI args > .jd/store.yaml > manifest.
         Persists resolved values to .jd/store.yaml so subsequent runs skip discovery.
 
-        When store_id is explicitly set, verifies the store exists with find_store()
+        When store_id is set, verifies the store exists with find_store()
         and raises ProjectStoreNotFoundError if not found.
 
         Returns:
@@ -119,7 +124,7 @@ class ConfigHandler(BaseProjectHandler):
         # Resolve store id: CLI > config
         resolved_store_id = store_id if store_id else self.get_store_id_from_config()
 
-        # When --store-id is explicitly passed, verify the bucket exists rather than creating one
+        # When store-id is set, verify the bucket exists rather than creating one
         if resolved_store_id is not None:
             store_manager = StoreManagerFactory.get_manager(store_type=resolved_store_type, store_id=resolved_store_id)
             store_info = store_manager.find_store()

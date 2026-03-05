@@ -203,6 +203,10 @@ def config(
         str | None,
         typer.Option("--store-id", help="Pin a specific store."),
     ] = None,
+    reset_store_id: Annotated[
+        bool,
+        typer.Option("--reset-store-id", help="Clear the pinned store ID and rediscover the store."),
+    ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", help="Show full output without progress bar.")] = False,
     variables: Annotated[
         dict[str, TemplateVariableDefinition] | None,
@@ -279,6 +283,11 @@ def config(
             if verbose:
                 console.print("[bold]jupyter-deploy:[/] skipping verification of requirements")
             run_configure = True
+
+        if reset_store_id:
+            handler.reset_store_id()
+            if verbose:
+                console.print(":white_check_mark: Store ID cleared from .jd/store.yaml")
 
         if run_configure:
             if verbose:

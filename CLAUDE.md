@@ -115,12 +115,15 @@ The E2E tests run in a local container using `pytest` where `playwright` and web
 - `just e2e-up` builds and starts the container.
 - `just e2e-sync` synchronizes the workspace files with the container.
 Look at `./justfile` for more details.
-IMPORTANT: you CANNOT run any e2e directly with `uv run pytest E2E-TEST-SELECTOR`, you MUST use a `just` command.
+
+**IMPORTANT**: you CANNOT run any e2e directly with `uv run pytest E2E-TEST-SELECTOR`, you MUST use a `just` command.
 
 **IMPORTANT**: Deployment directories contain their own copy of template files.
 When testing template changes in an existing deployment (e.g., sandbox-e2e),
 you must manually copy the modified template files from `libs/jupyter-deploy-tf-aws-ec2-base/jupyter_deploy_tf_aws_ec2_base/template/`
 to the deployment directory BEFORE running configuration tests or deploying.
+
+**IMPORTANT:** E2E tests MUST be run sequentially — never run multiple `just test-e2e` commands in parallel.
 
 ## Prerequisites
 1. A deployed project to test against located in a dir relative to the workspace root (e.g., `./sandbox`)

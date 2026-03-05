@@ -112,6 +112,8 @@ class TestFindStore(unittest.TestCase):
             provider.find_store()
 
         self.assertIn("missing-bucket", str(ctx.exception))
+        self.assertIsNotNone(ctx.exception.hint)
+        self.assertIn("--reset-store-id", ctx.exception.hint)  # type: ignore[arg-type]
 
 
 class TestEnsureStore(unittest.TestCase):
