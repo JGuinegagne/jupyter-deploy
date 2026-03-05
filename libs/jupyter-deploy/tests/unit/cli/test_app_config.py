@@ -5,6 +5,7 @@ from typer.testing import CliRunner
 
 from jupyter_deploy.cli.app import runner as app_runner
 from jupyter_deploy.cli.simple_display import SimpleDisplayManager
+from jupyter_deploy.enum import StoreType
 from jupyter_deploy.exceptions import InvalidPresetError, LogCleanupError, SupervisedExecutionError
 from jupyter_deploy.verify_utils import ToolRequiredError
 
@@ -383,3 +384,63 @@ class TestConfigCommand(unittest.TestCase):
         mock_config_fns["reset_recorded_variables"].assert_not_called()
         mock_config_fns["reset_recorded_secrets"].assert_not_called()
         mock_config_fns["has_used_preset"].assert_called_once()
+
+    @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
+    def test_config_passes_store_type_none_and_store_id_none_by_default(self, mock_config_handler: Mock) -> None:
+        """Test that config passes store_type=None and store_id=None to ensure_store by default."""
+        mock_config_handler_instance, mock_config_fns = self.get_mock_config_handler()
+        mock_config_handler.return_value = mock_config_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["config"])
+
+        self.assertEqual(result.exit_code, 0)
+        mock_config_fns["ensure_store"].assert_called_once_with(store_type=None, store_id=None)
+
+    @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
+    def test_config_passes_store_type_to_ensure_store(self, mock_config_handler: Mock) -> None:
+        """Test that --store-type is forwarded to ensure_store."""
+        mock_config_handler_instance, mock_config_fns = self.get_mock_config_handler()
+        mock_config_handler.return_value = mock_config_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["config", "--store-type", "s3-only"])
+
+        self.assertEqual(result.exit_code, 0)
+        mock_config_fns["ensure_store"].assert_called_once_with(store_type=StoreType.S3_ONLY, store_id=None)
+
+    @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
+    def test_config_passes_store_id_to_ensure_store(self, mock_config_handler: Mock) -> None:
+        """Test that --store-id is forwarded to ensure_store."""
+        mock_config_handler_instance, mock_config_fns = self.get_mock_config_handler()
+        mock_config_handler.return_value = mock_config_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["config", "--store-id", "my-bucket"])
+
+        self.assertEqual(result.exit_code, 0)
+        mock_config_fns["ensure_store"].assert_called_once_with(store_type=None, store_id="my-bucket")
+
+    @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
+    def test_config_passes_store_type_and_store_id_to_ensure_store(self, mock_config_handler: Mock) -> None:
+        """Test that --store-type and --store-id are both forwarded to ensure_store."""
+        mock_config_handler_instance, mock_config_fns = self.get_mock_config_handler()
+        mock_config_handler.return_value = mock_config_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["config", "--store-type", "s3-ddb", "--store-id", "my-bucket"])
+
+        self.assertEqual(result.exit_code, 0)
+        mock_config_fns["ensure_store"].assert_called_once_with(store_type=StoreType.S3_DDB, store_id="my-bucket")
+
+    @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
+    def test_config_rejects_invalid_store_type(self, mock_config_handler: Mock) -> None:
+        """Test that an invalid --store-type value is rejected by typer."""
+        mock_config_handler_instance, mock_config_fns = self.get_mock_config_handler()
+        mock_config_handler.return_value = mock_config_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["config", "--store-type", "invalid-type"])
+
+        self.assertNotEqual(result.exit_code, 0)
+        mock_config_fns["ensure_store"].assert_not_called()

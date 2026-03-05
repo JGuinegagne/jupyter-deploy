@@ -5,8 +5,9 @@ from pydantic import ValidationError
 from yaml.parser import ParserError
 from yaml.scanner import ScannerError
 
-from jupyter_deploy import constants, fs_utils, manifest, variables_config
+from jupyter_deploy import constants, fs_utils, manifest, store_config, variables_config
 from jupyter_deploy.engine.supervised_execution import DisplayManager
+from jupyter_deploy.enum import StoreType
 from jupyter_deploy.exceptions import (
     InvalidManifestError,
     InvalidVariablesDotYamlError,
@@ -43,6 +44,36 @@ class BaseProjectHandler:
         project_manifest = retrieve_project_manifest(manifest_path)
         self.engine = project_manifest.get_engine()
         self.project_manifest = project_manifest
+
+    def get_store_type_from_config_or_manifest(self) -> StoreType | None:
+        """Resolve the store type from .jd/store.yaml > manifest.
+
+        Returns None if no store is configured anywhere.
+
+        Raises:
+            InvalidStoreTypeError: If a resolved store type string is not recognized.
+        """
+        # Priority 1: .jd/store.yaml
+        config = retrieve_store_config(self.project_path)
+        if config is not None and config.store_type is not None:
+            return config.get_store_type()
+
+        # Priority 2: manifest project-store
+        if self.project_manifest.project_store is not None:
+            return self.project_manifest.project_store.get_store_type()
+
+        return None
+
+    def get_store_id_from_config(self) -> str | None:
+        """Resolve the store ID from .jd/store.yaml.
+
+        Returns None if no store ID is pinned (use tag-based discovery).
+        """
+        config = retrieve_store_config(self.project_path)
+        if config is not None and config.store_id is not None:
+            return config.store_id
+
+        return None
 
 
 def retrieve_project_manifest(manifest_path: Path) -> manifest.JupyterDeployManifest:
@@ -113,3 +144,33 @@ def retrieve_variables_config(variables_config_path: Path) -> variables_config.J
         )
 
     return variables_config.JupyterDeployVariablesConfig(**content)
+
+
+def retrieve_store_config(project_path: Path) -> store_config.JupyterDeployStoreConfig | None:
+    """Read .jd/store.yaml and return a parsed config, or None if file does not exist."""
+    store_config_path = project_path / constants.JD_DIR / constants.STORE_CONFIG_FILENAME
+    if not fs_utils.file_exists(store_config_path):
+        return None
+
+    with open(store_config_path) as f:
+        content = yaml.safe_load(f)
+
+    if not isinstance(content, dict):
+        return None
+
+    return store_config.JupyterDeployStoreConfig(**content)
+
+
+def write_store_config(project_path: Path, store_type: str | None = None, store_id: str | None = None) -> None:
+    """Write .jd/store.yaml with the given values. Creates .jd/ dir if needed."""
+    jd_dir = project_path / constants.JD_DIR
+    jd_dir.mkdir(parents=True, exist_ok=True)
+
+    config = store_config.JupyterDeployStoreConfigV1(store_type=store_type, store_id=store_id)
+    content = config.model_dump(by_alias=True, exclude_none=True)
+
+    fs_utils.write_yaml_file_with_comments(
+        jd_dir / constants.STORE_CONFIG_FILENAME,
+        content,
+        key_order=store_config.STORE_CONFIG_V1_KEYS_ORDER,
+    )

@@ -2,10 +2,12 @@ from jupyter_deploy.engine import outdefs
 from jupyter_deploy.engine.engine_outputs import EngineOutputsHandler
 from jupyter_deploy.engine.engine_variables import EngineVariablesHandler
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.engine.outdefs import StrTemplateOutputDefinition
 from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.engine.terraform import tf_outputs, tf_variables
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
-from jupyter_deploy.exceptions import OutputNotFoundError, VariableNotFoundError
+from jupyter_deploy.enum import StoreType
+from jupyter_deploy.exceptions import OutputNotFoundError, ProjectIdNotAvailableError, VariableNotFoundError
 from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
 
 
@@ -86,6 +88,43 @@ class ShowHandler(BaseProjectHandler):
         description = getattr(output_def, "description", "") or "No description"
         value = str(output_def.value) if hasattr(output_def, "value") and output_def.value is not None else "None"
         return value, description
+
+    def get_project_id(self) -> str:
+        """Return the computed project ID.
+
+        Raises:
+            ProjectIdNotAvailableError: If deployment_id is not declared or not available.
+        """
+        try:
+            self.project_manifest.get_declared_value("deployment_id")
+        except NotImplementedError:
+            raise ProjectIdNotAvailableError("Template must declare a 'deployment_id' value.") from None
+
+        try:
+            deployment_id_def = self._outputs_handler.get_declared_output_def(
+                "deployment_id", StrTemplateOutputDefinition
+            )
+        except KeyError:
+            raise ProjectIdNotAvailableError(
+                "Deployment ID is not available.",
+                hint="This is normal if the project has not been deployed yet.",
+            ) from None
+
+        if not deployment_id_def.value:
+            raise ProjectIdNotAvailableError(
+                "Deployment ID is not available.",
+                hint="This is normal if the project has not been deployed yet.",
+            )
+
+        return self.project_manifest.compute_project_id(deployment_id_def.value)
+
+    def get_resolved_store_type(self) -> StoreType | None:
+        """Return the resolved store type, or None if not configured."""
+        return self.get_store_type_from_config_or_manifest()
+
+    def get_resolved_store_id(self) -> str | None:
+        """Return the resolved store ID, or None if not pinned."""
+        return self.get_store_id_from_config()
 
     def get_variable_str_value_and_description(self, variable_name: str) -> tuple[str, str]:
         """Return a tuple of str(value) and description of a single variable.

@@ -2,13 +2,32 @@ import unittest
 from unittest.mock import Mock, patch
 
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.engine.outdefs import StrTemplateOutputDefinition
+from jupyter_deploy.enum import StoreType
+from jupyter_deploy.exceptions import ProjectIdNotAvailableError
 from jupyter_deploy.handlers.project.show_handler import ShowHandler
-from jupyter_deploy.manifest import JupyterDeployManifestV1
+from jupyter_deploy.manifest import JupyterDeployManifestV1, JupyterDeployProjectStoreV1
+from jupyter_deploy.store_config import JupyterDeployStoreConfigV1
 
 
 class TestShowHandler(unittest.TestCase):
     def get_mock_manifest(self) -> JupyterDeployManifestV1:
-        """Create a mock manifest."""
+        """Create a mock manifest with deployment_id value and project store."""
+        return JupyterDeployManifestV1(
+            **{  # type: ignore
+                "schema_version": 1,
+                "template": {
+                    "name": "tf-aws-ec2-base",
+                    "engine": "terraform",
+                    "version": "1.0.0",
+                },
+                "values": [{"name": "deployment_id", "source": "output", "source-key": "deployment_id"}],
+                "project_store": JupyterDeployProjectStoreV1(**{"store-type": "s3-ddb"}),  # type: ignore
+            }
+        )
+
+    def get_mock_manifest_without_deployment_id_and_project_store(self) -> JupyterDeployManifestV1:
+        """Create a minimal mock manifest without deployment_id or project store."""
         return JupyterDeployManifestV1(
             **{  # type: ignore
                 "schema_version": 1,
@@ -465,3 +484,115 @@ class TestShowHandler(unittest.TestCase):
         # Should return a list of output names
         self.assertIsInstance(result, list)
         self.assertEqual(set(result), {"jupyter_url", "instance_id"})
+
+    # --- get_project_id tests ---
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    def test_get_project_id_returns_computed_id(self, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        handler = ShowHandler()
+
+        mock_output_def = StrTemplateOutputDefinition(output_name="deployment_id", value="dep-001")
+        with patch.object(handler._outputs_handler, "get_declared_output_def", return_value=mock_output_def):
+            result = handler.get_project_id()
+
+        self.assertEqual(result, "tf-aws-ec2-base-dep-001")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    def test_get_project_id_raises_when_not_declared(self, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest_without_deployment_id_and_project_store()
+        handler = ShowHandler()
+
+        with self.assertRaises(ProjectIdNotAvailableError) as ctx:
+            handler.get_project_id()
+
+        self.assertIn("declare", str(ctx.exception))
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    def test_get_project_id_raises_when_output_not_found(self, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        handler = ShowHandler()
+
+        with (
+            patch.object(
+                handler._outputs_handler,
+                "get_declared_output_def",
+                side_effect=KeyError("deployment_id"),
+            ),
+            self.assertRaises(ProjectIdNotAvailableError) as ctx,
+        ):
+            handler.get_project_id()
+
+        self.assertIsNotNone(ctx.exception.hint)
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    def test_get_project_id_raises_when_output_value_is_none(self, mock_retrieve_manifest: Mock) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        handler = ShowHandler()
+
+        mock_output_def = StrTemplateOutputDefinition(output_name="deployment_id", value=None)
+        with (
+            patch.object(handler._outputs_handler, "get_declared_output_def", return_value=mock_output_def),
+            self.assertRaises(ProjectIdNotAvailableError) as ctx,
+        ):
+            handler.get_project_id()
+
+        self.assertIsNotNone(ctx.exception.hint)
+
+    # --- get_resolved_store_type tests ---
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_store_config", return_value=None)
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    def test_get_resolved_store_type_returns_none_when_no_store(
+        self, mock_retrieve_manifest: Mock, mock_retrieve_store_config: Mock
+    ) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest_without_deployment_id_and_project_store()
+        handler = ShowHandler()
+
+        self.assertIsNone(handler.get_resolved_store_type())
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_store_config", return_value=None)
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    def test_get_resolved_store_type_from_manifest(
+        self, mock_retrieve_manifest: Mock, mock_retrieve_store_config: Mock
+    ) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        handler = ShowHandler()
+
+        self.assertEqual(handler.get_resolved_store_type(), StoreType.S3_DDB)
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_store_config")
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    def test_get_resolved_store_type_config_overrides_manifest(
+        self, mock_retrieve_manifest: Mock, mock_retrieve_store_config: Mock
+    ) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_retrieve_store_config.return_value = JupyterDeployStoreConfigV1(store_type="s3-only")
+
+        handler = ShowHandler()
+
+        self.assertEqual(handler.get_resolved_store_type(), StoreType.S3_ONLY)
+
+    # --- get_resolved_store_id tests ---
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_store_config", return_value=None)
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    def test_get_resolved_store_id_returns_none_when_not_set(
+        self, mock_retrieve_manifest: Mock, mock_retrieve_store_config: Mock
+    ) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        handler = ShowHandler()
+
+        self.assertIsNone(handler.get_resolved_store_id())
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_store_config")
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    def test_get_resolved_store_id_from_config(
+        self, mock_retrieve_manifest: Mock, mock_retrieve_store_config: Mock
+    ) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_retrieve_store_config.return_value = JupyterDeployStoreConfigV1(store_id="my-bucket")
+
+        handler = ShowHandler()
+
+        self.assertEqual(handler.get_resolved_store_id(), "my-bucket")

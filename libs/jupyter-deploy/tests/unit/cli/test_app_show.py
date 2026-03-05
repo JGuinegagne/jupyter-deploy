@@ -6,6 +6,8 @@ from unittest.mock import Mock, patch
 from typer.testing import CliRunner
 
 from jupyter_deploy.cli.app import runner as app_runner
+from jupyter_deploy.enum import StoreType
+from jupyter_deploy.exceptions import ProjectIdNotAvailableError
 
 
 class TestShowCommand(unittest.TestCase):
@@ -26,6 +28,9 @@ class TestShowCommand(unittest.TestCase):
         mock_get_output_str_value_and_description = Mock(return_value=("test_output", "output description"))
         mock_list_variable_names = Mock(return_value=["var1", "var2"])
         mock_list_output_names = Mock(return_value=["out1", "out2"])
+        mock_get_project_id = Mock(side_effect=ProjectIdNotAvailableError("N/A"))
+        mock_get_resolved_store_type = Mock(return_value=None)
+        mock_get_resolved_store_id = Mock(return_value=None)
 
         mock_show_handler.project_path = "/test/path"
         mock_show_handler.get_template_name = mock_get_template_name
@@ -37,6 +42,9 @@ class TestShowCommand(unittest.TestCase):
         mock_show_handler.get_output_str_value_and_description = mock_get_output_str_value_and_description
         mock_show_handler.list_variable_names = mock_list_variable_names
         mock_show_handler.list_output_names = mock_list_output_names
+        mock_show_handler.get_project_id = mock_get_project_id
+        mock_show_handler.get_resolved_store_type = mock_get_resolved_store_type
+        mock_show_handler.get_resolved_store_id = mock_get_resolved_store_id
 
         return mock_show_handler, {
             "get_template_name": mock_get_template_name,
@@ -48,6 +56,9 @@ class TestShowCommand(unittest.TestCase):
             "get_output_str_value_and_description": mock_get_output_str_value_and_description,
             "list_variable_names": mock_list_variable_names,
             "list_output_names": mock_list_output_names,
+            "get_project_id": mock_get_project_id,
+            "get_resolved_store_type": mock_get_resolved_store_type,
+            "get_resolved_store_id": mock_get_resolved_store_id,
         }
 
     @patch("jupyter_deploy.cli.app.ShowHandler")
@@ -888,3 +899,308 @@ class TestShowCommand(unittest.TestCase):
         # Should not include Rich markup tags
         self.assertNotIn("[bold", result.output)
         self.assertNotIn("[cyan", result.output)
+
+    # --project-id flag tests
+
+    @patch("jupyter_deploy.cli.app.ShowHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_show_command_with_project_id_flag(
+        self, mock_project_ctx_manager: Mock, mock_show_handler_cls: Mock
+    ) -> None:
+        """Test show command with --project-id flag displays the project ID."""
+        mock_project_ctx_manager.side_effect = TestShowCommand.mock_project_dir
+
+        mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
+        mock_show_fns["get_project_id"].side_effect = None
+        mock_show_fns["get_project_id"].return_value = "base-abc123"
+        mock_show_handler_cls.return_value = mock_show_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["show", "--project-id"])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("base-abc123", result.output)
+        mock_show_fns["get_project_id"].assert_called_once()
+
+    @patch("jupyter_deploy.cli.app.ShowHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_show_command_with_project_id_and_text_flags(
+        self, mock_project_ctx_manager: Mock, mock_show_handler_cls: Mock
+    ) -> None:
+        """Test show command with --project-id and --text flags outputs plain text."""
+        mock_project_ctx_manager.side_effect = TestShowCommand.mock_project_dir
+
+        mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
+        mock_show_fns["get_project_id"].side_effect = None
+        mock_show_fns["get_project_id"].return_value = "base-abc123"
+        mock_show_handler_cls.return_value = mock_show_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["show", "--project-id", "--text"])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("base-abc123", result.output)
+        self.assertNotIn("[bold", result.output)
+
+    @patch("jupyter_deploy.cli.app.ShowHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_show_command_with_project_id_raises_when_not_available(
+        self, mock_project_ctx_manager: Mock, mock_show_handler_cls: Mock
+    ) -> None:
+        """Test show command with --project-id raises error when project is not deployed."""
+        mock_project_ctx_manager.side_effect = TestShowCommand.mock_project_dir
+
+        mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
+        # Default mock already raises ProjectIdNotAvailableError
+        mock_show_handler_cls.return_value = mock_show_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["show", "--project-id"])
+
+        self.assertEqual(result.exit_code, 1)
+        mock_show_fns["get_project_id"].assert_called_once()
+
+    @patch("jupyter_deploy.cli.app.ShowHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_show_command_with_project_id_and_variable_raises_error(
+        self, mock_project_ctx_manager: Mock, mock_show_handler_cls: Mock
+    ) -> None:
+        """Test that using --project-id with --variable raises an error."""
+        mock_project_ctx_manager.side_effect = TestShowCommand.mock_project_dir
+
+        mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
+        mock_show_handler_cls.return_value = mock_show_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["show", "--project-id", "--variable", "test_var"])
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("Cannot use multiple query flags", result.output)
+
+    # --store-type flag tests
+
+    @patch("jupyter_deploy.cli.app.ShowHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_show_command_with_store_type_flag(
+        self, mock_project_ctx_manager: Mock, mock_show_handler_cls: Mock
+    ) -> None:
+        """Test show command with --store-type flag displays the store type."""
+        mock_project_ctx_manager.side_effect = TestShowCommand.mock_project_dir
+
+        mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
+        mock_show_fns["get_resolved_store_type"].return_value = StoreType.S3_DDB
+        mock_show_handler_cls.return_value = mock_show_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["show", "--store-type"])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("s3-ddb", result.output)
+        mock_show_fns["get_resolved_store_type"].assert_called_once()
+
+    @patch("jupyter_deploy.cli.app.ShowHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_show_command_with_store_type_flag_when_none(
+        self, mock_project_ctx_manager: Mock, mock_show_handler_cls: Mock
+    ) -> None:
+        """Test show command with --store-type flag displays 'None' when not configured."""
+        mock_project_ctx_manager.side_effect = TestShowCommand.mock_project_dir
+
+        mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
+        # Default mock returns None
+        mock_show_handler_cls.return_value = mock_show_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["show", "--store-type"])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("None", result.output)
+
+    @patch("jupyter_deploy.cli.app.ShowHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_show_command_with_store_type_and_text_flags(
+        self, mock_project_ctx_manager: Mock, mock_show_handler_cls: Mock
+    ) -> None:
+        """Test show command with --store-type and --text flags outputs plain text."""
+        mock_project_ctx_manager.side_effect = TestShowCommand.mock_project_dir
+
+        mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
+        mock_show_fns["get_resolved_store_type"].return_value = StoreType.S3_ONLY
+        mock_show_handler_cls.return_value = mock_show_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["show", "--store-type", "--text"])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("s3-only", result.output)
+        self.assertNotIn("[bold", result.output)
+
+    @patch("jupyter_deploy.cli.app.ShowHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_show_command_with_store_type_and_output_raises_error(
+        self, mock_project_ctx_manager: Mock, mock_show_handler_cls: Mock
+    ) -> None:
+        """Test that using --store-type with --output raises an error."""
+        mock_project_ctx_manager.side_effect = TestShowCommand.mock_project_dir
+
+        mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
+        mock_show_handler_cls.return_value = mock_show_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["show", "--store-type", "--output", "test_out"])
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("Cannot use multiple query flags", result.output)
+
+    # --store-id flag tests
+
+    @patch("jupyter_deploy.cli.app.ShowHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_show_command_with_store_id_flag(self, mock_project_ctx_manager: Mock, mock_show_handler_cls: Mock) -> None:
+        """Test show command with --store-id flag displays the store ID."""
+        mock_project_ctx_manager.side_effect = TestShowCommand.mock_project_dir
+
+        mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
+        mock_show_fns["get_resolved_store_id"].return_value = "my-bucket-abc123"
+        mock_show_handler_cls.return_value = mock_show_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["show", "--store-id"])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("my-bucket-abc123", result.output)
+        mock_show_fns["get_resolved_store_id"].assert_called_once()
+
+    @patch("jupyter_deploy.cli.app.ShowHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_show_command_with_store_id_flag_when_none(
+        self, mock_project_ctx_manager: Mock, mock_show_handler_cls: Mock
+    ) -> None:
+        """Test show command with --store-id flag displays 'None' when not configured."""
+        mock_project_ctx_manager.side_effect = TestShowCommand.mock_project_dir
+
+        mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
+        # Default mock returns None
+        mock_show_handler_cls.return_value = mock_show_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["show", "--store-id"])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("None", result.output)
+
+    @patch("jupyter_deploy.cli.app.ShowHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_show_command_with_store_id_and_text_flags(
+        self, mock_project_ctx_manager: Mock, mock_show_handler_cls: Mock
+    ) -> None:
+        """Test show command with --store-id and --text flags outputs plain text."""
+        mock_project_ctx_manager.side_effect = TestShowCommand.mock_project_dir
+
+        mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
+        mock_show_fns["get_resolved_store_id"].return_value = "my-bucket-abc123"
+        mock_show_handler_cls.return_value = mock_show_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["show", "--store-id", "--text"])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("my-bucket-abc123", result.output)
+        self.assertNotIn("[bold", result.output)
+
+    @patch("jupyter_deploy.cli.app.ShowHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_show_command_with_store_id_and_template_name_raises_error(
+        self, mock_project_ctx_manager: Mock, mock_show_handler_cls: Mock
+    ) -> None:
+        """Test that using --store-id with --template-name raises an error."""
+        mock_project_ctx_manager.side_effect = TestShowCommand.mock_project_dir
+
+        mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
+        mock_show_handler_cls.return_value = mock_show_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["show", "--store-id", "--template-name"])
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("Cannot use multiple query flags", result.output)
+
+    # Info table store type and store ID tests
+
+    @patch("jupyter_deploy.cli.app.ShowHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_show_info_table_displays_store_type_and_store_id(
+        self, mock_project_ctx_manager: Mock, mock_show_handler_cls: Mock
+    ) -> None:
+        """Test that info table includes Store Type and Store ID rows."""
+        mock_project_ctx_manager.side_effect = TestShowCommand.mock_project_dir
+
+        mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
+        mock_show_fns["get_resolved_store_type"].return_value = StoreType.S3_DDB
+        mock_show_fns["get_resolved_store_id"].return_value = "my-bucket-abc123"
+        mock_show_handler_cls.return_value = mock_show_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["show", "--info"])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Store Type", result.output)
+        self.assertIn("s3-ddb", result.output)
+        self.assertIn("Store ID", result.output)
+        self.assertIn("my-bucket-abc123", result.output)
+
+    @patch("jupyter_deploy.cli.app.ShowHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_show_info_table_displays_na_when_store_not_configured(
+        self, mock_project_ctx_manager: Mock, mock_show_handler_cls: Mock
+    ) -> None:
+        """Test that info table shows N/A when store type and store ID are None."""
+        mock_project_ctx_manager.side_effect = TestShowCommand.mock_project_dir
+
+        mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
+        # Default mocks return None for both
+        mock_show_handler_cls.return_value = mock_show_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["show", "--info"])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Store Type", result.output)
+        self.assertIn("Store ID", result.output)
+        self.assertIn("N/A", result.output)
+
+    # Display mode conflicts with new query flags
+
+    @patch("jupyter_deploy.cli.app.ShowHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_show_command_with_info_and_project_id_raises_error(
+        self, mock_project_ctx_manager: Mock, mock_show_handler_cls: Mock
+    ) -> None:
+        """Test that using --info with --project-id raises an error."""
+        mock_project_ctx_manager.side_effect = TestShowCommand.mock_project_dir
+
+        mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
+        mock_show_handler_cls.return_value = mock_show_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["show", "--info", "--project-id"])
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("Cannot use display mode flags", result.output)
+
+    @patch("jupyter_deploy.cli.app.ShowHandler")
+    @patch("jupyter_deploy.cmd_utils.project_dir")
+    def test_show_command_with_variables_and_store_type_raises_error(
+        self, mock_project_ctx_manager: Mock, mock_show_handler_cls: Mock
+    ) -> None:
+        """Test that using --variables with --store-type raises an error."""
+        mock_project_ctx_manager.side_effect = TestShowCommand.mock_project_dir
+
+        mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
+        mock_show_handler_cls.return_value = mock_show_handler_instance
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["show", "--variables", "--store-type"])
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("Cannot use display mode flags", result.output)

@@ -9,9 +9,8 @@ from jupyter_deploy.engine.terraform import tf_up
 from jupyter_deploy.engine.terraform.tf_constants import TF_ENGINE_DIR
 from jupyter_deploy.engine.terraform.tf_outputs import TerraformOutputsHandler
 from jupyter_deploy.engine.terraform.tf_store_access import TerraformStoreAccessManager
-from jupyter_deploy.enum import StoreType
 from jupyter_deploy.exceptions import ProjectIdNotAvailableError
-from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
+from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler, write_store_config
 from jupyter_deploy.provider.store.store_manager_factory import StoreManagerFactory
 
 
@@ -76,25 +75,24 @@ class UpHandler(BaseProjectHandler):
         """
         return self._handler.apply(config_file_path, auto_approve)
 
-    def push_to_store(self, store_type: StoreType | None = None, store_id: str | None = None) -> None:
+    def push_to_store(self) -> None:
         """Push the project to the remote store.
 
-        No-op if store is not specified as argument or declared in the manifest.
+        Resolves store type and ID from .jd/store.yaml > manifest.
+        After successful find_store, persists discovered store-id to .jd/store.yaml.
 
-        Args:
-            store_type: Override the store type from the manifest.
-            store_id: Override the store identifier (e.g., bucket name).
+        No-op if no store type is configured anywhere.
 
         Raises:
             ProjectIdNotAvailableError: If deployment_id is not declared or not available.
             ProjectStoreNotFoundError: If no project store is found in the account.
         """
-        if store_type is None and self.project_manifest.project_store is not None:
-            store_type = self.project_manifest.project_store.get_store_type()
-
+        store_type = self.get_store_type_from_config_or_manifest()
         if not store_type:
             self.display_manager.warning("No project store type configured. Skipping store push.")
             return
+
+        store_id = self.get_store_id_from_config()
 
         try:
             deployment_id_value = self.project_manifest.get_declared_value("deployment_id")
@@ -115,3 +113,6 @@ class UpHandler(BaseProjectHandler):
             self._store_access_manager.configure(store_info, project_id, self.display_manager)
 
         store_manager.push(self.project_path, project_id, self.display_manager)
+
+        # Persist discovered store-id to .jd/store.yaml
+        write_store_config(self.project_path, store_type=store_type.value, store_id=store_info.store_id)

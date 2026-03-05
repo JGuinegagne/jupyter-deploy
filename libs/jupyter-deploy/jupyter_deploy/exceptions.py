@@ -429,6 +429,12 @@ class ProjectStoreAccessConfigurationError(JupyterDeployError, RuntimeError):
 
 
 class ProjectIdNotAvailableError(JupyterDeployError, RuntimeError):
-    """Raised when the project ID cannot be resolved from deployment outputs."""
+    """Raised when the project ID cannot be resolved from deployment outputs.
 
-    pass
+    Attributes:
+        hint: Optional hint for resolving the error
+    """
+
+    def __init__(self, message: str, hint: str | None = None) -> None:
+        self.hint = hint
+        super().__init__(message)
