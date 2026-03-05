@@ -1,3 +1,4 @@
+from jupyter_deploy.enum import StoreType
 from jupyter_deploy.provider.store.store_manager import StoreManager
 
 
@@ -8,17 +9,24 @@ class StoreManagerFactory:
     """
 
     @staticmethod
-    def get_manager(store_type: str, store_id: str | None = None) -> StoreManager:
+    def get_manager(store_type: StoreType, store_id: str | None = None) -> StoreManager:
         """Return a StoreManager for the given store type.
 
         Args:
-            store_type: The type of store (e.g., "s3-ddb").
+            store_type: The type of store.
             store_id: Optional store identifier (e.g., bucket name).
 
         Raises:
             NotImplementedError if the store type is not recognized.
         """
-        if store_type == "s3-ddb":
+        if store_type == StoreType.S3_ONLY:
+            # do NOT move imports to top level
+            from jupyter_deploy.provider.aws.store.s3_store import S3StoreManager
+
+            partition_lead_region = S3StoreManager.resolve_lead_region()
+            return S3StoreManager(region=partition_lead_region, bucket_name=store_id)
+
+        if store_type == StoreType.S3_DDB:
             # do NOT move imports to top level
             from jupyter_deploy.provider.aws.store.s3_dynamodb_store import S3DynamoDbTableStoreManager
 

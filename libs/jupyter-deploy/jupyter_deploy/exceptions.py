@@ -392,6 +392,20 @@ class LogCleanupError(JupyterDeployError, Exception):
 # ============================================================================
 
 
+class InvalidStoreTypeError(JupyterDeployError, ValueError):
+    """Raised when a manifest declares an unrecognized project store type.
+
+    Attributes:
+        store_type: The invalid store type string
+        valid_store_types: List of valid store type values
+    """
+
+    def __init__(self, store_type: str, valid_store_types: list[str]) -> None:
+        self.store_type = store_type
+        self.valid_store_types = valid_store_types
+        super().__init__(f"Invalid store type: '{store_type}'")
+
+
 class ProjectStoreNotFoundError(JupyterDeployError, RuntimeError):
     """Raised when no project store is found.
 

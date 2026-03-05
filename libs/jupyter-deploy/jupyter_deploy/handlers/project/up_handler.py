@@ -9,6 +9,7 @@ from jupyter_deploy.engine.terraform import tf_up
 from jupyter_deploy.engine.terraform.tf_constants import TF_ENGINE_DIR
 from jupyter_deploy.engine.terraform.tf_outputs import TerraformOutputsHandler
 from jupyter_deploy.engine.terraform.tf_store_access import TerraformStoreAccessManager
+from jupyter_deploy.enum import StoreType
 from jupyter_deploy.exceptions import ProjectIdNotAvailableError
 from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
 from jupyter_deploy.provider.store.store_manager_factory import StoreManagerFactory
@@ -75,7 +76,7 @@ class UpHandler(BaseProjectHandler):
         """
         return self._handler.apply(config_file_path, auto_approve)
 
-    def push_to_store(self, store_type: str | None = None, store_id: str | None = None) -> None:
+    def push_to_store(self, store_type: StoreType | None = None, store_id: str | None = None) -> None:
         """Push the project to the remote store.
 
         No-op if store is not specified as argument or declared in the manifest.
@@ -89,7 +90,7 @@ class UpHandler(BaseProjectHandler):
             ProjectStoreNotFoundError: If no project store is found in the account.
         """
         if store_type is None and self.project_manifest.project_store is not None:
-            store_type = self.project_manifest.project_store.store_type
+            store_type = self.project_manifest.project_store.get_store_type()
 
         if not store_type:
             self.display_manager.warning("No project store type configured. Skipping store push.")

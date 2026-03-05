@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 from jupyter_deploy.engine.outdefs import StrTemplateOutputDefinition
 from jupyter_deploy.engine.supervised_execution import NullDisplay
+from jupyter_deploy.enum import StoreType
 from jupyter_deploy.exceptions import ProjectIdNotAvailableError, ProjectStoreAccessConfigurationError
 from jupyter_deploy.handlers.project.up_handler import UpHandler
 from jupyter_deploy.manifest import JupyterDeployManifestV1, JupyterDeployProjectStoreV1
@@ -278,9 +279,9 @@ class TestUpHandlerPushToStore(unittest.TestCase):
         mock_output_def = StrTemplateOutputDefinition(output_name="deployment_id", value="dep-001")
         mock_outputs_cls.return_value.get_declared_output_def.return_value = mock_output_def
 
-        handler.push_to_store(store_type="gcs", store_id="my-bucket")
+        handler.push_to_store(store_type=StoreType.S3_DDB, store_id="my-bucket")
 
-        mock_store_factory.get_manager.assert_called_once_with(store_type="gcs", store_id="my-bucket")
+        mock_store_factory.get_manager.assert_called_once_with(store_type=StoreType.S3_DDB, store_id="my-bucket")
 
     @patch("jupyter_deploy.handlers.project.up_handler.TerraformOutputsHandler")
     @patch("jupyter_deploy.engine.terraform.tf_up.TerraformUpHandler")

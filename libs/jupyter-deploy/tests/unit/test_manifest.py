@@ -5,6 +5,8 @@ from typing import Any
 import yaml
 
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.enum import StoreType
+from jupyter_deploy.exceptions import InvalidStoreTypeError
 from jupyter_deploy.manifest import (
     InvalidServiceError,
     JupyterDeployManifestV1,
@@ -129,6 +131,22 @@ class TestJupyterDeployProjectStoreV1(unittest.TestCase):
     def test_has_project_store_false(self) -> None:
         manifest = self._make_manifest()
         self.assertFalse(manifest.has_project_store())
+
+    def test_get_store_type_s3_only(self) -> None:
+        project_store = JupyterDeployProjectStoreV1(**{"store-type": "s3-only"})  # type: ignore
+        self.assertEqual(project_store.get_store_type(), StoreType.S3_ONLY)
+
+    def test_get_store_type_s3_ddb(self) -> None:
+        project_store = JupyterDeployProjectStoreV1(**{"store-type": "s3-ddb"})  # type: ignore
+        self.assertEqual(project_store.get_store_type(), StoreType.S3_DDB)
+
+    def test_get_store_type_invalid_raises(self) -> None:
+        project_store = JupyterDeployProjectStoreV1(**{"store-type": "gcs"})  # type: ignore
+        with self.assertRaises(InvalidStoreTypeError) as ctx:
+            project_store.get_store_type()
+        self.assertEqual(ctx.exception.store_type, "gcs")
+        self.assertIn("s3-only", ctx.exception.valid_store_types)
+        self.assertIn("s3-ddb", ctx.exception.valid_store_types)
 
     def test_compute_project_id(self) -> None:
         manifest = self._make_manifest()

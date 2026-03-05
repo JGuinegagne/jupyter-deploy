@@ -6,7 +6,8 @@ from unittest.mock import Mock, patch
 
 from jupyter_deploy.engine.terraform.tf_constants import TF_BACKEND_FILENAME, TF_INIT_CMD, TF_INIT_MIGRATE_CMD_OPTIONS
 from jupyter_deploy.engine.terraform.tf_store_access import TerraformStoreAccessManager
-from jupyter_deploy.exceptions import ProjectStoreAccessConfigurationError
+from jupyter_deploy.enum import StoreType
+from jupyter_deploy.exceptions import InvalidStoreTypeError, ProjectStoreAccessConfigurationError
 from jupyter_deploy.provider.store.store_manager import StoreInfo
 
 
@@ -19,7 +20,7 @@ class TestTerraformStoreAccessManager(unittest.TestCase):
             engine_dir_path=self.engine_dir,
         )
         self.store_info = StoreInfo(
-            store_type="s3-ddb",
+            store_type=StoreType.S3_DDB,
             store_id="jupyter-deploy-abc123",
             location="us-west-2",
         )
@@ -35,7 +36,7 @@ class TestTerraformStoreAccessManager(unittest.TestCase):
         self.assertTrue(self.manager.is_configured())
 
     @patch("jupyter_deploy.engine.terraform.tf_store_access.cmd_utils.run_cmd_and_capture_output")
-    def test_configure_writes_backend_file(self, mock_run: Mock) -> None:
+    def test_configure_writes_backend_file_with_lock(self, mock_run: Mock) -> None:
         display = Mock()
         self.manager.configure(self.store_info, "tf-aws-ec2-base-dep1", display)
 
@@ -47,8 +48,21 @@ class TestTerraformStoreAccessManager(unittest.TestCase):
         self.assertIn('backend "s3"', content)
 
     @patch("jupyter_deploy.engine.terraform.tf_store_access.cmd_utils.run_cmd_and_capture_output")
+    def test_configure_writes_backend_file_without_lock(self, mock_run: Mock) -> None:
+        store_info = StoreInfo(store_type=StoreType.S3_ONLY, store_id="jupyter-deploy-abc123", location="us-west-2")
+        display = Mock()
+        self.manager.configure(store_info, "tf-aws-ec2-base-dep1", display)
+
+        content = (self.engine_dir / TF_BACKEND_FILENAME).read_text()
+        self.assertIn('bucket         = "jupyter-deploy-abc123"', content)
+        self.assertIn('key            = "tf-aws-ec2-base-dep1/terraform.tfstate"', content)
+        self.assertIn('region         = "us-west-2"', content)
+        self.assertNotIn("dynamodb_table", content)
+        self.assertIn('backend "s3"', content)
+
+    @patch("jupyter_deploy.engine.terraform.tf_store_access.cmd_utils.run_cmd_and_capture_output")
     def test_configure_uses_store_info_location(self, mock_run: Mock) -> None:
-        store_info = StoreInfo(store_type="s3-ddb", store_id="bucket-1", location="eu-west-1")
+        store_info = StoreInfo(store_type=StoreType.S3_DDB, store_id="bucket-1", location="eu-west-1")
         display = Mock()
         self.manager.configure(store_info, "proj-1", display)
 
@@ -89,3 +103,26 @@ class TestTerraformStoreAccessManager(unittest.TestCase):
 
     def test_unconfigure_noop(self) -> None:
         self.manager.unconfigure()  # should not raise
+
+
+class TestGetBackendTemplate(unittest.TestCase):
+    def test_s3_only_returns_template_without_dynamodb(self) -> None:
+        template = TerraformStoreAccessManager._get_backend_template(StoreType.S3_ONLY)
+
+        self.assertNotIn("dynamodb_table", template)
+        self.assertIn("backend", template)
+
+    def test_s3_ddb_returns_template_with_dynamodb(self) -> None:
+        template = TerraformStoreAccessManager._get_backend_template(StoreType.S3_DDB)
+
+        self.assertIn("dynamodb_table", template)
+        self.assertIn("backend", template)
+
+    def test_all_store_types_are_mapped(self) -> None:
+        for store_type in StoreType:
+            template = TerraformStoreAccessManager._get_backend_template(store_type)
+            self.assertIn("backend", template)
+
+    def test_raises_for_invalid_store_type(self) -> None:
+        with self.assertRaises(InvalidStoreTypeError):
+            TerraformStoreAccessManager._get_backend_template("not-a-store-type")  # type: ignore[arg-type]

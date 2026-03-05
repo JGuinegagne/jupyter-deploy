@@ -21,7 +21,7 @@ values:
   source: output
   source-key: persisting_resources
 project-store:
-  store-type: s3-ddb
+  store-type: s3-only
 services:
 - jupyter
 - traefik

@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import ANY, Mock, patch
 
 from jupyter_deploy.engine.supervised_execution import NullDisplay
+from jupyter_deploy.enum import StoreType
 from jupyter_deploy.exceptions import InvalidPresetError
 from jupyter_deploy.handlers.project.config_handler import ConfigHandler
 from jupyter_deploy.manifest import JupyterDeployManifestV1, JupyterDeployProjectStoreV1
@@ -430,9 +431,9 @@ class TestConfigHandler(unittest.TestCase):
         mock_tf_handler.return_value = tf_mock_handler_instance
 
         handler = ConfigHandler(display_manager=NullDisplay())
-        handler.ensure_store(store_type="gcs", store_id="my-bucket")
+        handler.ensure_store(store_type=StoreType.S3_DDB, store_id="my-bucket")
 
-        mock_store_factory.get_manager.assert_called_once_with(store_type="gcs", store_id="my-bucket")
+        mock_store_factory.get_manager.assert_called_once_with(store_type=StoreType.S3_DDB, store_id="my-bucket")
         mock_store_manager.ensure_store.assert_called_once()
 
     @patch("jupyter_deploy.handlers.project.config_handler.StoreManagerFactory")
