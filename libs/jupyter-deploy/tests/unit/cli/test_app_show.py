@@ -31,6 +31,7 @@ class TestShowCommand(unittest.TestCase):
         mock_get_project_id = Mock(side_effect=ProjectIdNotAvailableError("N/A"))
         mock_get_resolved_store_type = Mock(return_value=None)
         mock_get_resolved_store_id = Mock(return_value=None)
+        mock_get_project_id_from_config = Mock(return_value=None)
 
         mock_show_handler.project_path = "/test/path"
         mock_show_handler.get_template_name = mock_get_template_name
@@ -45,6 +46,7 @@ class TestShowCommand(unittest.TestCase):
         mock_show_handler.get_project_id = mock_get_project_id
         mock_show_handler.get_resolved_store_type = mock_get_resolved_store_type
         mock_show_handler.get_resolved_store_id = mock_get_resolved_store_id
+        mock_show_handler.get_project_id_from_config = mock_get_project_id_from_config
 
         return mock_show_handler, {
             "get_template_name": mock_get_template_name,
@@ -59,6 +61,7 @@ class TestShowCommand(unittest.TestCase):
             "get_project_id": mock_get_project_id,
             "get_resolved_store_type": mock_get_resolved_store_type,
             "get_resolved_store_id": mock_get_resolved_store_id,
+            "get_project_id_from_config": mock_get_project_id_from_config,
         }
 
     @patch("jupyter_deploy.cli.app.ShowHandler")
@@ -1003,7 +1006,7 @@ class TestShowCommand(unittest.TestCase):
     def test_show_command_with_store_type_flag_when_none(
         self, mock_project_ctx_manager: Mock, mock_show_handler_cls: Mock
     ) -> None:
-        """Test show command with --store-type flag displays 'None' when not configured."""
+        """Test show command with --store-type flag displays 'N/A' when not configured."""
         mock_project_ctx_manager.side_effect = TestShowCommand.mock_project_dir
 
         mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
@@ -1014,7 +1017,7 @@ class TestShowCommand(unittest.TestCase):
         result = runner.invoke(app_runner.app, ["show", "--store-type"])
 
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("None", result.output)
+        self.assertIn("N/A", result.output)
 
     @patch("jupyter_deploy.cli.app.ShowHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -1076,7 +1079,7 @@ class TestShowCommand(unittest.TestCase):
     def test_show_command_with_store_id_flag_when_none(
         self, mock_project_ctx_manager: Mock, mock_show_handler_cls: Mock
     ) -> None:
-        """Test show command with --store-id flag displays 'None' when not configured."""
+        """Test show command with --store-id flag displays 'N/A' when not configured."""
         mock_project_ctx_manager.side_effect = TestShowCommand.mock_project_dir
 
         mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
@@ -1087,7 +1090,7 @@ class TestShowCommand(unittest.TestCase):
         result = runner.invoke(app_runner.app, ["show", "--store-id"])
 
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("None", result.output)
+        self.assertIn("N/A", result.output)
 
     @patch("jupyter_deploy.cli.app.ShowHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -1138,6 +1141,7 @@ class TestShowCommand(unittest.TestCase):
         mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
         mock_show_fns["get_resolved_store_type"].return_value = StoreType.S3_DDB
         mock_show_fns["get_resolved_store_id"].return_value = "my-bucket-abc123"
+        mock_show_fns["get_project_id_from_config"].return_value = "tpl-abc123"
         mock_show_handler_cls.return_value = mock_show_handler_instance
 
         runner = CliRunner()
@@ -1148,17 +1152,19 @@ class TestShowCommand(unittest.TestCase):
         self.assertIn("s3-ddb", result.output)
         self.assertIn("Store ID", result.output)
         self.assertIn("my-bucket-abc123", result.output)
+        self.assertIn("Project ID", result.output)
+        self.assertIn("tpl-abc123", result.output)
 
     @patch("jupyter_deploy.cli.app.ShowHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
     def test_show_info_table_displays_na_when_store_not_configured(
         self, mock_project_ctx_manager: Mock, mock_show_handler_cls: Mock
     ) -> None:
-        """Test that info table shows N/A when store type and store ID are None."""
+        """Test that info table shows N/A when store type, store ID, and project ID are None."""
         mock_project_ctx_manager.side_effect = TestShowCommand.mock_project_dir
 
         mock_show_handler_instance, mock_show_fns = self.get_mock_show_handler()
-        # Default mocks return None for both
+        # Default mocks return None for all three
         mock_show_handler_cls.return_value = mock_show_handler_instance
 
         runner = CliRunner()
@@ -1167,6 +1173,7 @@ class TestShowCommand(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertIn("Store Type", result.output)
         self.assertIn("Store ID", result.output)
+        self.assertIn("Project ID", result.output)
         self.assertIn("N/A", result.output)
 
     # Display mode conflicts with new query flags

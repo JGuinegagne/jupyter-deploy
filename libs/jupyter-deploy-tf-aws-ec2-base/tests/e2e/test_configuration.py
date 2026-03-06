@@ -264,7 +264,7 @@ def test_show_store_id_after_config(e2e_deployment: EndToEndDeployment) -> None:
     1. Creates a temporary undeployed project
     2. Runs jd config
     3. Runs jd show --store-id --text
-    4. Verifies the store ID is not empty or 'None'
+    4. Verifies the store ID is not empty or 'N/A'
     """
     with undeployed_project(e2e_deployment.suite_config) as (project_path, cli):
         e2e_deployment.configure_project(cli=cli)
@@ -273,7 +273,7 @@ def test_show_store_id_after_config(e2e_deployment: EndToEndDeployment) -> None:
         actual_store_id = result.stdout.strip()
 
         assert actual_store_id, "Store ID should not be empty after config"
-        assert actual_store_id != "None", "Store ID should not be 'None' after config"
+        assert actual_store_id != "N/A", "Store ID should not be 'N/A' after config"
 
 
 @skip_if_testvars_not_set(

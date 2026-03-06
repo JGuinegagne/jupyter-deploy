@@ -794,7 +794,7 @@ def show(
 
         if store_type:
             resolved = handler.get_resolved_store_type()
-            result = "None" if resolved is None else resolved.value
+            result = "N/A" if resolved is None else resolved.value
             if text:
                 console.print(result)
             else:
@@ -803,7 +803,7 @@ def show(
 
         if store_id:
             resolved_id = handler.get_resolved_store_id()
-            result = "None" if resolved_id is None else resolved_id
+            result = "N/A" if resolved_id is None else resolved_id
             if text:
                 console.print(result)
             else:
@@ -859,6 +859,10 @@ def show(
 
             resolved_store_id = handler.get_resolved_store_id()
             info_table.add_row("Store ID", resolved_store_id if resolved_store_id else "N/A")
+
+            # Read from local cache only; computing from outputs is too slow for --info display.
+            resolved_project_id = handler.get_project_id_from_config()
+            info_table.add_row("Project ID", resolved_project_id if resolved_project_id else "N/A")
 
             console.print(info_table)
             console.line()

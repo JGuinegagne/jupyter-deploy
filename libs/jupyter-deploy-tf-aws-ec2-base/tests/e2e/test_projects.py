@@ -17,7 +17,7 @@ def _get_project_id(e2e_deployment: EndToEndDeployment) -> str:
 def _get_store_type(e2e_deployment: EndToEndDeployment) -> str:
     result = e2e_deployment.cli.run_command(["jupyter-deploy", "show", "--store-type", "--text"])
     store_type = result.stdout.strip()
-    assert store_type and store_type != "None", f"Expected a valid store type, got '{store_type}'"
+    assert store_type and store_type != "N/A", f"Expected a valid store type, got '{store_type}'"
     return store_type
 
 
