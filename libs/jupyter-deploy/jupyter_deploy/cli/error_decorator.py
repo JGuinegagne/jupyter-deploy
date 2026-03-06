@@ -234,6 +234,9 @@ def handle_cli_errors(console: Console) -> Generator[None, None, None]:
 
     except ProjectIdNotAvailableError as e:
         console.print(f":x: {e}", style="bold red")
+        if e.hint:
+            console.line()
+            console.print(f":bulb: {e.hint}")
         raise typer.Exit(code=1) from None
 
     except ProjectStoreAccessConfigurationError as e:

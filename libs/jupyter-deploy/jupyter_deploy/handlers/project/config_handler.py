@@ -6,7 +6,7 @@ from jupyter_deploy.engine.terraform import tf_config
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
 from jupyter_deploy.enum import StoreType
 from jupyter_deploy.exceptions import InvalidPresetError
-from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler
+from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler, write_store_config
 from jupyter_deploy.provider.store.store_manager import StoreInfo
 from jupyter_deploy.provider.store.store_manager_factory import StoreManagerFactory
 
@@ -90,25 +90,54 @@ class ConfigHandler(BaseProjectHandler):
         """
         return self._handler.reset_recorded_secrets()
 
-    def ensure_store(self, store_type: StoreType | None = None, store_id: str | None = None) -> StoreInfo | None:
+    def reset_store_id(self) -> None:
+        """Clear the store-id from .jd/store.yaml, preserving store-type."""
+        store_type = self.get_store_type_from_config_or_manifest()
+        write_store_config(self.project_path, store_type=store_type.value if store_type else None, store_id=None)
+
+    def ensure_store(
+        self,
+        store_type: StoreType | None = None,
+        store_id: str | None = None,
+    ) -> StoreInfo | None:
         """Ensure the remote project store exists, creating it if necessary.
 
-        Args:
-            store_type: Store type. Inferred from manifest if not provided.
-            store_id: Store identifier (e.g., bucket name). Discovered from account if not provided.
+        Resolves store type and ID from CLI args > .jd/store.yaml > manifest.
+        Persists resolved values to .jd/store.yaml so subsequent runs skip discovery.
+
+        When store_id is set, verifies the store exists with find_store()
+        and raises ProjectStoreNotFoundError if not found.
 
         Returns:
             StoreInfo if the store was ensured, None if project store is not configured.
-        """
-        if store_type is None and self.project_manifest.project_store is not None:
-            store_type = self.project_manifest.project_store.get_store_type()
 
-        if not store_type:
+        Raises:
+            ProjectStoreNotFoundError: If store_id is set but the store does not exist.
+        """
+        # Resolve store type: CLI > config
+        resolved_store_type = store_type if store_type is not None else self.get_store_type_from_config_or_manifest()
+
+        if not resolved_store_type:
             self.display_manager.warning("No project store type configured. Skipping store setup.")
             return None
 
-        store_manager = StoreManagerFactory.get_manager(store_type=store_type, store_id=store_id)
-        return store_manager.ensure_store(self.display_manager)
+        # Resolve store id: CLI > config
+        resolved_store_id = store_id if store_id else self.get_store_id_from_config()
+
+        # When store-id is set, verify the bucket exists rather than creating one
+        if resolved_store_id is not None:
+            store_manager = StoreManagerFactory.get_manager(store_type=resolved_store_type, store_id=resolved_store_id)
+            store_info = store_manager.find_store()
+            write_store_config(self.project_path, store_type=resolved_store_type, store_id=resolved_store_id)
+            return store_info
+
+        store_manager = StoreManagerFactory.get_manager(store_type=resolved_store_type, store_id=resolved_store_id)
+        store_info = store_manager.ensure_store(self.display_manager)
+
+        # Persist to .jd/store.yaml so subsequent runs skip discovery
+        write_store_config(self.project_path, store_type=resolved_store_type, store_id=store_info.store_id)
+
+        return store_info
 
     def configure(
         self, variable_overrides: dict[str, TemplateVariableDefinition] | None = None

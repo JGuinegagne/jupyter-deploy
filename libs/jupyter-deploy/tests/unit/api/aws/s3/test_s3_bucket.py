@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import Mock
 
 from jupyter_deploy.api.aws.s3.s3_bucket import (
+    bucket_exists,
     create_bucket,
     find_buckets_by_tag,
     list_top_level_prefixes,
@@ -242,3 +243,53 @@ class TestListTopLevelPrefixes(unittest.TestCase):
         result = list_top_level_prefixes(mock_s3, "bucket")
 
         self.assertEqual(result, [])
+
+
+class TestBucketExists(unittest.TestCase):
+    def test_returns_true_when_bucket_exists(self) -> None:
+        mock_s3 = Mock()
+        mock_s3.head_bucket.return_value = {}
+
+        self.assertTrue(bucket_exists(mock_s3, "my-bucket"))
+        mock_s3.head_bucket.assert_called_once_with(Bucket="my-bucket")
+
+    def test_returns_false_on_404(self) -> None:
+        client_error = type("ClientError", (Exception,), {})
+        mock_s3 = Mock()
+        error = client_error()
+        error.response = {"Error": {"Code": "404"}}
+        mock_s3.head_bucket.side_effect = error
+        mock_s3.exceptions.ClientError = client_error
+
+        self.assertFalse(bucket_exists(mock_s3, "missing-bucket"))
+
+    def test_returns_false_on_no_such_bucket(self) -> None:
+        client_error = type("ClientError", (Exception,), {})
+        mock_s3 = Mock()
+        error = client_error()
+        error.response = {"Error": {"Code": "NoSuchBucket"}}
+        mock_s3.head_bucket.side_effect = error
+        mock_s3.exceptions.ClientError = client_error
+
+        self.assertFalse(bucket_exists(mock_s3, "missing-bucket"))
+
+    def test_returns_false_on_403(self) -> None:
+        client_error = type("ClientError", (Exception,), {})
+        mock_s3 = Mock()
+        error = client_error()
+        error.response = {"Error": {"Code": "403"}}
+        mock_s3.head_bucket.side_effect = error
+        mock_s3.exceptions.ClientError = client_error
+
+        self.assertFalse(bucket_exists(mock_s3, "forbidden-bucket"))
+
+    def test_raises_on_unexpected_error(self) -> None:
+        client_error = type("ClientError", (Exception,), {})
+        mock_s3 = Mock()
+        error = client_error()
+        error.response = {"Error": {"Code": "InternalError"}}
+        mock_s3.head_bucket.side_effect = error
+        mock_s3.exceptions.ClientError = client_error
+
+        with self.assertRaises(client_error):
+            bucket_exists(mock_s3, "some-bucket")

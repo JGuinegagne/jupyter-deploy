@@ -21,6 +21,7 @@ from jupyter_deploy.cli.users_app import users_app
 from jupyter_deploy.cli.variables_decorator import with_project_variables
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
+from jupyter_deploy.enum import StoreType
 from jupyter_deploy.exceptions import LogCleanupError, OpenWebBrowserError, UrlNotAvailableError
 from jupyter_deploy.handlers.init_handler import InitHandler
 from jupyter_deploy.handlers.project import config_handler
@@ -194,6 +195,18 @@ def config(
     output_filename: Annotated[
         str | None, typer.Option("--output-filename", "-f", help="Name of the file to store the configuration to.")
     ] = None,
+    store_type: Annotated[
+        StoreType | None,
+        typer.Option("--store-type", help="Override the project store type."),
+    ] = None,
+    store_id: Annotated[
+        str | None,
+        typer.Option("--store-id", help="Pin a specific store."),
+    ] = None,
+    reset_store_id: Annotated[
+        bool,
+        typer.Option("--reset-store-id", help="Clear the pinned store ID and rediscover the store."),
+    ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", help="Show full output without progress bar.")] = False,
     variables: Annotated[
         dict[str, TemplateVariableDefinition] | None,
@@ -271,13 +284,18 @@ def config(
                 console.print("[bold]jupyter-deploy:[/] skipping verification of requirements")
             run_configure = True
 
+        if reset_store_id:
+            handler.reset_store_id()
+            if verbose:
+                console.print(":white_check_mark: Store ID cleared from .jd/store.yaml")
+
         if run_configure:
             if verbose:
                 console.rule("[bold]jupyter-deploy:[/] Configuring the remote store...")
-                handler.ensure_store()
+                handler.ensure_store(store_type=store_type, store_id=store_id)
             else:
                 with display_manager.spinner("Configuring the remote store..."):
-                    handler.ensure_store()
+                    handler.ensure_store(store_type=store_type, store_id=store_id)
 
             if verbose:
                 console.rule("[bold]jupyter-deploy:[/] configuring the project")
@@ -551,6 +569,18 @@ def show(
     template_name: Annotated[bool, typer.Option("--template-name", help="Display the template name.")] = False,
     template_version: Annotated[bool, typer.Option("--template-version", help="Display the template version.")] = False,
     template_engine: Annotated[bool, typer.Option("--template-engine", help="Display the template engine.")] = False,
+    store_type: Annotated[
+        bool,
+        typer.Option("--store-type", help="Display the type of store for this project."),
+    ] = False,
+    store_id: Annotated[
+        bool,
+        typer.Option("--store-id", help="Display the ID of the store for this project."),
+    ] = False,
+    project_id: Annotated[
+        bool,
+        typer.Option("--project-id", help="Display the full project ID."),
+    ] = False,
     description: Annotated[
         bool,
         typer.Option("--description", "-d", help="Show description instead of value (with --variable or --output)."),
@@ -581,14 +611,24 @@ def show(
     Pass --variables --list or --outputs --list to display the list of variable or output names.
     """
     # Validate parameter combinations
-    query_flags = [variable, output, template_name, template_version, template_engine]
+    query_flags = [
+        variable,
+        output,
+        template_name,
+        template_version,
+        template_engine,
+        project_id,
+        store_type,
+        store_id,
+    ]
     query_flags_set = sum([bool(f) for f in query_flags])
 
     if query_flags_set > 1:
         err_console = Console(stderr=True)
         err_console.print(
             ":x: Cannot use multiple query flags "
-            "(--variable, --output, --template-name, --template-version, --template-engine) at the same time.",
+            "(--variable, --output, --template-name, --template-version, --template-engine, "
+            "--project-id, --store-type, --store-id) at the same time.",
             style="red",
         )
         raise typer.Exit(code=1)
@@ -663,6 +703,33 @@ def show(
                 console.print(f"[bold cyan]{result}[/]")
             return
 
+        # Handle store/project queries
+        if project_id:
+            result = handler.get_project_id()
+            if text:
+                console.print(result)
+            else:
+                console.print(f"[bold cyan]{result}[/]")
+            return
+
+        if store_type:
+            resolved = handler.get_resolved_store_type()
+            result = "None" if resolved is None else resolved.value
+            if text:
+                console.print(result)
+            else:
+                console.print(f"[bold cyan]{result}[/]")
+            return
+
+        if store_id:
+            resolved_id = handler.get_resolved_store_id()
+            result = "None" if resolved_id is None else resolved_id
+            if text:
+                console.print(result)
+            else:
+                console.print(f"[bold cyan]{result}[/]")
+            return
+
         # Handle list mode with --variables or --outputs (list names only)
         if list_names:
             if variables and not info and not outputs:
@@ -706,6 +773,12 @@ def show(
             info_table.add_row("Engine", handler.get_template_engine())
             info_table.add_row("Template Name", handler.get_template_name())
             info_table.add_row("Template Version", handler.get_template_version())
+
+            resolved_store_type = handler.get_resolved_store_type()
+            info_table.add_row("Store Type", resolved_store_type.value if resolved_store_type else "N/A")
+
+            resolved_store_id = handler.get_resolved_store_id()
+            info_table.add_row("Store ID", resolved_store_id if resolved_store_id else "N/A")
 
             console.print(info_table)
             console.line()

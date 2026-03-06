@@ -195,3 +195,84 @@ def test_show_template_version_matches_manifest(e2e_deployment: EndToEndDeployme
     actual_version = result.stdout.strip()
 
     assert actual_version == expected_version, f"Expected template version '{expected_version}', got '{actual_version}'"
+
+
+def test_show_project_id_returns_nonempty_value(e2e_deployment: EndToEndDeployment) -> None:
+    """Test that jd show --project-id returns a non-empty project ID on a deployed project.
+
+    This test:
+    1. Ensures deployment exists
+    2. Reads template name from manifest
+    3. Queries project ID via jd show --project-id --text
+    4. Verifies the project ID starts with the template name prefix
+    """
+    e2e_deployment.ensure_deployed()
+
+    manifest = e2e_deployment.get_manifest()
+
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "show", "--project-id", "--text"])
+    actual_id = result.stdout.strip()
+
+    assert actual_id, "Project ID should not be empty on a deployed project"
+    assert actual_id.startswith(manifest.template.name), (
+        f"Project ID '{actual_id}' should start with template name '{manifest.template.name}'"
+    )
+
+
+def test_show_store_type_matches_manifest(e2e_deployment: EndToEndDeployment) -> None:
+    """Test that jd show --store-type returns the store type from manifest.
+
+    This test:
+    1. Ensures deployment exists
+    2. Reads project-store.store-type from manifest.yaml
+    3. Queries store type via jd show --store-type --text
+    4. Verifies values match
+    """
+    e2e_deployment.ensure_deployed()
+
+    manifest = e2e_deployment.get_manifest()
+    assert manifest.project_store is not None, "Manifest should have a project-store section"
+    expected_store_type = manifest.project_store.store_type
+
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "show", "--store-type", "--text"])
+    actual_store_type = result.stdout.strip()
+
+    assert actual_store_type == expected_store_type, (
+        f"Expected store type '{expected_store_type}', got '{actual_store_type}'"
+    )
+
+
+def test_show_store_id_returns_nonempty_value(e2e_deployment: EndToEndDeployment) -> None:
+    """Test that jd show --store-id returns a non-empty store ID on a deployed project.
+
+    This test:
+    1. Ensures deployment exists
+    2. Queries store ID via jd show --store-id --text
+    3. Verifies the store ID is not empty and not "None"
+    """
+    e2e_deployment.ensure_deployed()
+
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "show", "--store-id", "--text"])
+    actual_store_id = result.stdout.strip()
+
+    assert actual_store_id, "Store ID should not be empty on a deployed project"
+    assert actual_store_id != "None", "Store ID should not be 'None' on a deployed project"
+
+
+def test_show_info_includes_store_type_and_store_id(e2e_deployment: EndToEndDeployment) -> None:
+    """Test that jd show --info displays Store Type and Store ID rows.
+
+    This test:
+    1. Ensures deployment exists
+    2. Runs jd show --info
+    3. Verifies output contains Store Type and Store ID rows with values (not N/A)
+    """
+    e2e_deployment.ensure_deployed()
+
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "show", "--info"])
+
+    assert result.returncode == 0, f"jd show --info should succeed, got returncode {result.returncode}"
+    assert "Store Type" in result.stdout, "Info table should contain Store Type row"
+    assert "Store ID" in result.stdout, "Info table should contain Store ID row"
+    # On a deployed project with a configured store, values should not be N/A
+    assert "N/A" not in result.stdout, "Store Type and Store ID should not be N/A on a deployed project"

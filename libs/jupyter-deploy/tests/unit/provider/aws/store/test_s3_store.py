@@ -89,14 +89,31 @@ class TestFindStore(unittest.TestCase):
         with self.assertRaises(ProviderPermissionError):
             provider.find_store()
 
+    @patch(f"{_MODULE}.s3_bucket")
     @patch(f"{_MODULE}.boto3")
-    def test_uses_provided_bucket_name(self, mock_boto3: Mock) -> None:
+    def test_uses_provided_bucket_name(self, mock_boto3: Mock, mock_s3_bucket: Mock) -> None:
+        mock_s3_bucket.bucket_exists.return_value = True
         provider = S3StoreManager(region="us-west-2", bucket_name="my-bucket")
 
         result = provider.find_store()
 
         self.assertEqual(result.store_id, "my-bucket")
         self.assertEqual(result.location, "us-west-2")
+        mock_s3_bucket.bucket_exists.assert_called_once()
+        mock_s3_bucket.find_buckets_by_tag.assert_not_called()
+
+    @patch(f"{_MODULE}.s3_bucket")
+    @patch(f"{_MODULE}.boto3")
+    def test_raises_when_provided_bucket_not_found(self, mock_boto3: Mock, mock_s3_bucket: Mock) -> None:
+        mock_s3_bucket.bucket_exists.return_value = False
+        provider = S3StoreManager(region="us-west-2", bucket_name="missing-bucket")
+
+        with self.assertRaises(ProjectStoreNotFoundError) as ctx:
+            provider.find_store()
+
+        self.assertIn("missing-bucket", str(ctx.exception))
+        self.assertIsNotNone(ctx.exception.hint)
+        self.assertIn("--reset-store-id", ctx.exception.hint)  # type: ignore[arg-type]
 
 
 class TestEnsureStore(unittest.TestCase):

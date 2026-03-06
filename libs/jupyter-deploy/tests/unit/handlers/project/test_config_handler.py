@@ -4,9 +4,11 @@ from unittest.mock import ANY, Mock, patch
 
 from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.enum import StoreType
-from jupyter_deploy.exceptions import InvalidPresetError
+from jupyter_deploy.exceptions import InvalidPresetError, ProjectStoreNotFoundError
 from jupyter_deploy.handlers.project.config_handler import ConfigHandler
 from jupyter_deploy.manifest import JupyterDeployManifestV1, JupyterDeployProjectStoreV1
+from jupyter_deploy.provider.store.store_manager import StoreInfo
+from jupyter_deploy.store_config import JupyterDeployStoreConfigV1
 from jupyter_deploy.verify_utils import ToolRequiredError
 
 
@@ -374,14 +376,18 @@ class TestConfigHandler(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             handler.record(record_vars=True)
 
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_store_config", return_value=None)
+    @patch("jupyter_deploy.handlers.project.config_handler.write_store_config")
     @patch("jupyter_deploy.handlers.project.config_handler.StoreManagerFactory")
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("jupyter_deploy.engine.terraform.tf_config.TerraformConfigHandler")
-    def test_ensure_store_calls_store_manager(
+    def test_ensure_store_resolves_from_manifest(
         self,
         mock_tf_handler: Mock,
         mock_retrieve_manifest: Mock,
         mock_store_factory: Mock,
+        mock_write_config: Mock,
+        mock_retrieve_store_config: Mock,
     ) -> None:
         project_store = JupyterDeployProjectStoreV1(**{"store-type": "s3-ddb"})  # type: ignore
         manifest = JupyterDeployManifestV1(
@@ -394,25 +400,31 @@ class TestConfigHandler(unittest.TestCase):
         mock_retrieve_manifest.return_value = manifest
 
         mock_store_manager = Mock()
+        mock_store_info = StoreInfo(store_type=StoreType.S3_DDB, store_id="discovered-bucket", location="us-east-1")
+        mock_store_manager.ensure_store.return_value = mock_store_info
         mock_store_factory.get_manager.return_value = mock_store_manager
 
         tf_mock_handler_instance, _ = self.get_mock_handler_and_fns()
         mock_tf_handler.return_value = tf_mock_handler_instance
 
         handler = ConfigHandler(display_manager=NullDisplay())
-        handler.ensure_store()
+        result = handler.ensure_store()
 
-        mock_store_factory.get_manager.assert_called_once_with(store_type="s3-ddb", store_id=None)
+        mock_store_factory.get_manager.assert_called_once_with(store_type=StoreType.S3_DDB, store_id=None)
         mock_store_manager.ensure_store.assert_called_once()
+        mock_write_config.assert_called_once_with(ANY, store_type="s3-ddb", store_id="discovered-bucket")
+        self.assertEqual(result, mock_store_info)
 
+    @patch("jupyter_deploy.handlers.project.config_handler.write_store_config")
     @patch("jupyter_deploy.handlers.project.config_handler.StoreManagerFactory")
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("jupyter_deploy.engine.terraform.tf_config.TerraformConfigHandler")
-    def test_ensure_store_with_overrides(
+    def test_ensure_store_with_explicit_store_id_calls_find_store(
         self,
         mock_tf_handler: Mock,
         mock_retrieve_manifest: Mock,
         mock_store_factory: Mock,
+        mock_write_config: Mock,
     ) -> None:
         project_store = JupyterDeployProjectStoreV1(**{"store-type": "s3-ddb"})  # type: ignore
         manifest = JupyterDeployManifestV1(
@@ -425,6 +437,8 @@ class TestConfigHandler(unittest.TestCase):
         mock_retrieve_manifest.return_value = manifest
 
         mock_store_manager = Mock()
+        mock_store_info = StoreInfo(store_type=StoreType.S3_DDB, store_id="my-bucket", location="us-east-1")
+        mock_store_manager.find_store.return_value = mock_store_info
         mock_store_factory.get_manager.return_value = mock_store_manager
 
         tf_mock_handler_instance, _ = self.get_mock_handler_and_fns()
@@ -434,13 +448,21 @@ class TestConfigHandler(unittest.TestCase):
         handler.ensure_store(store_type=StoreType.S3_DDB, store_id="my-bucket")
 
         mock_store_factory.get_manager.assert_called_once_with(store_type=StoreType.S3_DDB, store_id="my-bucket")
-        mock_store_manager.ensure_store.assert_called_once()
+        mock_store_manager.find_store.assert_called_once()
+        mock_store_manager.ensure_store.assert_not_called()
 
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_store_config", return_value=None)
+    @patch("jupyter_deploy.handlers.project.config_handler.write_store_config")
     @patch("jupyter_deploy.handlers.project.config_handler.StoreManagerFactory")
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("jupyter_deploy.engine.terraform.tf_config.TerraformConfigHandler")
-    def test_ensure_store_without_backup_warns_and_returns_none(
-        self, mock_tf_handler: Mock, mock_retrieve_manifest: Mock, mock_store_factory: Mock
+    def test_ensure_store_without_store_warns_and_returns_none(
+        self,
+        mock_tf_handler: Mock,
+        mock_retrieve_manifest: Mock,
+        mock_store_factory: Mock,
+        mock_write_config: Mock,
+        mock_retrieve_store_config: Mock,
     ) -> None:
         mock_retrieve_manifest.return_value = self.mock_manifest
         tf_mock_handler_instance, _ = self.get_mock_handler_and_fns()
@@ -453,3 +475,87 @@ class TestConfigHandler(unittest.TestCase):
         self.assertIsNone(result)
         mock_display.warning.assert_called_once()
         mock_store_factory.get_manager.assert_not_called()
+        mock_write_config.assert_not_called()
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_store_config")
+    @patch("jupyter_deploy.handlers.project.config_handler.write_store_config")
+    @patch("jupyter_deploy.handlers.project.config_handler.StoreManagerFactory")
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("jupyter_deploy.engine.terraform.tf_config.TerraformConfigHandler")
+    def test_ensure_store_stale_store_id_propagates_error(
+        self,
+        mock_tf_handler: Mock,
+        mock_retrieve_manifest: Mock,
+        mock_store_factory: Mock,
+        mock_write_config: Mock,
+        mock_retrieve_store_config: Mock,
+    ) -> None:
+        """When store-id from .jd/store.yaml is stale, find_store error propagates."""
+        project_store = JupyterDeployProjectStoreV1(**{"store-type": "s3-only"})  # type: ignore
+        manifest = JupyterDeployManifestV1(
+            **{  # type: ignore
+                "schema_version": 1,
+                "template": {"name": "test", "engine": "terraform", "version": "1.0.0"},
+                "project_store": project_store,
+            }
+        )
+        mock_retrieve_manifest.return_value = manifest
+
+        # Simulate .jd/store.yaml with a stale store-id
+        mock_retrieve_store_config.return_value = JupyterDeployStoreConfigV1(
+            store_type="s3-only", store_id="deleted-bucket"
+        )
+
+        mock_store_manager = Mock()
+        mock_store_manager.find_store.side_effect = ProjectStoreNotFoundError(
+            "S3 bucket not found: deleted-bucket",
+            hint="run 'jd config --reset-store-id' to clear it and rediscover the store.",
+        )
+        mock_store_factory.get_manager.return_value = mock_store_manager
+
+        tf_mock_handler_instance, _ = self.get_mock_handler_and_fns()
+        mock_tf_handler.return_value = tf_mock_handler_instance
+
+        handler = ConfigHandler(display_manager=NullDisplay())
+
+        with self.assertRaises(ProjectStoreNotFoundError) as ctx:
+            handler.ensure_store()
+
+        self.assertIsNotNone(ctx.exception.hint)
+        self.assertIn("--reset-store-id", ctx.exception.hint)  # type: ignore[arg-type]
+        mock_write_config.assert_not_called()
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_store_config")
+    @patch("jupyter_deploy.handlers.project.config_handler.write_store_config")
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("jupyter_deploy.engine.terraform.tf_config.TerraformConfigHandler")
+    def test_reset_store_id_clears_store_id_preserving_store_type(
+        self,
+        mock_tf_handler: Mock,
+        mock_retrieve_manifest: Mock,
+        mock_write_config: Mock,
+        mock_retrieve_store_config: Mock,
+    ) -> None:
+        """reset_store_id writes store.yaml with store-type but no store-id."""
+        project_store = JupyterDeployProjectStoreV1(**{"store-type": "s3-only"})  # type: ignore
+        manifest = JupyterDeployManifestV1(
+            **{  # type: ignore
+                "schema_version": 1,
+                "template": {"name": "test", "engine": "terraform", "version": "1.0.0"},
+                "project_store": project_store,
+            }
+        )
+        mock_retrieve_manifest.return_value = manifest
+
+        # .jd/store.yaml has both store-type and store-id
+        mock_retrieve_store_config.return_value = JupyterDeployStoreConfigV1(
+            store_type="s3-only", store_id="old-bucket"
+        )
+
+        tf_mock_handler_instance, _ = self.get_mock_handler_and_fns()
+        mock_tf_handler.return_value = tf_mock_handler_instance
+
+        handler = ConfigHandler(display_manager=NullDisplay())
+        handler.reset_store_id()
+
+        mock_write_config.assert_called_once_with(ANY, store_type="s3-only", store_id=None)

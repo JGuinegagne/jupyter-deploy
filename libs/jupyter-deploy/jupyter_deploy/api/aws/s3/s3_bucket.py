@@ -49,6 +49,25 @@ def find_buckets_by_tag(
     return matched
 
 
+def bucket_exists(s3_client: S3Client, bucket_name: str) -> bool:
+    """Return True if the S3 bucket exists and is accessible.
+
+    Raises:
+        botocore.exceptions.ClientError on unexpected AWS API errors (not 404/403).
+    """
+    try:
+        s3_client.head_bucket(Bucket=bucket_name)
+        return True
+    except s3_client.exceptions.ClientError as e:
+        error_code = e.response.get("Error", {}).get("Code", "")
+        if error_code in ("404", "NoSuchBucket"):
+            return False
+        if error_code == "403":
+            # Bucket exists but caller lacks access; treat as not found for our purposes
+            return False
+        raise
+
+
 def create_bucket(s3_client: S3Client, bucket_name: str, region: str, tags: dict[str, str]) -> None:
     """Calls S3:CreateBucket, and enable versioning, KMS encryption, and add tags.
 
