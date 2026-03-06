@@ -2,9 +2,12 @@ from pathlib import Path
 
 from jupyter_deploy import fs_utils
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.engine.supervised_execution import DisplayManager
+from jupyter_deploy.enum import StoreType
 from jupyter_deploy.handlers.docs_generator import DocsGenerator
 from jupyter_deploy.infrastructure.enum import AWSInfrastructureType, InfrastructureType
 from jupyter_deploy.provider.enum import ProviderType
+from jupyter_deploy.provider.store.store_manager_factory import StoreManagerFactory
 from jupyter_deploy.template_utils import TEMPLATES
 
 
@@ -87,3 +90,21 @@ class InitHandler:
         # Generate documentation files
         docs_generator.generate_gitignore()
         docs_generator.generate_agent_md()
+
+    @staticmethod
+    def restore(
+        project_dir: str,
+        project_id: str,
+        store_type: StoreType,
+        display_manager: DisplayManager,
+        store_id: str | None = None,
+    ) -> Path:
+        """Restore a project from the remote store into a local directory.
+
+        Returns:
+            The absolute path to the restored project.
+        """
+        dest_path = Path(project_dir)
+        store_manager = StoreManagerFactory.get_manager(store_type=store_type, store_id=store_id)
+        store_manager.pull(project_id, dest_path, display_manager)
+        return dest_path.resolve()

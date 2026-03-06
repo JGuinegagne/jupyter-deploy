@@ -37,6 +37,14 @@ class SyncResult(BaseModel):
 class StoreManager(ABC):
     """Abstract interface for a remote project store manager."""
 
+    _cached_store_info: StoreInfo | None
+
+    def resolve_store(self) -> StoreInfo:
+        """Return the resolved StoreInfo, discovering the store if not yet resolved."""
+        if self._cached_store_info is None:
+            self._cached_store_info = self.find_store()
+        return self._cached_store_info
+
     @abstractmethod
     def find_store(self) -> StoreInfo:
         """Find an existing project store.
@@ -73,9 +81,21 @@ class StoreManager(ABC):
         """
 
     @abstractmethod
+    def get_project(self, project_id: str, display_manager: DisplayManager) -> ProjectSummary:
+        """Return a ProjectSummary for a specific project.
+
+        Raises:
+            ProjectNotFoundInStoreError: If the project is not found in the store.
+        """
+
+    @abstractmethod
     def list_projects(self, display_manager: DisplayManager) -> list[ProjectSummary]:
         """Return a list of ProjectSummaries for all projects in the project store."""
 
     @abstractmethod
     def delete_project(self, project_id: str, display_manager: DisplayManager) -> None:
         """Delete all content of a project from the project store."""
+
+    @abstractmethod
+    def get_user_identity(self) -> str:
+        """Return an identifier for the current user (e.g. an IAM ARN)."""

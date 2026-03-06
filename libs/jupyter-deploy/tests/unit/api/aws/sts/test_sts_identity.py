@@ -1,8 +1,16 @@
 import unittest
 from unittest.mock import Mock
 
-from jupyter_deploy.api.aws.sts.sts_identity import get_partition, get_partition_lead_region
+from jupyter_deploy.api.aws.sts.sts_identity import get_caller_arn, get_partition, get_partition_lead_region
 from jupyter_deploy.exceptions import UnsupportedProviderRegionError
+
+
+class TestGetCallerArn(unittest.TestCase):
+    def test_returns_full_arn(self) -> None:
+        sts_client = Mock()
+        sts_client.get_caller_identity.return_value = {"Arn": "arn:aws:iam::123456789012:user/jeff"}
+
+        self.assertEqual(get_caller_arn(sts_client), "arn:aws:iam::123456789012:user/jeff")
 
 
 class TestGetPartition(unittest.TestCase):

@@ -31,6 +31,7 @@ from jupyter_deploy.exceptions import (
     OpenWebBrowserError,
     OutputNotFoundError,
     ProjectIdNotAvailableError,
+    ProjectNotFoundInStoreError,
     ProjectStoreAccessConfigurationError,
     ProjectStoreNotFoundError,
     ProviderPermissionError,
@@ -237,6 +238,19 @@ def handle_cli_errors(console: Console) -> Generator[None, None, None]:
         if e.hint:
             console.line()
             console.print(f":bulb: {e.hint}")
+        raise typer.Exit(code=1) from None
+
+    except ProjectNotFoundInStoreError as e:
+        console.print(f":x: {e}", style="bold red")
+        console.line()
+        hint_cmd = "jd projects list --store-type"
+        if e.store_type:
+            hint_cmd += f" {e.store_type}"
+            if e.store_id:
+                hint_cmd += f" --store-id {e.store_id}"
+        else:
+            hint_cmd += " <type>"
+        console.print(f":bulb: Use [bold cyan]{hint_cmd}[/] to see available projects.")
         raise typer.Exit(code=1) from None
 
     except ProjectStoreAccessConfigurationError as e:

@@ -264,7 +264,9 @@ class TestUpHandlerPushToStore(unittest.TestCase):
         mock_store_manager.find_store.assert_called_once()
         handler._store_access_manager.configure.assert_not_called()
         mock_store_manager.push.assert_called_once()
-        mock_write_config.assert_called_once_with(ANY, store_type="s3-ddb", store_id="discovered-bucket")
+        mock_write_config.assert_called_once_with(
+            ANY, store_type="s3-ddb", store_id="discovered-bucket", project_id="test-template-dep-001"
+        )
 
     @patch("jupyter_deploy.handlers.project.up_handler.write_store_config")
     @patch("jupyter_deploy.handlers.project.up_handler.StoreManagerFactory")

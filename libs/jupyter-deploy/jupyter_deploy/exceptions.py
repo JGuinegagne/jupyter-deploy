@@ -428,6 +428,22 @@ class ProjectStoreAccessConfigurationError(JupyterDeployError, RuntimeError):
     pass
 
 
+class ProjectNotFoundInStoreError(JupyterDeployError, RuntimeError):
+    """Raised when a project is not found in the remote store.
+
+    Attributes:
+        project_id: The project ID that was not found
+        store_type: The store type that was queried (if available)
+        store_id: The store ID that was queried (if available)
+    """
+
+    def __init__(self, project_id: str, store_type: str | None = None, store_id: str | None = None) -> None:
+        self.project_id = project_id
+        self.store_type = store_type
+        self.store_id = store_id
+        super().__init__(f"Project '{project_id}' not found in the store.")
+
+
 class ProjectIdNotAvailableError(JupyterDeployError, RuntimeError):
     """Raised when the project ID cannot be resolved from deployment outputs.
 

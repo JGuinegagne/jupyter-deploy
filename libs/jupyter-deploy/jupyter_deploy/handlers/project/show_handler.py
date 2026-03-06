@@ -90,11 +90,17 @@ class ShowHandler(BaseProjectHandler):
         return value, description
 
     def get_project_id(self) -> str:
-        """Return the computed project ID.
+        """Return the project ID from .jd/store.yaml (fast path) or computed from outputs.
 
         Raises:
             ProjectIdNotAvailableError: If deployment_id is not declared or not available.
         """
+        # Fast path: read from .jd/store.yaml
+        cached = self.get_project_id_from_config()
+        if cached is not None:
+            return cached
+
+        # Slow path: compute from outputs
         try:
             self.project_manifest.get_declared_value("deployment_id")
         except NotImplementedError:

@@ -11,7 +11,7 @@ from jupyter_deploy.api.aws.s3 import s3_bucket, s3_object, s3_sync
 from jupyter_deploy.api.aws.sts import sts_identity
 from jupyter_deploy.engine.supervised_execution import DisplayManager
 from jupyter_deploy.enum import StoreType
-from jupyter_deploy.exceptions import ProjectStoreNotFoundError
+from jupyter_deploy.exceptions import ProjectNotFoundInStoreError, ProjectStoreNotFoundError
 from jupyter_deploy.provider.aws.aws_error_handler import aws_error_context_manager
 from jupyter_deploy.provider.aws.store.constants import (
     STORE_BUCKET_NAME_PREFIX,
@@ -30,6 +30,7 @@ class S3StoreManager(StoreManager):
     def __init__(self, region: str, bucket_name: str | None = None) -> None:
         self._region = region
         self._bucket_name = bucket_name
+        self._cached_store_info: StoreInfo | None = None
         self._s3_client: S3Client = boto3.client("s3", region_name=region)
 
     @staticmethod
@@ -95,8 +96,7 @@ class S3StoreManager(StoreManager):
             return StoreInfo(store_type=self._store_type, store_id=self._bucket_name, location=self._region)
 
     def push(self, project_path: Path, project_id: str, display_manager: DisplayManager) -> SyncResult:
-        if not self._bucket_name:
-            raise ProjectStoreNotFoundError
+        bucket = self.resolve_store().store_id
 
         with aws_error_context_manager():
             # Scope the project snapshot under a "project/" subdirectory so it doesn't overlap
@@ -107,10 +107,10 @@ class S3StoreManager(StoreManager):
             prefix = f"{project_id}/project/"
             gitignore_path = project_path / ".gitignore"
 
-            display_manager.info(f"Updating remote store: {self._bucket_name}, prefix: {prefix}")
+            display_manager.info(f"Updating remote store: {bucket}, prefix: {prefix}")
             result = s3_sync.sync_to_remote(
                 self._s3_client,
-                self._bucket_name,
+                bucket,
                 prefix,
                 project_path,
                 gitignore_path if gitignore_path.exists() else None,
@@ -123,29 +123,42 @@ class S3StoreManager(StoreManager):
             return SyncResult(uploaded=result.uploaded, deleted=result.deleted, unchanged=result.unchanged)
 
     def pull(self, project_id: str, dest_path: Path, display_manager: DisplayManager) -> SyncResult:
-        if not self._bucket_name:
-            raise ProjectStoreNotFoundError
+        bucket = self.resolve_store().store_id
 
         with aws_error_context_manager():
             prefix = f"{project_id}/project/"
 
-            display_manager.info(f"Pulling project from s3://{self._bucket_name}/{prefix} to {dest_path.absolute()}")
-            result = s3_sync.sync_from_remote(self._s3_client, self._bucket_name, prefix, dest_path)
+            display_manager.info(f"Pulling project from s3://{bucket}/{prefix} to {dest_path.absolute()}")
+            result = s3_sync.sync_from_remote(self._s3_client, bucket, prefix, dest_path)
 
             display_manager.success(f"Pull complete: {result.uploaded} files downloaded")
             return SyncResult(uploaded=result.uploaded, deleted=result.deleted, unchanged=result.unchanged)
 
-    def list_projects(self, display_manager: DisplayManager) -> list[ProjectSummary]:
-        if not self._bucket_name:
-            raise ProjectStoreNotFoundError
+    def get_project(self, project_id: str, display_manager: DisplayManager) -> ProjectSummary:
+        bucket = self.resolve_store().store_id
 
         with aws_error_context_manager():
-            display_manager.info(f"Listing projects in projects store: {self._bucket_name}")
-            prefixes = s3_bucket.list_top_level_prefixes(self._s3_client, self._bucket_name)
+            objects = s3_object.list_objects(self._s3_client, bucket, f"{project_id}/")
+            if not objects:
+                raise ProjectNotFoundInStoreError(project_id, store_type=self._store_type.value, store_id=bucket)
+
+            last_modified = max(obj["LastModified"] for obj in objects)
+            return ProjectSummary(
+                project_id=project_id,
+                last_modified=last_modified,
+                file_count=len(objects),
+            )
+
+    def list_projects(self, display_manager: DisplayManager) -> list[ProjectSummary]:
+        bucket = self.resolve_store().store_id
+
+        with aws_error_context_manager():
+            display_manager.info(f"Listing projects in projects store: {bucket}")
+            prefixes = s3_bucket.list_top_level_prefixes(self._s3_client, bucket)
             summaries: list[ProjectSummary] = []
 
             for prefix_name in prefixes:
-                objects = s3_object.list_objects(self._s3_client, self._bucket_name, f"{prefix_name}/")
+                objects = s3_object.list_objects(self._s3_client, bucket, f"{prefix_name}/")
                 last_modified = (
                     max(obj["LastModified"] for obj in objects) if objects else datetime.min.replace(tzinfo=UTC)
                 )
@@ -160,16 +173,18 @@ class S3StoreManager(StoreManager):
             return summaries
 
     def delete_project(self, project_id: str, display_manager: DisplayManager) -> None:
-        if not self._bucket_name:
-            raise ProjectStoreNotFoundError
+        bucket = self.resolve_store().store_id
 
         with aws_error_context_manager():
-            display_manager.info(f"Deleting project '{project_id}' from projects store: {self._bucket_name}")
-            objects = s3_object.list_objects(self._s3_client, self._bucket_name, f"{project_id}/")
+            display_manager.info(f"Deleting project '{project_id}' from projects store: {bucket}")
+            objects = s3_object.list_objects(self._s3_client, bucket, f"{project_id}/")
             if objects:
-                display_manager.info(f"Found {len(objects)} for the project in projects store: {self._bucket_name}")
+                display_manager.info(f"Found {len(objects)} for the project in projects store: {bucket}")
                 keys = [obj["Key"] for obj in objects]
-                s3_object.delete_objects(self._s3_client, self._bucket_name, keys)
-            display_manager.success(
-                f"Deleted {len(objects)} for project '{project_id}' in projects store: {self._bucket_name}"
-            )
+                s3_object.delete_objects(self._s3_client, bucket, keys)
+            display_manager.success(f"Deleted {len(objects)} for project '{project_id}' in projects store: {bucket}")
+
+    def get_user_identity(self) -> str:
+        with aws_error_context_manager():
+            sts_client = boto3.client("sts")
+            return sts_identity.get_caller_arn(sts_client)

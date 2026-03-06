@@ -75,6 +75,17 @@ class BaseProjectHandler:
 
         return None
 
+    def get_project_id_from_config(self) -> str | None:
+        """Resolve the project ID from .jd/store.yaml.
+
+        Returns None if no project ID is stored.
+        """
+        config = retrieve_store_config(self.project_path)
+        if config is not None and config.project_id is not None:
+            return config.project_id
+
+        return None
+
 
 def retrieve_project_manifest(manifest_path: Path) -> manifest.JupyterDeployManifest:
     """Read the manifest file on disk, parse, validate and return it.
@@ -161,12 +172,17 @@ def retrieve_store_config(project_path: Path) -> store_config.JupyterDeployStore
     return store_config.JupyterDeployStoreConfig(**content)
 
 
-def write_store_config(project_path: Path, store_type: str | None = None, store_id: str | None = None) -> None:
+def write_store_config(
+    project_path: Path,
+    store_type: str | None = None,
+    store_id: str | None = None,
+    project_id: str | None = None,
+) -> None:
     """Write .jd/store.yaml with the given values. Creates .jd/ dir if needed."""
     jd_dir = project_path / constants.JD_DIR
     jd_dir.mkdir(parents=True, exist_ok=True)
 
-    config = store_config.JupyterDeployStoreConfigV1(store_type=store_type, store_id=store_id)
+    config = store_config.JupyterDeployStoreConfigV1(store_type=store_type, store_id=store_id, project_id=project_id)
     content = config.model_dump(by_alias=True, exclude_none=True)
 
     fs_utils.write_yaml_file_with_comments(
