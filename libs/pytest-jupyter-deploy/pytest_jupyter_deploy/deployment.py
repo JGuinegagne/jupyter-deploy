@@ -486,13 +486,14 @@ class EndToEndDeployment:
             comments=VARIABLES_CONFIG_V1_COMMENTS,
         )
 
-    def ensure_deployed_with(self, config_args: list[str]) -> None:
+    def ensure_deployed_with(self, config_args: list[str], timeout_seconds: int | None = None) -> None:
         """Ensure the deployment is updated with new configuration.
 
         This method reconfigures and redeploys an existing project with new settings.
 
         Args:
             config_args: Additional arguments to pass to `jd config` command
+            timeout_seconds: Override deploy timeout for this call
 
         Raises:
             JDCliError: If configuration or deployment fails
@@ -505,7 +506,8 @@ class EndToEndDeployment:
         self.cli.run_command(config_cmd)
 
         # Run jd up to apply changes
-        self.cli.run_command(["jupyter-deploy", "up", "-y"], timeout_seconds=self.deploy_timeout_seconds)
+        timeout = timeout_seconds if timeout_seconds is not None else self.deploy_timeout_seconds
+        self.cli.run_command(["jupyter-deploy", "up", "-y"], timeout_seconds=timeout)
 
     def get_str_variable_value(self, variable_name: str) -> str:
         """Call jupyter-deploy show CLI, return the parsed response as str."""

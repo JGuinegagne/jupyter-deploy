@@ -59,13 +59,15 @@ def test_switch_to_gpu(
     )
 
     # Switch to GPU instance and pixi package manager
+    # GPU instance provisioning can take longer than the default timeout
     e2e_deployment.ensure_deployed_with(
         [
             "--instance-type",
             gpu_instance_type,
             "--jupyter-package-manager",
             "pixi",
-        ]
+        ],
+        timeout_seconds=3600,
     )
 
     # Ensure the server is running and healthy
@@ -186,7 +188,10 @@ def test_switch_from_gpu_to_cpu(
     """Test switching back to CPU instance."""
     # Switch back to CPU instance and UV package manager
     e2e_deployment.ensure_server_running()
-    e2e_deployment.ensure_deployed_with(["--instance-type", cpu_instance_type, "--jupyter-package-manager", "uv"])
+    e2e_deployment.ensure_deployed_with(
+        ["--instance-type", cpu_instance_type, "--jupyter-package-manager", "uv"],
+        timeout_seconds=3600,
+    )
 
     # Prerequisites
     e2e_deployment.ensure_server_running()
