@@ -279,12 +279,14 @@ class TestPull(unittest.TestCase):
 class TestGetProject(unittest.TestCase):
     @patch(f"{_MODULE}.s3_object")
     @patch(f"{_MODULE}.boto3")
-    def test_returns_project_summary(self, mock_boto3: Mock, mock_s3_object: Mock) -> None:
+    def test_returns_project_details_with_manifest(self, mock_boto3: Mock, mock_s3_object: Mock) -> None:
         now = datetime.now(tz=UTC)
         mock_s3_object.list_objects.return_value = [
             _obj("my-project/project/f1.txt", 10, now),
             _obj("my-project/project/f2.txt", 20, now),
         ]
+        manifest_yaml = "schema_version: 1\ntemplate:\n  name: base-template\n  version: 1.2.0\n  engine: terraform\n"
+        mock_s3_object.get_object_content.return_value = manifest_yaml
         provider = S3StoreManager(region="us-east-1", bucket_name="bucket")
 
         result = provider.get_project("my-project", NullDisplay())
@@ -292,7 +294,29 @@ class TestGetProject(unittest.TestCase):
         self.assertEqual(result.project_id, "my-project")
         self.assertEqual(result.file_count, 2)
         self.assertEqual(result.last_modified, now)
+        self.assertEqual(result.template_name, "base-template")
+        self.assertEqual(result.template_version, "1.2.0")
+        self.assertEqual(result.engine, "terraform")
         mock_s3_object.list_objects.assert_called_once_with(mock_boto3.client.return_value, "bucket", "my-project/")
+
+    @patch(f"{_MODULE}.s3_object")
+    @patch(f"{_MODULE}.boto3")
+    def test_returns_project_details_when_manifest_missing(self, mock_boto3: Mock, mock_s3_object: Mock) -> None:
+        now = datetime.now(tz=UTC)
+        mock_s3_object.list_objects.return_value = [_obj("my-project/project/f1.txt", 10, now)]
+        # Simulate NoSuchKey via the S3 client exception attribute
+        mock_s3_client = mock_boto3.client.return_value
+        no_such_key = type("NoSuchKey", (Exception,), {})
+        mock_s3_client.exceptions.NoSuchKey = no_such_key
+        mock_s3_object.get_object_content.side_effect = no_such_key()
+        provider = S3StoreManager(region="us-east-1", bucket_name="bucket")
+
+        result = provider.get_project("my-project", NullDisplay())
+
+        self.assertEqual(result.project_id, "my-project")
+        self.assertIsNone(result.template_name)
+        self.assertIsNone(result.template_version)
+        self.assertIsNone(result.engine)
 
     @patch(f"{_MODULE}.s3_object")
     @patch(f"{_MODULE}.boto3")

@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 from jupyter_deploy.enum import StoreType
 from jupyter_deploy.exceptions import ProjectNotFoundInStoreError
 from jupyter_deploy.handlers.projects_handler import ProjectsHandler
-from jupyter_deploy.provider.store.store_manager import ProjectSummary, StoreInfo
+from jupyter_deploy.provider.store.store_manager import ProjectDetails, ProjectSummary, StoreInfo
 
 
 class TestProjectsHandler(unittest.TestCase):
@@ -43,7 +43,14 @@ class TestProjectsHandler(unittest.TestCase):
     @patch("jupyter_deploy.handlers.projects_handler.StoreManagerFactory")
     def test_show_project_delegates_to_get_project(self, mock_factory: Mock) -> None:
         mock_store_manager = Mock()
-        expected = self.projects[0]
+        expected = ProjectDetails(
+            project_id="template-abc123",
+            last_modified=datetime(2026, 3, 1),
+            file_count=10,
+            template_name="base-template",
+            template_version="1.0.0",
+            engine="terraform",
+        )
         mock_store_manager.get_project.return_value = expected
         mock_factory.get_manager.return_value = mock_store_manager
 
@@ -51,6 +58,7 @@ class TestProjectsHandler(unittest.TestCase):
         result = handler.show_project("template-abc123")
 
         self.assertEqual(result, expected)
+        self.assertEqual(result.template_name, "base-template")
         mock_store_manager.get_project.assert_called_once_with("template-abc123", self.mock_display)
 
     @patch("jupyter_deploy.handlers.projects_handler.StoreManagerFactory")

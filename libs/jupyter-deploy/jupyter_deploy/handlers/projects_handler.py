@@ -1,6 +1,6 @@
 from jupyter_deploy.engine.supervised_execution import DisplayManager
 from jupyter_deploy.enum import StoreType
-from jupyter_deploy.provider.store.store_manager import ProjectSummary
+from jupyter_deploy.provider.store.store_manager import ProjectDetails, ProjectSummary
 from jupyter_deploy.provider.store.store_manager_factory import StoreManagerFactory
 
 
@@ -24,8 +24,8 @@ class ProjectsHandler:
         """Return the list of project summaries in the store."""
         return self._store_manager.list_projects(self.display_manager)
 
-    def show_project(self, project_id: str) -> ProjectSummary:
-        """Return the summary for a specific project as saved in the store.
+    def show_project(self, project_id: str) -> ProjectDetails:
+        """Return the details for a specific project as saved in the store.
 
         Raises:
             ProjectNotFoundInStoreError: If the project is not found in the store.

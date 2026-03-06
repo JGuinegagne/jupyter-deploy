@@ -63,6 +63,9 @@ def test_projects_show_returns_deployed_project_details(e2e_deployment: EndToEnd
 
     output = result.stdout.strip()
     assert f"project-id: {project_id}" in output, f"Expected project-id in output. Got: {output}"
+    assert "template-name:" in output, f"Expected template-name in output. Got: {output}"
+    assert "template-version:" in output, f"Expected template-version in output. Got: {output}"
+    assert "engine:" in output, f"Expected engine in output. Got: {output}"
     assert "last-modified:" in output, f"Expected last-modified in output. Got: {output}"
     assert "file-count:" in output, f"Expected file-count in output. Got: {output}"
 

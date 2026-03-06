@@ -7,6 +7,7 @@ import botocore.exceptions
 from jupyter_deploy.api.aws.s3.s3_object import (
     delete_objects,
     download_file,
+    get_object_content,
     list_objects,
     upload_file,
 )
@@ -90,6 +91,28 @@ class TestDownloadFile(unittest.TestCase):
 
         with self.assertRaises(botocore.exceptions.ClientError):
             download_file(mock_s3, "bucket", "key/file.txt", "/tmp/file.txt")
+
+
+class TestGetObjectContent(unittest.TestCase):
+    def test_returns_content_as_string(self) -> None:
+        mock_s3 = Mock()
+        mock_body = Mock()
+        mock_body.read.return_value = b"hello world"
+        mock_s3.get_object.return_value = {"Body": mock_body}
+
+        result = get_object_content(mock_s3, "bucket", "key/file.txt")
+
+        self.assertEqual(result, "hello world")
+        mock_s3.get_object.assert_called_once_with(Bucket="bucket", Key="key/file.txt")
+
+    def test_raises_on_client_error(self) -> None:
+        mock_s3 = Mock()
+        mock_s3.get_object.side_effect = botocore.exceptions.ClientError(
+            {"Error": {"Code": "NoSuchKey", "Message": "Not found"}}, "GetObject"
+        )
+
+        with self.assertRaises(botocore.exceptions.ClientError):
+            get_object_content(mock_s3, "bucket", "key/missing.txt")
 
 
 class TestDeleteObjects(unittest.TestCase):

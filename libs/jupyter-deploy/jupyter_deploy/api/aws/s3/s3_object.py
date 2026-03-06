@@ -38,6 +38,16 @@ def download_file(s3_client: S3Client, bucket_name: str, key: str, file_path: st
     s3_client.download_file(Bucket=bucket_name, Key=key, Filename=file_path)
 
 
+def get_object_content(s3_client: S3Client, bucket_name: str, key: str) -> str:
+    """Read the content of an S3 object as a UTF-8 string.
+
+    Raises:
+        botocore.exceptions.ClientError on AWS API errors (including NoSuchKey).
+    """
+    response = s3_client.get_object(Bucket=bucket_name, Key=key)
+    return response["Body"].read().decode("utf-8")
+
+
 def delete_objects(s3_client: S3Client, bucket_name: str, keys: list[str]) -> None:
     """Paginate batch delete objects.
 

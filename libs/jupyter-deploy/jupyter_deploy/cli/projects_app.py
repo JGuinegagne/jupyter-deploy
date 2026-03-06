@@ -112,6 +112,9 @@ def show_project(
         if text:
             console.print(f"project-id: {project.project_id}")
             console.print(f"store-id: {handler.store_id}")
+            console.print(f"template-name: {project.template_name or 'N/A'}")
+            console.print(f"template-version: {project.template_version or 'N/A'}")
+            console.print(f"engine: {project.engine or 'N/A'}")
             console.print(f"last-modified: {project.last_modified.strftime('%Y-%m-%d %H:%M:%S')}")
             console.print(f"file-count: {project.file_count}")
         else:
@@ -121,6 +124,9 @@ def show_project(
 
             table.add_row("Project ID", project.project_id)
             table.add_row("Store ID", handler.store_id)
+            table.add_row("Template", project.template_name or "N/A")
+            table.add_row("Version", project.template_version or "N/A")
+            table.add_row("Engine", project.engine or "N/A")
             table.add_row("Last Modified", project.last_modified.strftime("%Y-%m-%d %H:%M:%S"))
             table.add_row("Files", str(project.file_count))
             console.print(table)

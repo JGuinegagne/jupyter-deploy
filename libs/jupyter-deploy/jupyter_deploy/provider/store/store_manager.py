@@ -4,10 +4,14 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
 
-from pydantic import BaseModel
+import yaml
+from pydantic import BaseModel, ValidationError
+from yaml.parser import ParserError
+from yaml.scanner import ScannerError
 
 from jupyter_deploy.engine.supervised_execution import DisplayManager
 from jupyter_deploy.enum import StoreType
+from jupyter_deploy.manifest import JupyterDeployManifest
 
 
 class StoreInfo(BaseModel):
@@ -24,6 +28,14 @@ class ProjectSummary(BaseModel):
     project_id: str
     last_modified: datetime
     file_count: int
+
+
+class ProjectDetails(ProjectSummary):
+    """Detailed information about a project in the project store."""
+
+    template_name: str | None = None
+    template_version: str | None = None
+    engine: str | None = None
 
 
 class SyncResult(BaseModel):
@@ -81,8 +93,11 @@ class StoreManager(ABC):
         """
 
     @abstractmethod
-    def get_project(self, project_id: str, display_manager: DisplayManager) -> ProjectSummary:
-        """Return a ProjectSummary for a specific project.
+    def get_project(self, project_id: str, display_manager: DisplayManager) -> ProjectDetails:
+        """Return ProjectDetails for a specific project.
+
+        Template metadata fields (template_name, template_version, engine) may be None
+        if the remote manifest cannot be read or parsed.
 
         Raises:
             ProjectNotFoundInStoreError: If the project is not found in the store.
@@ -99,3 +114,22 @@ class StoreManager(ABC):
     @abstractmethod
     def get_user_identity(self) -> str:
         """Return an identifier for the current user (e.g. an IAM ARN)."""
+
+    @staticmethod
+    def _safe_parse_manifest(content: str) -> JupyterDeployManifest | None:
+        """Parse manifest YAML content and return a validated manifest.
+
+        Returns None if the content cannot be parsed or validated.
+        """
+        try:
+            data = yaml.safe_load(content)
+        except (ParserError, ScannerError):
+            return None
+
+        if not isinstance(data, dict):
+            return None
+
+        try:
+            return JupyterDeployManifest(**data)
+        except ValidationError:
+            return None

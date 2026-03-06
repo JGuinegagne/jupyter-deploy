@@ -9,6 +9,7 @@ from mypy_boto3_s3.client import S3Client
 
 from jupyter_deploy.api.aws.s3 import s3_bucket, s3_object, s3_sync
 from jupyter_deploy.api.aws.sts import sts_identity
+from jupyter_deploy.constants import MANIFEST_FILENAME
 from jupyter_deploy.engine.supervised_execution import DisplayManager
 from jupyter_deploy.enum import StoreType
 from jupyter_deploy.exceptions import ProjectNotFoundInStoreError, ProjectStoreNotFoundError
@@ -19,7 +20,13 @@ from jupyter_deploy.provider.aws.store.constants import (
     STORE_TAG_SOURCE_VALUE,
     STORE_TAG_VERSION_KEY,
 )
-from jupyter_deploy.provider.store.store_manager import ProjectSummary, StoreInfo, StoreManager, SyncResult
+from jupyter_deploy.provider.store.store_manager import (
+    ProjectDetails,
+    ProjectSummary,
+    StoreInfo,
+    StoreManager,
+    SyncResult,
+)
 
 
 class S3StoreManager(StoreManager):
@@ -134,7 +141,7 @@ class S3StoreManager(StoreManager):
             display_manager.success(f"Pull complete: {result.uploaded} files downloaded")
             return SyncResult(uploaded=result.uploaded, deleted=result.deleted, unchanged=result.unchanged)
 
-    def get_project(self, project_id: str, display_manager: DisplayManager) -> ProjectSummary:
+    def get_project(self, project_id: str, display_manager: DisplayManager) -> ProjectDetails:
         bucket = self.resolve_store().store_id
 
         with aws_error_context_manager():
@@ -143,10 +150,24 @@ class S3StoreManager(StoreManager):
                 raise ProjectNotFoundInStoreError(project_id, store_type=self._store_type.value, store_id=bucket)
 
             last_modified = max(obj["LastModified"] for obj in objects)
-            return ProjectSummary(
+
+            # Try to read template metadata from the remote manifest
+            manifest = None
+            try:
+                content = s3_object.get_object_content(
+                    self._s3_client, bucket, f"{project_id}/project/{MANIFEST_FILENAME}"
+                )
+                manifest = self._safe_parse_manifest(content)
+            except self._s3_client.exceptions.NoSuchKey:
+                pass
+
+            return ProjectDetails(
                 project_id=project_id,
                 last_modified=last_modified,
                 file_count=len(objects),
+                template_name=manifest.template.name if manifest else None,
+                template_version=manifest.template.version if manifest else None,
+                engine=manifest.template.engine if manifest else None,
             )
 
     def list_projects(self, display_manager: DisplayManager) -> list[ProjectSummary]:

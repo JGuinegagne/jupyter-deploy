@@ -7,7 +7,7 @@ from typer.testing import CliRunner
 from jupyter_deploy.cli.app import runner as app_runner
 from jupyter_deploy.enum import StoreType
 from jupyter_deploy.exceptions import ProjectNotFoundInStoreError, ProjectStoreNotFoundError
-from jupyter_deploy.provider.store.store_manager import ProjectSummary
+from jupyter_deploy.provider.store.store_manager import ProjectDetails, ProjectSummary
 
 _HANDLER = "jupyter_deploy.cli.projects_app.ProjectsHandler"
 
@@ -147,8 +147,13 @@ class TestProjectsShowCommand(unittest.TestCase):
     def test_show_project(self, mock_handler_cls: Mock) -> None:
         mock_handler = Mock()
         type(mock_handler).store_id = PropertyMock(return_value="jd-bucket-abc")
-        mock_handler.show_project.return_value = ProjectSummary(
-            project_id="tpl-abc123", last_modified=datetime(2026, 3, 1, 12, 0), file_count=10
+        mock_handler.show_project.return_value = ProjectDetails(
+            project_id="tpl-abc123",
+            last_modified=datetime(2026, 3, 1, 12, 0),
+            file_count=10,
+            template_name="base-template",
+            template_version="1.2.0",
+            engine="terraform",
         )
         mock_handler_cls.return_value = mock_handler
 
@@ -159,13 +164,21 @@ class TestProjectsShowCommand(unittest.TestCase):
         self.assertIn("tpl-abc123", result.output)
         self.assertIn("jd-bucket-abc", result.output)
         self.assertIn("10", result.output)
+        self.assertIn("base-template", result.output)
+        self.assertIn("1.2.0", result.output)
+        self.assertIn("terraform", result.output)
 
     @patch(_HANDLER)
     def test_show_project_text_mode(self, mock_handler_cls: Mock) -> None:
         mock_handler = Mock()
         type(mock_handler).store_id = PropertyMock(return_value="jd-bucket-abc")
-        mock_handler.show_project.return_value = ProjectSummary(
-            project_id="tpl-abc123", last_modified=datetime(2026, 3, 1, 12, 0), file_count=10
+        mock_handler.show_project.return_value = ProjectDetails(
+            project_id="tpl-abc123",
+            last_modified=datetime(2026, 3, 1, 12, 0),
+            file_count=10,
+            template_name="base-template",
+            template_version="1.2.0",
+            engine="terraform",
         )
         mock_handler_cls.return_value = mock_handler
 
@@ -175,7 +188,27 @@ class TestProjectsShowCommand(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertIn("project-id: tpl-abc123", result.output)
         self.assertIn("store-id: jd-bucket-abc", result.output)
+        self.assertIn("template-name: base-template", result.output)
+        self.assertIn("template-version: 1.2.0", result.output)
+        self.assertIn("engine: terraform", result.output)
         self.assertIn("file-count: 10", result.output)
+
+    @patch(_HANDLER)
+    def test_show_project_text_mode_none_fields(self, mock_handler_cls: Mock) -> None:
+        mock_handler = Mock()
+        type(mock_handler).store_id = PropertyMock(return_value="jd-bucket-abc")
+        mock_handler.show_project.return_value = ProjectDetails(
+            project_id="tpl-abc123", last_modified=datetime(2026, 3, 1, 12, 0), file_count=10
+        )
+        mock_handler_cls.return_value = mock_handler
+
+        runner = CliRunner()
+        result = runner.invoke(app_runner.app, ["projects", "show", "tpl-abc123", "--store-type", "s3-only", "--text"])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("template-name: N/A", result.output)
+        self.assertIn("template-version: N/A", result.output)
+        self.assertIn("engine: N/A", result.output)
 
     @patch(_HANDLER)
     def test_show_project_not_found(self, mock_handler_cls: Mock) -> None:
