@@ -11,7 +11,7 @@ from mypy_boto3_s3.type_defs import ObjectTypeDef
 from jupyter_deploy.api.aws.s3.s3_sync import S3SyncResult
 from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.enum import StoreType
-from jupyter_deploy.exceptions import ProjectStoreNotFoundError, ProviderPermissionError
+from jupyter_deploy.exceptions import ProjectNotFoundInStoreError, ProjectStoreNotFoundError, ProviderPermissionError
 from jupyter_deploy.provider.aws.store.s3_store import S3StoreManager
 
 _MODULE = "jupyter_deploy.provider.aws.store.s3_store"
@@ -214,8 +214,10 @@ class TestPush(unittest.TestCase):
         self.assertEqual(result.deleted, 1)
         self.assertEqual(result.unchanged, 5)
 
+    @patch(f"{_MODULE}.s3_bucket")
     @patch(f"{_MODULE}.boto3")
-    def test_raises_when_store_not_initialized(self, mock_boto3: Mock) -> None:
+    def test_raises_when_store_not_initialized(self, mock_boto3: Mock, mock_s3_bucket: Mock) -> None:
+        mock_s3_bucket.find_buckets_by_tag.return_value = []
         provider = S3StoreManager(region="us-east-1")
 
         with self.assertRaises(ProjectStoreNotFoundError):
@@ -253,8 +255,10 @@ class TestPull(unittest.TestCase):
 
         self.assertEqual(result.uploaded, 5)
 
+    @patch(f"{_MODULE}.s3_bucket")
     @patch(f"{_MODULE}.boto3")
-    def test_raises_when_store_not_initialized(self, mock_boto3: Mock) -> None:
+    def test_raises_when_store_not_initialized(self, mock_boto3: Mock, mock_s3_bucket: Mock) -> None:
+        mock_s3_bucket.find_buckets_by_tag.return_value = []
         provider = S3StoreManager(region="us-east-1")
 
         with self.assertRaises(ProjectStoreNotFoundError):
@@ -270,6 +274,71 @@ class TestPull(unittest.TestCase):
 
         with self.assertRaises(ProviderPermissionError):
             provider.pull("my-project", Path("/dest"), NullDisplay())
+
+
+class TestGetProject(unittest.TestCase):
+    @patch(f"{_MODULE}.s3_object")
+    @patch(f"{_MODULE}.boto3")
+    def test_returns_project_details_with_manifest(self, mock_boto3: Mock, mock_s3_object: Mock) -> None:
+        now = datetime.now(tz=UTC)
+        mock_s3_object.list_objects.return_value = [
+            _obj("my-project/project/f1.txt", 10, now),
+            _obj("my-project/project/f2.txt", 20, now),
+        ]
+        manifest_yaml = "schema_version: 1\ntemplate:\n  name: base-template\n  version: 1.2.0\n  engine: terraform\n"
+        mock_s3_object.get_object_content.return_value = manifest_yaml
+        provider = S3StoreManager(region="us-east-1", bucket_name="bucket")
+
+        result = provider.get_project("my-project", NullDisplay())
+
+        self.assertEqual(result.project_id, "my-project")
+        self.assertEqual(result.file_count, 2)
+        self.assertEqual(result.last_modified, now)
+        self.assertEqual(result.template_name, "base-template")
+        self.assertEqual(result.template_version, "1.2.0")
+        self.assertEqual(result.engine, "terraform")
+        mock_s3_object.list_objects.assert_called_once_with(mock_boto3.client.return_value, "bucket", "my-project/")
+
+    @patch(f"{_MODULE}.s3_object")
+    @patch(f"{_MODULE}.boto3")
+    def test_returns_project_details_when_manifest_missing(self, mock_boto3: Mock, mock_s3_object: Mock) -> None:
+        now = datetime.now(tz=UTC)
+        mock_s3_object.list_objects.return_value = [_obj("my-project/project/f1.txt", 10, now)]
+        # Simulate NoSuchKey via the S3 client exception attribute
+        mock_s3_client = mock_boto3.client.return_value
+        no_such_key = type("NoSuchKey", (Exception,), {})
+        mock_s3_client.exceptions.NoSuchKey = no_such_key
+        mock_s3_object.get_object_content.side_effect = no_such_key()
+        provider = S3StoreManager(region="us-east-1", bucket_name="bucket")
+
+        result = provider.get_project("my-project", NullDisplay())
+
+        self.assertEqual(result.project_id, "my-project")
+        self.assertIsNone(result.template_name)
+        self.assertIsNone(result.template_version)
+        self.assertIsNone(result.engine)
+
+    @patch(f"{_MODULE}.s3_object")
+    @patch(f"{_MODULE}.boto3")
+    def test_raises_when_project_not_found(self, mock_boto3: Mock, mock_s3_object: Mock) -> None:
+        mock_s3_object.list_objects.return_value = []
+        provider = S3StoreManager(region="us-east-1", bucket_name="bucket")
+
+        with self.assertRaises(ProjectNotFoundInStoreError) as ctx:
+            provider.get_project("nonexistent", NullDisplay())
+
+        self.assertEqual(ctx.exception.project_id, "nonexistent")
+        self.assertEqual(ctx.exception.store_type, "s3-only")
+        self.assertEqual(ctx.exception.store_id, "bucket")
+
+    @patch(f"{_MODULE}.s3_bucket")
+    @patch(f"{_MODULE}.boto3")
+    def test_raises_when_store_not_initialized(self, mock_boto3: Mock, mock_s3_bucket: Mock) -> None:
+        mock_s3_bucket.find_buckets_by_tag.return_value = []
+        provider = S3StoreManager(region="us-east-1")
+
+        with self.assertRaises(ProjectStoreNotFoundError):
+            provider.get_project("my-project", NullDisplay())
 
 
 class TestListProjects(unittest.TestCase):
@@ -293,8 +362,10 @@ class TestListProjects(unittest.TestCase):
         self.assertEqual(result[1].project_id, "project-b")
         self.assertEqual(result[1].file_count, 0)
 
+    @patch(f"{_MODULE}.s3_bucket")
     @patch(f"{_MODULE}.boto3")
-    def test_raises_when_store_not_initialized(self, mock_boto3: Mock) -> None:
+    def test_raises_when_store_not_initialized(self, mock_boto3: Mock, mock_s3_bucket: Mock) -> None:
+        mock_s3_bucket.find_buckets_by_tag.return_value = []
         provider = S3StoreManager(region="us-east-1")
 
         with self.assertRaises(ProjectStoreNotFoundError):
@@ -355,8 +426,10 @@ class TestDeleteProject(unittest.TestCase):
 
         mock_s3_object.delete_objects.assert_not_called()
 
+    @patch(f"{_MODULE}.s3_bucket")
     @patch(f"{_MODULE}.boto3")
-    def test_raises_when_store_not_initialized(self, mock_boto3: Mock) -> None:
+    def test_raises_when_store_not_initialized(self, mock_boto3: Mock, mock_s3_bucket: Mock) -> None:
+        mock_s3_bucket.find_buckets_by_tag.return_value = []
         provider = S3StoreManager(region="us-east-1")
 
         with self.assertRaises(ProjectStoreNotFoundError):
@@ -385,3 +458,15 @@ class TestDeleteProject(unittest.TestCase):
 
         with self.assertRaises(ProviderPermissionError):
             provider.delete_project("proj", NullDisplay())
+
+
+class TestGetUserIdentity(unittest.TestCase):
+    @patch(f"{_MODULE}.sts_identity")
+    @patch(f"{_MODULE}.boto3")
+    def test_returns_caller_arn(self, mock_boto3: Mock, mock_sts_identity: Mock) -> None:
+        mock_sts_identity.get_caller_arn.return_value = "arn:aws:iam::123456789012:user/jeff"
+        provider = S3StoreManager(region="us-east-1", bucket_name="bucket")
+
+        result = provider.get_user_identity()
+
+        self.assertEqual(result, "arn:aws:iam::123456789012:user/jeff")

@@ -14,6 +14,7 @@ from jupyter_deploy.cli.history_app import history_app
 from jupyter_deploy.cli.host_app import host_app
 from jupyter_deploy.cli.organization_app import organization_app
 from jupyter_deploy.cli.progress_display import ProgressDisplayManager
+from jupyter_deploy.cli.projects_app import projects_app
 from jupyter_deploy.cli.servers_app import servers_app
 from jupyter_deploy.cli.simple_display import SimpleDisplayManager
 from jupyter_deploy.cli.teams_app import teams_app
@@ -49,6 +50,7 @@ class JupyterDeployCliRunner:
         self.app.add_typer(organization_app, name="organization")
         self.app.add_typer(host_app, name="host")
         self.app.add_typer(history_app, name="history")
+        self.app.add_typer(projects_app, name="projects")
 
     def _setup_basic_commands(self) -> None:
         """Register the basic commands."""
@@ -96,6 +98,22 @@ def init(
             help="Overwrite the project directory instead of failing when the directory is not empty.",
         ),
     ] = False,
+    restore_project_id: Annotated[
+        str | None,
+        typer.Option(
+            "--restore-project",
+            help="Restore a project from the remote store instead of creating a new one. "
+            "Pass the project ID to restore.",
+        ),
+    ] = None,
+    restore_store_type: Annotated[
+        StoreType | None,
+        typer.Option("--store-type", help="Type of the remote store (required with --restore-project)."),
+    ] = None,
+    restore_store_id: Annotated[
+        str | None,
+        typer.Option("--store-id", help="ID of a specific store to restore from."),
+    ] = None,
 ) -> None:
     """Initialize a project directory containing the specified infrastructure-as-code template.
 
@@ -105,66 +123,114 @@ def init(
     You must specify a project path which must be a directory. If such a directory is not empty,
     the command will fail unless you passed the `--overwrite` or `-o` flag. `--overwrite` will prompt
     for confirmation before deleting existing content.
+
+    Alternatively, use --restore-project to restore a project from a remote store.
     """
     if path is None:
         init_help_cmds = ["jupyter", "deploy", "init", "--help"]
         subprocess.run(init_help_cmds)
-        return
+        raise typer.Exit(code=1)
 
     console = Console()
     with handle_cli_errors(console):
-        project = InitHandler(
-            project_dir=path,
-            engine=engine,
-            provider=provider,
-            infrastructure=infrastructure,
-            template=template,
+        if restore_project_id:
+            _init_from_store(console, path, restore_project_id, restore_store_type, restore_store_id)
+        else:
+            _init_from_template(console, path, engine, provider, infrastructure, template, overwrite)
+
+
+def _init_from_template(
+    console: Console,
+    path: str,
+    engine: EngineType,
+    provider: ProviderType,
+    infrastructure: InfrastructureType,
+    template: str,
+    overwrite: bool,
+) -> None:
+    project = InitHandler(
+        project_dir=path,
+        engine=engine,
+        provider=provider,
+        infrastructure=infrastructure,
+        template=template,
+    )
+
+    if not project.may_export_to_project_path():
+        if not overwrite:
+            console.line()
+            console.print(f":x: The directory {project.project_path} is not empty, aborting.", style="red")
+            console.line()
+            console.print(":bulb: To force this operation, use option: [bold cyan]--overwrite[/]")
+            return
+
+        console.line()
+        console.print(f":warning: The target directory {project.abs_project_path} is not empty.", style="yellow")
+        console.line()
+        console.print(
+            ":warning: Initiating the project may overwrite existing files, are you sure you want to proceed?",
+            style="yellow",
         )
 
-        if not project.may_export_to_project_path():
-            if not overwrite:
-                console.line()
-                console.print(f":x: The directory {project.project_path} is not empty, aborting.", style="red")
-                console.line()
-                console.print(":bulb: To force this operation, use option: [bold cyan]--overwrite[/]")
-                return
-            else:
-                console.line()
-                console.print(
-                    f":warning: The target directory {project.abs_project_path} is not empty.", style="yellow"
-                )
-                console.line()
-                console.print(
-                    ":warning: Initiating the project may overwrite existing files, are you sure you want to proceed?",
-                    style="yellow",
-                )
+        if not typer.confirm(""):
+            console.line()
+            console.print(f"Left files under {project.project_path} untouched.\n")
+            typer.Abort()
+            return
 
-                overwrite_existing = typer.confirm("")
+    project.setup()
 
-                if not overwrite_existing:
-                    console.line()
-                    console.print(f"Left files under {project.project_path} untouched.\n")
-                    typer.Abort()
-                    return
+    console.print(f"Created start-up project files at: {project.project_path.absolute()}", style="bold green")
+    console.line()
 
-        project.setup()
+    if Path.cwd().absolute() != project.project_path.absolute():
+        console.print(
+            ":bulb: To configure the project with default variables, "
+            f"change your working directory to [bold]{project.project_path}[/] "
+            "then run: [bold cyan]jd config[/]",
+        )
+    else:
+        console.print(":bulb: To configure the project with default variables, run: [bold cyan]jd config[/]")
 
-        console.print(f"Created start-up project files at: {project.project_path.absolute()}", style="bold green")
-        console.line()
+    console.print(":bulb: To find out which variables are available for this template, use: [bold cyan]--help[/]")
+    console.print(":bulb: To set or override a specific variable, use: [bold cyan]--variable-name VARVALUE[/]")
+    console.print(":bulb: To ignore [italic]all[/] default values, use: [bold cyan]--defaults none[/]")
+    console.line()
 
-        if Path.cwd().absolute() != project.project_path.absolute():
-            console.print(
-                ":bulb: To configure the project with default variables, "
-                f"change your working directory to [bold]{project.project_path}[/] "
-                "then run: [bold cyan]jd config[/]",
-            )
-        else:
-            console.print(":bulb: To configure the project with default variables, run: [bold cyan]jd config[/]")
 
-        console.print(":bulb: To find out which variables are available for this template, use: [bold cyan]--help[/]")
-        console.print(":bulb: To set or override a specific variable, use: [bold cyan]--variable-name VARVALUE[/]")
-        console.print(":bulb: To ignore [italic]all[/] default values, use: [bold cyan]--defaults none[/]")
-        console.line()
+def _init_from_store(
+    console: Console,
+    path: str,
+    project_id: str,
+    store_type: StoreType | None,
+    store_id: str | None,
+) -> None:
+    if not store_type:
+        console.print(":x: --store-type is required with --restore-project.", style="bold red")
+        raise typer.Exit(code=1)
+
+    display_manager = SimpleDisplayManager(console=console, pass_through=False)
+
+    with display_manager.spinner(f"Restoring project '{project_id}'..."):
+        abs_path = InitHandler.restore(
+            project_dir=path,
+            project_id=project_id,
+            store_type=store_type,
+            display_manager=display_manager,
+            store_id=store_id,
+        )
+
+    console.print(f":white_check_mark: Project restored to: {abs_path}", style="bold green")
+    console.line()
+
+    if Path.cwd().absolute() != abs_path.absolute():
+        console.print(
+            f":bulb: To reconfigure, change your working directory to [bold]{path}[/], "
+            "then run: [bold cyan]jd config[/]",
+        )
+    else:
+        console.print(":bulb: To reconfigure, run: [bold cyan]jd config[/]")
+    console.line()
 
 
 @runner.app.command()
@@ -472,9 +538,23 @@ def down(
                 # Log cleanup failed, but main operation succeeded - warn and continue
                 console.print(f":warning: log clean up failed: {e}", style="yellow")
 
+        if verbose:
+            console.print("Updating the remote store...")
+            push_result = handler.push_to_store()
+        else:
+            with display_manager.spinner("Updating remote store..."):
+                push_result = handler.push_to_store()
+
         console.print("Infrastructure resources destroyed successfully.", style="green")
         console.line()
         console.print(":bulb: To view the full logs, run: [bold cyan]jd history show[/]")
+        if push_result:
+            delete_cmd = f"jd projects delete {push_result.project_id} --store-type {push_result.store_type}"
+            if push_result.store_id:
+                delete_cmd += f" --store-id {push_result.store_id}"
+            console.print(
+                f":bulb: To delete the project from the remote store, run: [bold cyan]{delete_cmd}[/]",
+            )
 
 
 @runner.app.command()
@@ -714,7 +794,7 @@ def show(
 
         if store_type:
             resolved = handler.get_resolved_store_type()
-            result = "None" if resolved is None else resolved.value
+            result = "N/A" if resolved is None else resolved.value
             if text:
                 console.print(result)
             else:
@@ -723,7 +803,7 @@ def show(
 
         if store_id:
             resolved_id = handler.get_resolved_store_id()
-            result = "None" if resolved_id is None else resolved_id
+            result = "N/A" if resolved_id is None else resolved_id
             if text:
                 console.print(result)
             else:
@@ -779,6 +859,10 @@ def show(
 
             resolved_store_id = handler.get_resolved_store_id()
             info_table.add_row("Store ID", resolved_store_id if resolved_store_id else "N/A")
+
+            # Read from local cache only; computing from outputs is too slow for --info display.
+            resolved_project_id = handler.get_project_id_from_config()
+            info_table.add_row("Project ID", resolved_project_id if resolved_project_id else "N/A")
 
             console.print(info_table)
             console.line()

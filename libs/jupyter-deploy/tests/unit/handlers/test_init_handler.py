@@ -1,8 +1,10 @@
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, Mock, patch
 
 from jupyter_deploy.engine.enum import EngineType
+from jupyter_deploy.engine.supervised_execution import NullDisplay
+from jupyter_deploy.enum import StoreType
 from jupyter_deploy.handlers.init_handler import InitHandler
 from jupyter_deploy.infrastructure.enum import AWSInfrastructureType
 from jupyter_deploy.provider.enum import ProviderType
@@ -263,3 +265,36 @@ class TestInitHandler(unittest.TestCase):
         )
         mock_docs_generator.generate_gitignore.assert_called_once()
         mock_docs_generator.generate_agent_md.assert_called_once()
+
+
+class TestInitHandlerRestore(unittest.TestCase):
+    @patch("jupyter_deploy.handlers.init_handler.StoreManagerFactory")
+    def test_restore_pulls_from_store(self, mock_factory: Mock) -> None:
+        mock_store_manager = Mock()
+        mock_factory.get_manager.return_value = mock_store_manager
+
+        result = InitHandler.restore(
+            project_dir="/tmp/restored",
+            project_id="tpl-abc123",
+            store_type=StoreType.S3_ONLY,
+            display_manager=NullDisplay(),
+        )
+
+        mock_factory.get_manager.assert_called_once_with(store_type=StoreType.S3_ONLY, store_id=None)
+        mock_store_manager.pull.assert_called_once_with("tpl-abc123", Path("/tmp/restored"), ANY)
+        self.assertEqual(result, Path("/tmp/restored").resolve())
+
+    @patch("jupyter_deploy.handlers.init_handler.StoreManagerFactory")
+    def test_restore_passes_store_id(self, mock_factory: Mock) -> None:
+        mock_store_manager = Mock()
+        mock_factory.get_manager.return_value = mock_store_manager
+
+        InitHandler.restore(
+            project_dir="/tmp/restored",
+            project_id="tpl-abc123",
+            store_type=StoreType.S3_ONLY,
+            display_manager=NullDisplay(),
+            store_id="my-bucket",
+        )
+
+        mock_factory.get_manager.assert_called_once_with(store_type=StoreType.S3_ONLY, store_id="my-bucket")

@@ -487,8 +487,24 @@ class TestShowHandler(unittest.TestCase):
 
     # --- get_project_id tests ---
 
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_store_config")
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
-    def test_get_project_id_returns_computed_id(self, mock_retrieve_manifest: Mock) -> None:
+    def test_get_project_id_from_store_config(
+        self, mock_retrieve_manifest: Mock, mock_retrieve_store_config: Mock
+    ) -> None:
+        mock_retrieve_manifest.return_value = self.get_mock_manifest()
+        mock_retrieve_store_config.return_value = JupyterDeployStoreConfigV1(project_id="tf-aws-ec2-base-cached-001")
+
+        handler = ShowHandler()
+        result = handler.get_project_id()
+
+        self.assertEqual(result, "tf-aws-ec2-base-cached-001")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_store_config", return_value=None)
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    def test_get_project_id_returns_computed_id(
+        self, mock_retrieve_manifest: Mock, mock_retrieve_store_config: Mock
+    ) -> None:
         mock_retrieve_manifest.return_value = self.get_mock_manifest()
         handler = ShowHandler()
 

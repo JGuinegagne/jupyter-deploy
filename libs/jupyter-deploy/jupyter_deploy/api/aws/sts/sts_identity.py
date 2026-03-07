@@ -11,13 +11,18 @@ PARTITION_LEAD_REGIONS: dict[str, str] = {
 }
 
 
+def get_caller_arn(sts_client: STSClient) -> str:
+    """Return the ARN of the caller's identity via STS:GetCallerIdentity."""
+    identity = sts_client.get_caller_identity()
+    return identity["Arn"]
+
+
 def get_partition(sts_client: STSClient) -> str:
     """Return the AWS partition of the caller's identity.
 
     Calls STS:GetCallerIdentity and extracts the partition from the ARN.
     """
-    identity = sts_client.get_caller_identity()
-    return identity["Arn"].split(":")[1]
+    return get_caller_arn(sts_client).split(":")[1]
 
 
 def get_partition_lead_region(sts_client: STSClient) -> str:

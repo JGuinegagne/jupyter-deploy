@@ -91,9 +91,15 @@ class ConfigHandler(BaseProjectHandler):
         return self._handler.reset_recorded_secrets()
 
     def reset_store_id(self) -> None:
-        """Clear the store-id from .jd/store.yaml, preserving store-type."""
+        """Clear the store-id from .jd/store.yaml, preserving store-type and project-id."""
         store_type = self.get_store_type_from_config_or_manifest()
-        write_store_config(self.project_path, store_type=store_type.value if store_type else None, store_id=None)
+        project_id = self.get_project_id_from_config()
+        write_store_config(
+            self.project_path,
+            store_type=store_type.value if store_type else None,
+            store_id=None,
+            project_id=project_id,
+        )
 
     def ensure_store(
         self,
@@ -124,18 +130,31 @@ class ConfigHandler(BaseProjectHandler):
         # Resolve store id: CLI > config
         resolved_store_id = store_id if store_id else self.get_store_id_from_config()
 
+        # Preserve existing project-id across config rewrites
+        existing_project_id = self.get_project_id_from_config()
+
         # When store-id is set, verify the bucket exists rather than creating one
         if resolved_store_id is not None:
             store_manager = StoreManagerFactory.get_manager(store_type=resolved_store_type, store_id=resolved_store_id)
             store_info = store_manager.find_store()
-            write_store_config(self.project_path, store_type=resolved_store_type, store_id=resolved_store_id)
+            write_store_config(
+                self.project_path,
+                store_type=resolved_store_type,
+                store_id=resolved_store_id,
+                project_id=existing_project_id,
+            )
             return store_info
 
         store_manager = StoreManagerFactory.get_manager(store_type=resolved_store_type, store_id=resolved_store_id)
         store_info = store_manager.ensure_store(self.display_manager)
 
         # Persist to .jd/store.yaml so subsequent runs skip discovery
-        write_store_config(self.project_path, store_type=resolved_store_type, store_id=store_info.store_id)
+        write_store_config(
+            self.project_path,
+            store_type=resolved_store_type,
+            store_id=store_info.store_id,
+            project_id=existing_project_id,
+        )
 
         return store_info
 

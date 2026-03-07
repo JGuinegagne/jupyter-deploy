@@ -412,7 +412,9 @@ class TestConfigHandler(unittest.TestCase):
 
         mock_store_factory.get_manager.assert_called_once_with(store_type=StoreType.S3_DDB, store_id=None)
         mock_store_manager.ensure_store.assert_called_once()
-        mock_write_config.assert_called_once_with(ANY, store_type="s3-ddb", store_id="discovered-bucket")
+        mock_write_config.assert_called_once_with(
+            ANY, store_type="s3-ddb", store_id="discovered-bucket", project_id=None
+        )
         self.assertEqual(result, mock_store_info)
 
     @patch("jupyter_deploy.handlers.project.config_handler.write_store_config")
@@ -558,4 +560,4 @@ class TestConfigHandler(unittest.TestCase):
         handler = ConfigHandler(display_manager=NullDisplay())
         handler.reset_store_id()
 
-        mock_write_config.assert_called_once_with(ANY, store_type="s3-only", store_id=None)
+        mock_write_config.assert_called_once_with(ANY, store_type="s3-only", store_id=None, project_id=None)

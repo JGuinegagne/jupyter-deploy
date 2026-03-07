@@ -248,7 +248,7 @@ def test_show_store_id_returns_nonempty_value(e2e_deployment: EndToEndDeployment
     This test:
     1. Ensures deployment exists
     2. Queries store ID via jd show --store-id --text
-    3. Verifies the store ID is not empty and not "None"
+    3. Verifies the store ID is not empty and not "N/A"
     """
     e2e_deployment.ensure_deployed()
 
@@ -256,16 +256,16 @@ def test_show_store_id_returns_nonempty_value(e2e_deployment: EndToEndDeployment
     actual_store_id = result.stdout.strip()
 
     assert actual_store_id, "Store ID should not be empty on a deployed project"
-    assert actual_store_id != "None", "Store ID should not be 'None' on a deployed project"
+    assert actual_store_id != "N/A", "Store ID should not be 'N/A' on a deployed project"
 
 
-def test_show_info_includes_store_type_and_store_id(e2e_deployment: EndToEndDeployment) -> None:
-    """Test that jd show --info displays Store Type and Store ID rows.
+def test_show_info_includes_store_and_project_id(e2e_deployment: EndToEndDeployment) -> None:
+    """Test that jd show --info displays Store Type, Store ID, and Project ID rows.
 
     This test:
     1. Ensures deployment exists
     2. Runs jd show --info
-    3. Verifies output contains Store Type and Store ID rows with values (not N/A)
+    3. Verifies output contains Store Type, Store ID, and Project ID rows
     """
     e2e_deployment.ensure_deployed()
 
@@ -274,5 +274,6 @@ def test_show_info_includes_store_type_and_store_id(e2e_deployment: EndToEndDepl
     assert result.returncode == 0, f"jd show --info should succeed, got returncode {result.returncode}"
     assert "Store Type" in result.stdout, "Info table should contain Store Type row"
     assert "Store ID" in result.stdout, "Info table should contain Store ID row"
-    # On a deployed project with a configured store, values should not be N/A
-    assert "N/A" not in result.stdout, "Store Type and Store ID should not be N/A on a deployed project"
+    assert "Project ID" in result.stdout, "Info table should contain Project ID row"
+    # On a deployed project, all store fields should have values
+    assert "N/A" not in result.stdout, "Store Type, Store ID, and Project ID should not be N/A on a deployed project"

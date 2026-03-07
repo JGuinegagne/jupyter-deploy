@@ -4,10 +4,14 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
 
-from pydantic import BaseModel
+import yaml
+from pydantic import BaseModel, ValidationError
+from yaml.parser import ParserError
+from yaml.scanner import ScannerError
 
 from jupyter_deploy.engine.supervised_execution import DisplayManager
 from jupyter_deploy.enum import StoreType
+from jupyter_deploy.manifest import JupyterDeployManifest
 
 
 class StoreInfo(BaseModel):
@@ -26,6 +30,14 @@ class ProjectSummary(BaseModel):
     file_count: int
 
 
+class ProjectDetails(ProjectSummary):
+    """Detailed information about a project in the project store."""
+
+    template_name: str | None = None
+    template_version: str | None = None
+    engine: str | None = None
+
+
 class SyncResult(BaseModel):
     """Result of a sync operation."""
 
@@ -36,6 +48,14 @@ class SyncResult(BaseModel):
 
 class StoreManager(ABC):
     """Abstract interface for a remote project store manager."""
+
+    _cached_store_info: StoreInfo | None
+
+    def resolve_store(self) -> StoreInfo:
+        """Return the resolved StoreInfo, discovering the store if not yet resolved."""
+        if self._cached_store_info is None:
+            self._cached_store_info = self.find_store()
+        return self._cached_store_info
 
     @abstractmethod
     def find_store(self) -> StoreInfo:
@@ -73,9 +93,43 @@ class StoreManager(ABC):
         """
 
     @abstractmethod
+    def get_project(self, project_id: str, display_manager: DisplayManager) -> ProjectDetails:
+        """Return ProjectDetails for a specific project.
+
+        Template metadata fields (template_name, template_version, engine) may be None
+        if the remote manifest cannot be read or parsed.
+
+        Raises:
+            ProjectNotFoundInStoreError: If the project is not found in the store.
+        """
+
+    @abstractmethod
     def list_projects(self, display_manager: DisplayManager) -> list[ProjectSummary]:
         """Return a list of ProjectSummaries for all projects in the project store."""
 
     @abstractmethod
     def delete_project(self, project_id: str, display_manager: DisplayManager) -> None:
         """Delete all content of a project from the project store."""
+
+    @abstractmethod
+    def get_user_identity(self) -> str:
+        """Return an identifier for the current user (e.g. an IAM ARN)."""
+
+    @staticmethod
+    def _safe_parse_manifest(content: str) -> JupyterDeployManifest | None:
+        """Parse manifest YAML content and return a validated manifest.
+
+        Returns None if the content cannot be parsed or validated.
+        """
+        try:
+            data = yaml.safe_load(content)
+        except (ParserError, ScannerError):
+            return None
+
+        if not isinstance(data, dict):
+            return None
+
+        try:
+            return JupyterDeployManifest(**data)
+        except ValidationError:
+            return None

@@ -8,6 +8,7 @@ from jupyter_deploy.exceptions import InvalidStoreTypeError
 STORE_CONFIG_V1_KEYS_ORDER = [
     "store-type",
     "store-id",
+    "project-id",
 ]
 
 
@@ -15,6 +16,7 @@ class JupyterDeployStoreConfigV1(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
     store_type: str | None = Field(alias="store-type", default=None)
     store_id: str | None = Field(alias="store-id", default=None)
+    project_id: str | None = Field(alias="project-id", default=None)
 
     def get_store_type(self) -> StoreType:
         """Return the store type as an enum.

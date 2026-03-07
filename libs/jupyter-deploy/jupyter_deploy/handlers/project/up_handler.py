@@ -114,5 +114,10 @@ class UpHandler(BaseProjectHandler):
 
         store_manager.push(self.project_path, project_id, self.display_manager)
 
-        # Persist discovered store-id to .jd/store.yaml
-        write_store_config(self.project_path, store_type=store_type.value, store_id=store_info.store_id)
+        # Persist discovered store-id and project-id to .jd/store.yaml
+        write_store_config(
+            self.project_path,
+            store_type=store_type.value,
+            store_id=store_info.store_id,
+            project_id=project_id,
+        )

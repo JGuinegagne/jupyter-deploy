@@ -11,10 +11,19 @@ from jupyter_deploy.store_config import JupyterDeployStoreConfigV1
 
 
 class TestJupyterDeployStoreConfigV1(unittest.TestCase):
-    def test_parse_with_both_fields(self) -> None:
+    def test_parse_with_all_fields(self) -> None:
+        config = JupyterDeployStoreConfigV1(
+            **{"store-type": "s3-only", "store-id": "my-bucket", "project-id": "tpl-abc123"}
+        )  # type: ignore
+        self.assertEqual(config.store_type, "s3-only")
+        self.assertEqual(config.store_id, "my-bucket")
+        self.assertEqual(config.project_id, "tpl-abc123")
+
+    def test_parse_with_store_fields_only(self) -> None:
         config = JupyterDeployStoreConfigV1(**{"store-type": "s3-only", "store-id": "my-bucket"})  # type: ignore
         self.assertEqual(config.store_type, "s3-only")
         self.assertEqual(config.store_id, "my-bucket")
+        self.assertIsNone(config.project_id)
 
     def test_parse_with_store_type_only(self) -> None:
         config = JupyterDeployStoreConfigV1(**{"store-type": "s3-ddb"})  # type: ignore
@@ -25,6 +34,7 @@ class TestJupyterDeployStoreConfigV1(unittest.TestCase):
         config = JupyterDeployStoreConfigV1()
         self.assertIsNone(config.store_type)
         self.assertIsNone(config.store_id)
+        self.assertIsNone(config.project_id)
 
     def test_parse_tolerates_extra_fields(self) -> None:
         config = JupyterDeployStoreConfigV1(**{"store-type": "s3-only", "extra-field": "value"})  # type: ignore
@@ -49,9 +59,10 @@ class TestJupyterDeployStoreConfigV1(unittest.TestCase):
             config.get_store_type()
 
     def test_populate_by_name(self) -> None:
-        config = JupyterDeployStoreConfigV1(store_type="s3-only", store_id="my-bucket")
+        config = JupyterDeployStoreConfigV1(store_type="s3-only", store_id="my-bucket", project_id="tpl-abc")
         self.assertEqual(config.store_type, "s3-only")
         self.assertEqual(config.store_id, "my-bucket")
+        self.assertEqual(config.project_id, "tpl-abc")
 
 
 class TestRetrieveStoreConfig(unittest.TestCase):
@@ -82,14 +93,15 @@ class TestRetrieveStoreConfig(unittest.TestCase):
 class TestWriteStoreConfig(unittest.TestCase):
     @patch("jupyter_deploy.handlers.base_project_handler.fs_utils.write_yaml_file_with_comments")
     @patch("pathlib.Path.mkdir")
-    def test_writes_config_with_both_fields(self, mock_mkdir: Mock, mock_write: Mock) -> None:
-        write_store_config(Path("/mock/project"), store_type="s3-only", store_id="my-bucket")
+    def test_writes_config_with_all_fields(self, mock_mkdir: Mock, mock_write: Mock) -> None:
+        write_store_config(Path("/mock/project"), store_type="s3-only", store_id="my-bucket", project_id="tpl-abc")
         mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
         mock_write.assert_called_once()
         call_args = mock_write.call_args
         content = call_args[1]["content"] if "content" in call_args[1] else call_args[0][1]
         self.assertEqual(content["store-type"], "s3-only")
         self.assertEqual(content["store-id"], "my-bucket")
+        self.assertEqual(content["project-id"], "tpl-abc")
 
     @patch("jupyter_deploy.handlers.base_project_handler.fs_utils.write_yaml_file_with_comments")
     @patch("pathlib.Path.mkdir")
@@ -99,6 +111,7 @@ class TestWriteStoreConfig(unittest.TestCase):
         content = call_args[1]["content"] if "content" in call_args[1] else call_args[0][1]
         self.assertEqual(content["store-type"], "s3-only")
         self.assertNotIn("store-id", content)
+        self.assertNotIn("project-id", content)
 
 
 class TestGetStoreTypeFromConfig(unittest.TestCase):
