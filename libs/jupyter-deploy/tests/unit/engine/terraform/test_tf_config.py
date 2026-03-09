@@ -675,7 +675,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         self.assertEqual(mock_write_call[1][0], TestTerraformConfigHandler.MOCK_RECORD_SECRETS_PATH)
         self.assertIn('secret1 = "nuclear-codes"\n', mock_write_call[1][1])
 
-        mock_vars_fns["sync_project_variables_config"].assert_called_once_with({"secret1": "nuclear-codes"})
+        mock_vars_fns["sync_project_variables_config"].assert_not_called()
 
     @patch("jupyter_deploy.engine.terraform.tf_plan_metadata.save_plan_metadata")
     @patch("jupyter_deploy.engine.terraform.tf_plan.extract_resource_counts_from_plan")
@@ -741,9 +741,7 @@ class TestTerraformConfigHandler(unittest.TestCase):
         self.assertEqual(mock_write_secrets_call[1][0], TestTerraformConfigHandler.MOCK_RECORD_SECRETS_PATH)
         self.assertIn('secret1 = "nuclear-codes"\n', mock_write_secrets_call[1][1])
 
-        mock_vars_fns["sync_project_variables_config"].assert_called_once_with(
-            {"var1": 1, "var2": "two", "secret1": "nuclear-codes"}
-        )
+        mock_vars_fns["sync_project_variables_config"].assert_called_once_with({"var1": 1, "var2": "two"})
 
     @patch("jupyter_deploy.fs_utils.write_inline_file_content")
     @patch("jupyter_deploy.cmd_utils.run_cmd_and_capture_output")

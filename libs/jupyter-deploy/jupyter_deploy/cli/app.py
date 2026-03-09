@@ -377,6 +377,7 @@ def config(
             if verbose:
                 console.rule("[bold]jupyter-deploy:[/] recording input values")
                 handler.record(record_vars=True, record_secrets=record_secrets)
+                handler.mask_secrets()
                 if record_secrets:
                     console.print(":floppy_disk: Recorded configuration, variables and secrets")
                 else:
@@ -385,6 +386,7 @@ def config(
                 # Show spinner during record phase in non-verbose mode
                 with display_manager.spinner("Recording configuration..."):
                     handler.record(record_vars=True, record_secrets=record_secrets)
+                    handler.mask_secrets()
                     if record_secrets:
                         display_manager.info(":floppy_disk: Recorded configuration, variables and secrets")
                     else:

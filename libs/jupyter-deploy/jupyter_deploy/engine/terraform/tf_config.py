@@ -270,7 +270,7 @@ class TerraformConfigHandler(EngineConfigHandler):
             secrets_file_lines.extend(tf_plan.format_plan_variables(secrets))
             fs_utils.write_inline_file_content(secrets_file_path, secrets_file_lines)
 
-            vardefs.update({k: v.value for k, v in secrets.items()})
+            # Do not write secrets back to variables.yaml — they will be masked separately.
 
-        if record_vars or record_secrets:
+        if record_vars:
             self.variables_handler.sync_project_variables_config(vardefs)

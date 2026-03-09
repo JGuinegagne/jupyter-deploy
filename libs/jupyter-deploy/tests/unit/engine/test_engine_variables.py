@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 from pydantic import ValidationError
 
 from jupyter_deploy import constants
+from jupyter_deploy.constants import MASKED_SECRET_VALUE
 from jupyter_deploy.engine.engine_variables import EngineVariablesHandler
 from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
@@ -212,6 +213,27 @@ class TestSyncEngineVarfilesWithProjectVariablesConfig(unittest.TestCase):
             # Verify - None values should be skipped
             mock_update_records.assert_any_call({"var1": "value1", "var5": "value5"})
             mock_update_records.assert_any_call({"var3": "value3"}, sensitive=True)
+
+    def test_skips_masked_secret_values(self) -> None:
+        project_path = Path("/mock/project")
+        manifest = Mock()
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
+
+        with patch.object(handler, "update_variable_records") as mock_update_records:
+            mock_config = Mock(spec=JupyterDeployVariablesConfig)
+            mock_config.required = {"var1": "value1"}
+            mock_config.required_sensitive = {"secret1": MASKED_SECRET_VALUE, "secret2": "real-value"}
+            mock_config.overrides = {}
+
+            handler._variables_config = mock_config
+
+            handler.sync_engine_varfiles_with_project_variables_config()
+
+            # Masked secrets should be skipped, real values should pass through
+            mock_update_records.assert_any_call({"var1": "value1"})
+            mock_update_records.assert_any_call({"secret2": "real-value"}, sensitive=True)
 
     def test_calls_child_methods_on_variables_and_secrets(self) -> None:
         # Setup
@@ -582,6 +604,104 @@ class TestResetRecordedVariables(unittest.TestCase):
         # Execute and verify that the exception propagates
         with self.assertRaises(OSError):
             handler.reset_recorded_variables()
+
+
+class TestMaskSecrets(unittest.TestCase):
+    @patch("jupyter_deploy.fs_utils.write_yaml_file_with_comments")
+    def test_replaces_all_sensitive_values_with_mask(self, mock_write: Mock) -> None:
+        project_path = Path("/mock/project")
+        manifest = Mock()
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
+
+        mock_config = Mock(spec=JupyterDeployVariablesConfig)
+        mock_config.required = {"var1": "value1"}
+        mock_config.required_sensitive = {"secret1": "real-secret", "secret2": "another-secret"}
+        mock_config.overrides = {"var3": "value3-override"}
+        mock_config.defaults = {"var3": "value3-default"}
+        handler._variables_config = mock_config
+
+        handler.mask_secrets()
+
+        mock_write.assert_called_once()
+        written_data = mock_write.call_args[0][1]
+
+        # Sensitive values should be masked
+        self.assertEqual(
+            written_data["required_sensitive"], {"secret1": MASKED_SECRET_VALUE, "secret2": MASKED_SECRET_VALUE}
+        )
+        # Non-sensitive values should be preserved
+        self.assertEqual(written_data["required"], {"var1": "value1"})
+        self.assertEqual(written_data["overrides"], {"var3": "value3-override"})
+        self.assertEqual(written_data["defaults"], {"var3": "value3-default"})
+
+    @patch("jupyter_deploy.fs_utils.write_yaml_file_with_comments")
+    def test_masks_none_values_too(self, mock_write: Mock) -> None:
+        project_path = Path("/mock/project")
+        manifest = Mock()
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
+
+        mock_config = Mock(spec=JupyterDeployVariablesConfig)
+        mock_config.required = {}
+        mock_config.required_sensitive = {"secret1": None, "secret2": "value"}
+        mock_config.overrides = {}
+        mock_config.defaults = {}
+        handler._variables_config = mock_config
+
+        handler.mask_secrets()
+
+        mock_write.assert_called_once()
+        written_data = mock_write.call_args[0][1]
+        self.assertEqual(
+            written_data["required_sensitive"], {"secret1": MASKED_SECRET_VALUE, "secret2": MASKED_SECRET_VALUE}
+        )
+
+    @patch("jupyter_deploy.fs_utils.write_yaml_file_with_comments")
+    def test_updates_cached_config(self, mock_write: Mock) -> None:
+        project_path = Path("/mock/project")
+        manifest = Mock()
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
+
+        mock_config = Mock(spec=JupyterDeployVariablesConfig)
+        mock_config.required = {}
+        mock_config.required_sensitive = {"secret1": "real-value"}
+        mock_config.overrides = {}
+        mock_config.defaults = {}
+        handler._variables_config = mock_config
+
+        handler.mask_secrets()
+
+        # Cached config should be updated with masked values
+        self.assertIsNotNone(handler._variables_config)
+        assert handler._variables_config is not None
+        self.assertEqual(handler._variables_config.required_sensitive["secret1"], MASKED_SECRET_VALUE)
+
+    @patch("jupyter_deploy.fs_utils.write_yaml_file_with_comments")
+    def test_writes_with_comments_and_key_order(self, mock_write: Mock) -> None:
+        project_path = Path("/mock/project")
+        manifest = Mock()
+        handler = DummyVariablesHandler(
+            project_path=project_path, project_manifest=manifest, display_manager=NullDisplay()
+        )
+
+        mock_config = Mock(spec=JupyterDeployVariablesConfig)
+        mock_config.required = {}
+        mock_config.required_sensitive = {}
+        mock_config.overrides = {}
+        mock_config.defaults = {}
+        handler._variables_config = mock_config
+
+        handler.mask_secrets()
+
+        mock_write.assert_called_once()
+        self.assertEqual(mock_write.call_args[0][0], project_path / constants.VARIABLES_FILENAME)
+        self.assertEqual(mock_write.call_args[1]["key_order"], VARIABLES_CONFIG_V1_KEYS_ORDER)
+        self.assertEqual(mock_write.call_args[1]["comments"], VARIABLES_CONFIG_V1_COMMENTS)
 
 
 class TestResetRecordedSecrets(unittest.TestCase):

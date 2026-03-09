@@ -561,3 +561,17 @@ class TestConfigHandler(unittest.TestCase):
         handler.reset_store_id()
 
         mock_write_config.assert_called_once_with(ANY, store_type="s3-only", store_id=None, project_id=None)
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("jupyter_deploy.engine.terraform.tf_config.TerraformConfigHandler")
+    def test_mask_secrets_delegates_to_variables_handler(
+        self, mock_tf_handler: Mock, mock_retrieve_manifest: Mock
+    ) -> None:
+        mock_retrieve_manifest.return_value = self.mock_manifest
+        tf_mock_handler_instance, _ = self.get_mock_handler_and_fns()
+        mock_tf_handler.return_value = tf_mock_handler_instance
+
+        handler = ConfigHandler(display_manager=NullDisplay())
+        handler.mask_secrets()
+
+        tf_mock_handler_instance.variables_handler.mask_secrets.assert_called_once()
