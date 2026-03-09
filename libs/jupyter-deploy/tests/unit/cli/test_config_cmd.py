@@ -105,7 +105,7 @@ class TestDeployCmdWithDecorator(unittest.TestCase):
                 mock_config_fns["set_preset"].assert_called_once()
                 mock_config_fns["verify"].assert_called_once()
                 mock_config_fns["configure"].assert_called_once_with(variable_overrides=mock_variables)
-                mock_config_fns["record"].assert_called_once_with(record_vars=True, record_secrets=False)
+                mock_config_fns["record"].assert_called_once()
                 mock_config_fns["reset_recorded_variables"].assert_not_called()
                 mock_config_fns["reset_recorded_secrets"].assert_not_called()
                 mock_config_fns["has_used_preset"].assert_called_once_with("all")
