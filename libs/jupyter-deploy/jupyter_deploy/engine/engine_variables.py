@@ -5,6 +5,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from jupyter_deploy import constants, fs_utils
+from jupyter_deploy.constants import MASKED_SECRET_VALUE
 from jupyter_deploy.engine.supervised_execution import DisplayManager
 from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
 from jupyter_deploy.exceptions import InvalidVariablesDotYamlError
@@ -136,12 +137,34 @@ class EngineVariablesHandler(ABC):
             varvalues[var_name] = var_value
 
         for sensitive_var_name, sensitive_var_value in sensitive.items():
-            if sensitive_var_value is None:
+            if sensitive_var_value is None or sensitive_var_value == MASKED_SECRET_VALUE:
                 continue
             sensitive_varvalues[sensitive_var_name] = sensitive_var_value
 
         self.update_variable_records(varvalues)
         self.update_variable_records(sensitive_varvalues, sensitive=True)
+
+    def mask_secrets(self) -> None:
+        """Rewrite variables.yaml replacing all required_sensitive values with the mask."""
+        curr_vars = self.variables_config
+        masked_sensitive = {k: MASKED_SECRET_VALUE for k in curr_vars.required_sensitive}
+
+        new_variables_config = JupyterDeployVariablesConfigV1(
+            schema_version=1,
+            required=curr_vars.required,
+            required_sensitive=masked_sensitive,
+            overrides=curr_vars.overrides,
+            defaults=curr_vars.defaults,
+        )
+
+        variables_config_path = self.project_path / constants.VARIABLES_FILENAME
+        fs_utils.write_yaml_file_with_comments(
+            variables_config_path,
+            new_variables_config.model_dump(),
+            key_order=VARIABLES_CONFIG_V1_KEYS_ORDER,
+            comments=VARIABLES_CONFIG_V1_COMMENTS,
+        )
+        self._variables_config = new_variables_config
 
     def get_variable_names_assigned_in_config(self) -> list[str]:
         """Return the variable names for which the user specified a value in `variables.yaml`."""

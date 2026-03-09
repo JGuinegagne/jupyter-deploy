@@ -164,6 +164,10 @@ class ConfigHandler(BaseProjectHandler):
         """Set inputs of the project, calls the engine, return CompletionContext."""
         return self._handler.configure(preset_name=self.preset_name, variable_overrides=variable_overrides)
 
-    def record(self, record_vars: bool = False, record_secrets: bool = False) -> None:
-        """Save the values of the variables to disk in the project dir."""
-        self._handler.record(record_vars=record_vars, record_secrets=record_secrets)
+    def record(self) -> None:
+        """Save the values of the variables and secrets to disk in the project dir."""
+        self._handler.record()
+
+    def mask_secrets(self) -> None:
+        """Replace all sensitive variable values in variables.yaml with a mask."""
+        self._handler.variables_handler.mask_secrets()

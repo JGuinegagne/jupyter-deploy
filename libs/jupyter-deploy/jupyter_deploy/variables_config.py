@@ -15,6 +15,7 @@ VARIABLES_CONFIG_V1_COMMENTS: dict[str, list[str]] = {
     "required_sensitive": [
         "  # either assign values below",
         "  # or run 'jd config -s' to use the interactive experience",
+        "  # values entered here will be masked after running 'jd config'",
     ],
     "overrides": [
         "  # set variable values as <variable-name>: <variable-value>",

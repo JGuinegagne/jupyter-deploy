@@ -85,13 +85,13 @@ class EndToEndDeployment:
                     "Cannot run integration tests; referenced project does not exist "
                     f"at path: {self.suite_config.project_dir.absolute()}"
                 )
-            # Run jd config -s to ensure the engine is initialized in this
+            # Run jd config to ensure the engine is initialized in this
             # environment. The host and the test container may run different
             # terraform versions, and with a remote backend (e.g. backend.tf
             # for S3), terraform requires re-initialization to connect.
             # With a local backend this is a no-op since terraform can read
             # the state file directly regardless of version.
-            self.cli.run_command(["jupyter-deploy", "config", "-s"])
+            self.cli.run_command(["jupyter-deploy", "config"])
             self._is_deployed = True
         # CASE 2: Deploy from Scratch, then Test against it
         else:
@@ -209,7 +209,7 @@ class EndToEndDeployment:
             raise RuntimeError("Jupyter Server failed to stop")
 
     def configure_project(self, cli: JDCli | None = None) -> None:
-        """Configure the E2E project by running jd config -s.
+        """Configure the E2E project by running jd config.
 
         Args:
             cli: Optional CLI instance to use. If provided, uses cli.project_dir as the project directory.
@@ -235,8 +235,8 @@ class EndToEndDeployment:
             # Prepare configuration (copies variables.yaml to default project dir)
             self.suite_config.prepare_configuration(self.config_name)
 
-        # Run jd config -s
-        use_cli.run_command(["jupyter-deploy", "config", "-s"])
+        # Run jd config
+        use_cli.run_command(["jupyter-deploy", "config"])
 
     def _deploy_e2e_project(self) -> None:
         """Calls jd init, jd config, jd up."""

@@ -66,6 +66,6 @@ class EngineConfigHandler(ABC):
         pass
 
     @abstractmethod
-    def record(self, record_vars: bool = False, record_secrets: bool = False) -> None:
-        """Save the values of the variables and/or secrets to disk in the project dir."""
+    def record(self) -> None:
+        """Save the values of the variables and secrets to disk in the project dir."""
         pass

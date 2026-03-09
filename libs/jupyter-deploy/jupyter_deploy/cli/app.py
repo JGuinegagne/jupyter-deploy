@@ -244,14 +244,6 @@ def config(
             help="Name of the preset defaults to use: 'all', 'none' or template-specific preset names.",
         ),
     ] = "all",
-    record_secrets: Annotated[
-        bool,
-        typer.Option(
-            "--record-secrets",
-            "-s",
-            help="Record the values of variables marked 'sensitive'.",
-        ),
-    ] = False,
     reset: Annotated[
         bool, typer.Option("--reset", "-r", help="Delete previously recorded variables and secrets.")
     ] = False,
@@ -286,8 +278,7 @@ def config(
     The `config` command will remember your variable values so that you do not need to
     specify them again next time you run `config`.
 
-    You can reset these recorded values with `--reset` or `-r`. Sensitive variables do not
-    get recorded unless you pass `--record-secrets` or `-s`.
+    You can reset these recorded values with `--reset` or `-r`.
 
     You can specify where to save the planned change with `--output-file` or `-f`.
     """
@@ -376,19 +367,15 @@ def config(
 
             if verbose:
                 console.rule("[bold]jupyter-deploy:[/] recording input values")
-                handler.record(record_vars=True, record_secrets=record_secrets)
-                if record_secrets:
-                    console.print(":floppy_disk: Recorded configuration, variables and secrets")
-                else:
-                    console.print(":floppy_disk: Recorded configuration and variables")
+                handler.record()
+                handler.mask_secrets()
+                console.print(":floppy_disk: Recorded configuration, variables and secrets")
             else:
                 # Show spinner during record phase in non-verbose mode
                 with display_manager.spinner("Recording configuration..."):
-                    handler.record(record_vars=True, record_secrets=record_secrets)
-                    if record_secrets:
-                        display_manager.info(":floppy_disk: Recorded configuration, variables and secrets")
-                    else:
-                        display_manager.info(":floppy_disk: Recorded configuration and variables")
+                    handler.record()
+                    handler.mask_secrets()
+                    display_manager.info(":floppy_disk: Recorded configuration, variables and secrets")
 
             # finally, display a message to the user if config ignored the template defaults
             # in favor of the recorded variables, with instructions on how to change this behavior.

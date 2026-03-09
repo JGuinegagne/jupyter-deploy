@@ -88,7 +88,7 @@ class TestConfigCommand(unittest.TestCase):
         mock_config_fns["verify"].assert_called_once()
         mock_config_fns["ensure_store"].assert_called_once()
         mock_config_fns["configure"].assert_called_with(variable_overrides={})
-        mock_config_fns["record"].assert_called_once_with(record_vars=True, record_secrets=False)
+        mock_config_fns["record"].assert_called_once()
         mock_config_fns["reset_recorded_variables"].assert_not_called()
         mock_config_fns["reset_recorded_secrets"].assert_not_called()
         mock_config_fns["has_used_preset"].assert_called_with("all")
@@ -289,7 +289,7 @@ class TestConfigCommand(unittest.TestCase):
         mock_config_fns["reset_recorded_secrets"].assert_called_once()
         mock_config_fns["verify"].assert_called_once()
         mock_config_fns["configure"].assert_called_once()
-        mock_config_fns["record"].assert_called_once_with(record_vars=True, record_secrets=False)
+        mock_config_fns["record"].assert_called_once()
         mock_config_fns["has_used_preset"].assert_called_once()
 
     @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
@@ -307,7 +307,7 @@ class TestConfigCommand(unittest.TestCase):
         mock_config_fns["has_recorded_variables"].assert_not_called()
         mock_config_fns["validate_preset"].assert_called_once_with("all")
         mock_config_fns["set_preset"].assert_called_once_with("all")
-        mock_config_fns["record"].assert_called_once_with(record_vars=True, record_secrets=False)
+        mock_config_fns["record"].assert_called_once()
         mock_config_fns["reset_recorded_variables"].assert_called_once()
         mock_config_fns["reset_recorded_secrets"].assert_called_once()
         mock_config_fns["has_used_preset"].assert_called_once()
@@ -336,36 +336,6 @@ class TestConfigCommand(unittest.TestCase):
         # Verify
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(call_order, ["reset_vars", "reset_secrets", "ensure_store", "configure", "record"])
-
-    @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
-    def test_config_records_secrets_when_the_user_asks(self, mock_config_handler: Mock) -> None:
-        mock_config_handler_instance, mock_config_fns = self.get_mock_config_handler()
-        mock_config_handler.return_value = mock_config_handler_instance
-
-        # Act
-        runner = CliRunner()
-        result = runner.invoke(app_runner.app, ["config", "--record-secrets"])
-
-        # Verify
-        self.assertEqual(result.exit_code, 0)
-        mock_config_fns["record"].assert_called_once_with(record_vars=True, record_secrets=True)
-        mock_config_fns["reset_recorded_variables"].assert_not_called()
-        mock_config_fns["reset_recorded_secrets"].assert_not_called()
-
-    @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
-    def test_config_accept_s_flag_to_record_secrets(self, mock_config_handler: Mock) -> None:
-        mock_config_handler_instance, mock_config_fns = self.get_mock_config_handler()
-        mock_config_handler.return_value = mock_config_handler_instance
-
-        # Act
-        runner = CliRunner()
-        result = runner.invoke(app_runner.app, ["config", "-s"])
-
-        # Verify
-        self.assertEqual(result.exit_code, 0)
-        mock_config_fns["record"].assert_called_once_with(record_vars=True, record_secrets=True)
-        mock_config_fns["reset_recorded_variables"].assert_not_called()
-        mock_config_fns["reset_recorded_secrets"].assert_not_called()
 
     @patch("jupyter_deploy.handlers.project.config_handler.ConfigHandler")
     def test_config_skip_verify(self, mock_config_handler: Mock) -> None:
