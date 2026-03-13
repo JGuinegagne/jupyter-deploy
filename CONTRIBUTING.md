@@ -78,7 +78,9 @@ Integration tests (also called E2E tests) verify the entire deployment workflow,
 
 #### Setup
 
-The repository includes a containerized setup for running E2E tests. Each template has its own E2E image definition under `libs/<template>/tests/e2e/image/`. This ensures consistent dependencies and avoids GLIBC compatibility issues.
+The repository includes a containerized setup for running E2E tests. The E2E container image
+(Dockerfile, docker-compose.yml) is bundled in the `pytest-jupyter-deploy` plugin package and
+shared across all templates. It includes Python, Terraform, AWS CLI, and Playwright.
 
 Requirements:
 - Docker or Finch installed (automatically detected)
@@ -96,17 +98,21 @@ First-time setup:
 just e2e-up
 ```
 
-**Note**: The E2E image copies project files and installs dependencies during build (excluding `.venv`). The `.auth/` directory is mounted at runtime to persist authentication state across container restarts. The image is built automatically by docker-compose on first `just e2e-up`.
+Project files are synced into the container at runtime via `just e2e-sync` (called automatically by `e2e-up`).
+The `.auth/` directory is mounted at runtime to persist authentication state across container restarts.
 
-If you change dependencies in `pyproject.toml` or modify code, run `just e2e-sync`
+If you change dependencies in `pyproject.toml` or modify code, run `just e2e-sync`.
 
 Run E2E tests against an existing deployment:
 ```bash
-# Run all E2E tests
-just test-e2e <project-dir>
+# Run all E2E tests (base template)
+just test-e2e-base <project-dir>
 
-# Run only specific application tests
-just test-e2e sandbox3 test_application
+# Run only specific tests
+just test-e2e-base sandbox3 test_application
+
+# Or use the generic command with an explicit template
+just test-e2e <project-dir> <test-filter> <options> <template>
 ```
 
 Full workflow (start container and run tests in one command):

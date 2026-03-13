@@ -76,6 +76,8 @@ Code: `./libs/pytest-jupyter-deploy`
 
 A set of pytest fixtures to run end-to-end tests for templates, referred to as "pytest plugin".
 
+It bundles the E2E container image (Dockerfile + docker-compose.yml) used by the justfile to run E2E tests. The image is template-independent — it provides base tooling (Python, Terraform, AWS CLI, Playwright) while template-specific tests are synced at runtime.
+
 # Development Workflow
 
 ## After code changes
@@ -112,8 +114,10 @@ E2E tests are located in `libs/<template-name>/tests/e2e/`
 E2E tests validate a complete deployment with actual CLI commands and browser-based interactions using `playwright`.
 
 The E2E tests run in a local container using `pytest` where `playwright` and webbrowsers are installed.
-- `just e2e-up` builds and starts the container.
+- `just e2e-up` builds and starts the container (image from `pytest-jupyter-deploy` plugin).
 - `just e2e-sync` synchronizes the workspace files with the container.
+- Per-template convenience wrappers: `just test-e2e-base`, `just auth-setup-base`.
+- Generic commands accept a `template` parameter: `just test-e2e <project-dir> <filter> <options> <template>`.
 Look at `./justfile` for more details.
 
 **IMPORTANT**: you CANNOT run any e2e directly with `uv run pytest E2E-TEST-SELECTOR`, you MUST use a `just` command.
@@ -144,22 +148,22 @@ In the case of the base template, this corresponds to the `terraform plan` opera
 To run the configuration test:
 1. ask the user for the `<project-dir>` to use
 2. if testing modified template files, ensure they've been copied to `<project-dir>`
-3. run `just test-e2e <project-dir> test_configuration`
+3. run `just test-e2e-base <project-dir> test_configuration`
 
 ## Authentication Setup for the base template
-Before running E2E tests, ask the user to run GitHub OAuth authentication: `just auth-setup <project-dir>`.
+Before running E2E tests, ask the user to run GitHub OAuth authentication: `just auth-setup-base <project-dir>`.
 This will:
 - Launch a browser for the user to authenticate with GitHub (with 2FA presumably)
 - Save authentication state to `.auth/github-oauth-state.json`
 - Allow automated tests to reuse the session
 
 ## Running E2E Tests
-Run E2E tests against an existing deployment: `just test-e2e <project-dir> TEST-SELECTOR`
+Run E2E tests against an existing deployment: `just test-e2e-base <project-dir> TEST-SELECTOR`
 
 Examples (for project-dir == sandbox3):
-- Run all E2E tests without mutating the project: `just test-e2e sandbox3 ""`
-- Run all E2E tests: `just test-e2e sandbox3 "" mutate=true`
-- Run specific test file: `just test-e2e sandbox3 test_users` (possibly needs `mutate=true`)
+- Run all E2E tests without mutating the project: `just test-e2e-base sandbox3 ""`
+- Run all E2E tests: `just test-e2e-base sandbox3 "" mutate=true`
+- Run specific test file: `just test-e2e-base sandbox3 test_users` (possibly needs `mutate=true`)
 
 **NOTE:** mutate tests are long, pipe to log stream to file: `just test-e2e <project-dir> TEST-SELECTOR mutate=true 2>&1 | tee results.log`   
 The test container saves screenshots of failed tests to `./test-results`, use the read image tool.

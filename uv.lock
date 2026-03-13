@@ -781,8 +781,6 @@ dependencies = [
     { name = "pytest-order" },
     { name = "pyyaml" },
     { name = "requests" },
-    { name = "types-pexpect" },
-    { name = "types-requests" },
 ]
 
 [package.optional-dependencies]
@@ -794,6 +792,8 @@ ui = [
 dev = [
     { name = "mypy" },
     { name = "ruff" },
+    { name = "types-pexpect" },
+    { name = "types-requests" },
     { name = "yamllint" },
 ]
 
@@ -805,8 +805,6 @@ requires-dist = [
     { name = "pytest-playwright", marker = "extra == 'ui'", specifier = ">=0.7.2" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "requests", specifier = ">=2.32.0" },
-    { name = "types-pexpect", specifier = ">=4.9.0" },
-    { name = "types-requests", specifier = ">=2.32.0" },
 ]
 provides-extras = ["ui"]
 
@@ -814,6 +812,8 @@ provides-extras = ["ui"]
 dev = [
     { name = "mypy", specifier = ">=1.15.0" },
     { name = "ruff", specifier = ">=0.11.8" },
+    { name = "types-pexpect", specifier = ">=4.9.0" },
+    { name = "types-requests", specifier = ">=2.32.0" },
     { name = "yamllint", specifier = ">=1.35.0" },
 ]
 
