@@ -17,6 +17,7 @@ on:
         options:
           - libs/jupyter-deploy
           - libs/jupyter-deploy-tf-aws-ec2-base
+          - libs/pytest-jupyter-deploy
 
 jobs:
   build:

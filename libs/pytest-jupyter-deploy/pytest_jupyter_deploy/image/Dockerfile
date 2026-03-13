@@ -1,4 +1,4 @@
-# E2E test container for jupyter-deploy-tf-aws-ec2-base template
+# E2E test container for jupyter-deploy templates
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 # Install system dependencies

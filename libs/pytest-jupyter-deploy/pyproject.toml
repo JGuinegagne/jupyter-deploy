@@ -47,7 +47,8 @@ packages = ["pytest_jupyter_deploy"]
 
 [project.urls]
 Homepage = "https://github.com/jupyter-infra/jupyter-deploy"
-github = "https://github.com/jupyter-infra/jupyter-deploy/tree/main/libs/pytest-jupyter-deploy"
+Repository = "https://github.com/jupyter-infra/jupyter-deploy/tree/main/libs/pytest-jupyter-deploy"
+Issues = "https://github.com/jupyter-infra/jupyter-deploy/issues"
 
 [tool.ruff]
 line-length = 120
