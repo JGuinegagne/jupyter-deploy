@@ -383,6 +383,8 @@ dev = [
     { name = "ruff" },
     { name = "tomli-w" },
     { name = "typer" },
+    { name = "types-pexpect" },
+    { name = "types-requests" },
     { name = "yamllint" },
 ]
 
@@ -402,6 +404,8 @@ dev = [
     { name = "ruff", specifier = ">=0.11.8" },
     { name = "tomli-w", specifier = ">=1.2.0" },
     { name = "typer", specifier = ">=0.15.4" },
+    { name = "types-pexpect", specifier = ">=4.9.0" },
+    { name = "types-requests", specifier = ">=2.32.0" },
     { name = "yamllint", specifier = ">=1.35.0" },
 ]
 
