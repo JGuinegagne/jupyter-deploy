@@ -21,10 +21,14 @@ container-tool := `command -v finch >/dev/null 2>&1 && echo "finch" || echo "doc
 export HOST_UID := `id -u`
 export HOST_GID := `id -g`
 
-# E2E image configuration
-e2e-compose-file := "libs/jupyter-deploy-tf-aws-ec2-base/tests/e2e/image/docker-compose.yml"
-e2e-image-name := "jupyter-deploy-e2e-aws-ec2-base"
+# E2E image configuration (template-independent, vended by pytest-jupyter-deploy)
+e2e-image-dir := `uv run python -c "from pytest_jupyter_deploy.image import IMAGE_PATH; print(IMAGE_PATH)"`
+e2e-compose-file := e2e-image-dir + "/docker-compose.yml"
+e2e-container-name := "jupyter-deploy-e2e"
 e2e-image-tag := "latest"
+
+# Default template for E2E tests
+default-template := "tf-aws-ec2-base"
 
 # Start E2E container in background (always builds to ensure correct UID/GID)
 # Usage: just e2e-up [no-cache=true]
@@ -36,9 +40,24 @@ e2e-up no_cache="false":
     mkdir -p {{justfile_directory()}}/test-results
     mkdir -p {{justfile_directory()}}/.auth
 
-    # Update HOST_UID and HOST_GID in existing .env file
+    # Update .env file with current values
     sed -i 's/^HOST_UID=.*/HOST_UID={{HOST_UID}}/' {{justfile_directory()}}/.env
     sed -i 's/^HOST_GID=.*/HOST_GID={{HOST_GID}}/' {{justfile_directory()}}/.env
+    # Set Dockerfile path for compose (finch/nerdctl reads vars from .env, not process env)
+    if grep -q '^E2E_DOCKERFILE=' {{justfile_directory()}}/.env; then
+        sed -i 's|^E2E_DOCKERFILE=.*|E2E_DOCKERFILE={{e2e-image-dir}}/Dockerfile|' {{justfile_directory()}}/.env
+    else
+        echo 'E2E_DOCKERFILE={{e2e-image-dir}}/Dockerfile' >> {{justfile_directory()}}/.env
+    fi
+    # Resolve AWS_REGION from env or AWS config (must not be empty — SDK treats "" as valid)
+    _AWS_REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo "")}"
+    if [ -n "$_AWS_REGION" ]; then
+        if grep -q '^AWS_REGION=' {{justfile_directory()}}/.env; then
+            sed -i "s|^AWS_REGION=.*|AWS_REGION=$_AWS_REGION|" {{justfile_directory()}}/.env
+        else
+            echo "AWS_REGION=$_AWS_REGION" >> {{justfile_directory()}}/.env
+        fi
+    fi
 
     if [ "{{no_cache}}" = "true" ]; then
         echo "Building with --no-cache..."
@@ -72,7 +91,7 @@ e2e-sync:
     echo "Syncing project files to E2E container..."
 
     # Copy project files to container (excluding .venv, project directories, and build artifacts)
-    {{container-tool}} exec jupyter-deploy-e2e-aws-ec2-base bash -c "
+    {{container-tool}} exec {{e2e-container-name}} bash -c "
         echo 'Removing old .venv...'
         rm -rf /workspace/.venv
 
@@ -94,7 +113,7 @@ e2e-sync:
         --exclude='sandbox*' \
         --exclude='.auth' \
         -cf - . | \
-    {{container-tool}} exec -i jupyter-deploy-e2e-aws-ec2-base tar -xf - -C /workspace
+    {{container-tool}} exec -i {{e2e-container-name}} tar -xf - -C /workspace
 
     echo "Running uv sync..."
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} exec e2e bash -c "cd /workspace && uv sync --all-packages"
@@ -114,7 +133,7 @@ e2e-sync:
 # Example: just test-e2e sandbox2 test_config_changes mutate=true   # test existing project with mutating tests
 # Example: just test-e2e sandbox-e2e "" mutate=true,destroy=true    # deploy from scratch and destroy after tests
 # Example: just test-e2e sandbox2 "" log-level=debug          # test with debug logging
-test-e2e project_dir="sandbox-e2e" test_filter="" options="":
+test-e2e project_dir="sandbox-e2e" test_filter="" options="" template=default-template:
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -163,9 +182,23 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="":
     echo "Cleaning old test artifacts..."
     rm -rf "{{justfile_directory()}}/test-results"/*
 
-    # Update HOST_UID and HOST_GID in existing .env file
+    # Update .env file with current values
     sed -i 's/^HOST_UID=.*/HOST_UID={{HOST_UID}}/' {{justfile_directory()}}/.env
     sed -i 's/^HOST_GID=.*/HOST_GID={{HOST_GID}}/' {{justfile_directory()}}/.env
+    if grep -q '^E2E_DOCKERFILE=' {{justfile_directory()}}/.env; then
+        sed -i 's|^E2E_DOCKERFILE=.*|E2E_DOCKERFILE={{e2e-image-dir}}/Dockerfile|' {{justfile_directory()}}/.env
+    else
+        echo 'E2E_DOCKERFILE={{e2e-image-dir}}/Dockerfile' >> {{justfile_directory()}}/.env
+    fi
+    # Resolve AWS_REGION from env or AWS config (must not be empty — SDK treats "" as valid)
+    _AWS_REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo "")}"
+    if [ -n "$_AWS_REGION" ]; then
+        if grep -q '^AWS_REGION=' {{justfile_directory()}}/.env; then
+            sed -i "s|^AWS_REGION=.*|AWS_REGION=$_AWS_REGION|" {{justfile_directory()}}/.env
+        else
+            echo "AWS_REGION=$_AWS_REGION" >> {{justfile_directory()}}/.env
+        fi
+    fi
 
     # Create temporary override file to mount the project directory and test-results
     OVERRIDE_FILE="{{justfile_directory()}}/docker-compose.e2e-override.yml"
@@ -187,7 +220,7 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="":
     just e2e-sync
 
     # Check if container is running
-    if ! {{container-tool}} ps --filter "name=jupyter-deploy-e2e-aws-ec2-base" --format "{{{{.Status}}}}" | grep -q "Up"; then
+    if ! {{container-tool}} ps --filter "name={{e2e-container-name}}" --format "{{{{.Status}}}}" | grep -q "Up"; then
         echo "Error: E2E container is not running. Start it with: just e2e-up"
         [ -n "$OVERRIDE_FILE" ] && rm -f "$OVERRIDE_FILE"
         exit 1
@@ -195,7 +228,7 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="":
 
     # Verify test-results directory is writable (detect stale mount)
     echo "Verifying test-results directory is writable..."
-    if ! {{container-tool}} exec jupyter-deploy-e2e-aws-ec2-base bash -c "touch /workspace/test-results/.mount-check && rm /workspace/test-results/.mount-check" 2>/dev/null; then
+    if ! {{container-tool}} exec {{e2e-container-name}} bash -c "touch /workspace/test-results/.mount-check && rm /workspace/test-results/.mount-check" 2>/dev/null; then
         echo "Error: test-results directory is not writable (stale mount detected)"
         echo ""
         echo "This happens when test-results was deleted while the container was running."
@@ -206,12 +239,13 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="":
     echo "✓ test-results directory is writable"
 
     # Build the pytest command based on deployment mode
+    E2E_TESTS_DIR="libs/jupyter-deploy-{{template}}/tests/e2e"
     if [ "$IS_DEPLOYMENT_FROM_SCRATCH" = "true" ]; then
         # Deploy from scratch - don't pass --e2e-existing-project (uses default config "base")
-        PYTEST_ARGS="-m e2e --e2e-tests-dir=libs/jupyter-deploy-tf-aws-ec2-base/tests/e2e"
+        PYTEST_ARGS="-m e2e --e2e-tests-dir=$E2E_TESTS_DIR"
     else
         # Use existing project
-        PYTEST_ARGS="-m e2e --e2e-tests-dir=libs/jupyter-deploy-tf-aws-ec2-base/tests/e2e --e2e-existing-project={{project_dir}}"
+        PYTEST_ARGS="-m e2e --e2e-tests-dir=$E2E_TESTS_DIR --e2e-existing-project={{project_dir}}"
     fi
 
     # Add test filter if provided
@@ -328,9 +362,23 @@ auth-setup project_dir display="${DISPLAY:-}":
     echo "Cleaning old test artifacts..."
     rm -rf "{{justfile_directory()}}/test-results"/*
 
-    # Update HOST_UID and HOST_GID in existing .env file
+    # Update .env file with current values
     sed -i 's/^HOST_UID=.*/HOST_UID={{HOST_UID}}/' {{justfile_directory()}}/.env
     sed -i 's/^HOST_GID=.*/HOST_GID={{HOST_GID}}/' {{justfile_directory()}}/.env
+    if grep -q '^E2E_DOCKERFILE=' {{justfile_directory()}}/.env; then
+        sed -i 's|^E2E_DOCKERFILE=.*|E2E_DOCKERFILE={{e2e-image-dir}}/Dockerfile|' {{justfile_directory()}}/.env
+    else
+        echo 'E2E_DOCKERFILE={{e2e-image-dir}}/Dockerfile' >> {{justfile_directory()}}/.env
+    fi
+    # Resolve AWS_REGION from env or AWS config (must not be empty — SDK treats "" as valid)
+    _AWS_REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo "")}"
+    if [ -n "$_AWS_REGION" ]; then
+        if grep -q '^AWS_REGION=' {{justfile_directory()}}/.env; then
+            sed -i "s|^AWS_REGION=.*|AWS_REGION=$_AWS_REGION|" {{justfile_directory()}}/.env
+        else
+            echo "AWS_REGION=$_AWS_REGION" >> {{justfile_directory()}}/.env
+        fi
+    fi
 
     # Create temporary override file to mount the project directory and test-results
     OVERRIDE_FILE="{{justfile_directory()}}/docker-compose.e2e-override.yml"
@@ -353,7 +401,7 @@ auth-setup project_dir display="${DISPLAY:-}":
 
     # Verify test-results directory is writable (detect stale mount)
     echo "Verifying test-results directory is writable..."
-    if ! {{container-tool}} exec jupyter-deploy-e2e-aws-ec2-base bash -c "touch /workspace/test-results/.mount-check && rm /workspace/test-results/.mount-check" 2>/dev/null; then
+    if ! {{container-tool}} exec {{e2e-container-name}} bash -c "touch /workspace/test-results/.mount-check && rm /workspace/test-results/.mount-check" 2>/dev/null; then
         echo "Error: test-results directory is not writable (stale mount detected)"
         echo ""
         echo "This happens when test-results was deleted while the container was running."
@@ -404,7 +452,7 @@ auth-setup project_dir display="${DISPLAY:-}":
     xauth list | grep -q "127.0.0.1:$DISPLAY_NUM" || xauth add 127.0.0.1:$DISPLAY_NUM MIT-MAGIC-COOKIE-1 $COOKIE 2>/dev/null || true
 
     # Copy the host's .Xauthority file to container (preserves all cookie formats)
-    {{container-tool}} cp ~/.Xauthority jupyter-deploy-e2e-aws-ec2-base:/home/testuser/.Xauthority
+    {{container-tool}} cp ~/.Xauthority {{e2e-container-name}}:/home/testuser/.Xauthority
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} exec e2e chmod 600 /home/testuser/.Xauthority
 
     echo "✓ X11 authentication cookies copied to container"
@@ -426,7 +474,7 @@ auth-setup project_dir display="${DISPLAY:-}":
     echo "Launching browser..."
 
     # Ensure project files are synced (check if scripts directory exists)
-    if ! {{container-tool}} exec jupyter-deploy-e2e-aws-ec2-base test -d /workspace/scripts; then
+    if ! {{container-tool}} exec {{e2e-container-name}} test -d /workspace/scripts; then
         echo "Project files not found in container, syncing..."
         just e2e-sync
     fi
@@ -442,12 +490,22 @@ auth-setup project_dir display="${DISPLAY:-}":
 clean-e2e:
     rm -rf test-results .pytest_cache
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} down -v
-    {{container-tool}} rmi {{e2e-image-name}}:{{e2e-image-tag}} || true
+    {{container-tool}} rmi {{e2e-container-name}}:{{e2e-image-tag}} || true
 
 # Full workflow: start container (builds if needed) and run tests
 # Usage: just e2e-all <project-dir> [test-filter] [options] [no-cache]
-e2e-all project_dir test_filter="" options="" no_cache="false":
+e2e-all project_dir test_filter="" options="" no_cache="false" template=default-template:
     @echo "Starting E2E container (will build image if needed)..."
     @just e2e-up {{no_cache}}
     @echo ""
-    @just test-e2e {{project_dir}} {{test_filter}} {{options}}
+    @just test-e2e {{project_dir}} {{test_filter}} {{options}} {{template}}
+
+# --- Per-template convenience wrappers ---
+
+# Run E2E tests for the base template (tf-aws-ec2-base)
+test-e2e-base project_dir="sandbox-e2e" test_filter="" options="":
+    @just test-e2e {{project_dir}} "{{test_filter}}" "{{options}}" tf-aws-ec2-base
+
+# Setup GitHub OAuth for the base template
+auth-setup-base project_dir display="${DISPLAY:-}":
+    @just auth-setup {{project_dir}} "{{display}}"

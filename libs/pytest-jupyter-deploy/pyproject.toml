@@ -14,7 +14,7 @@ classifiers = [
     "Framework :: Pytest",
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -25,9 +25,7 @@ dependencies = [
     "pytest-order>=1.3.0",
     "pyyaml>=6.0.2",
     "pexpect>=4.9.0",
-    "types-pexpect>=4.9.0",
     "requests>=2.32.0",
-    "types-requests>=2.32.0",
 ]
 
 [project.optional-dependencies]
@@ -47,7 +45,8 @@ packages = ["pytest_jupyter_deploy"]
 
 [project.urls]
 Homepage = "https://github.com/jupyter-infra/jupyter-deploy"
-github = "https://github.com/jupyter-infra/jupyter-deploy/tree/main/libs/pytest-jupyter-deploy"
+Repository = "https://github.com/jupyter-infra/jupyter-deploy/tree/main/libs/pytest-jupyter-deploy"
+Issues = "https://github.com/jupyter-infra/jupyter-deploy/issues"
 
 [tool.ruff]
 line-length = 120
@@ -87,4 +86,6 @@ dev = [
     "mypy>=1.15.0",
     "ruff>=0.11.8",
     "yamllint>=1.35.0",
+    "types-pexpect>=4.9.0",
+    "types-requests>=2.32.0",
 ]
