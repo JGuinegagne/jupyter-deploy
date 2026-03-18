@@ -16,6 +16,7 @@ pytest-jupyter-deploy = { workspace = true }
 members = [
     "libs/jupyter-deploy",
     "libs/jupyter-deploy-tf-aws-ec2-base",
+    "libs/jupyter-infra-tf-aws-iam-ci",
     "libs/pytest-jupyter-deploy",
     "images/uvbase"
 ]
@@ -70,20 +71,34 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 check_untyped_defs = true
+explicit_package_bases = true
+mypy_path = [
+    "libs/jupyter-deploy",
+    "libs/jupyter-deploy-tf-aws-ec2-base",
+    "libs/jupyter-infra-tf-aws-iam-ci",
+    "libs/pytest-jupyter-deploy",
+]
 plugins = ["pydantic.mypy"]
 files = [
     "libs/jupyter-deploy",
     "libs/jupyter-deploy-tf-aws-ec2-base",
+    "libs/jupyter-infra-tf-aws-iam-ci",
     "libs/pytest-jupyter-deploy"
+]
+# E2E tests excluded: conftest.py (pytest magic name, can't rename) causes
+# "Duplicate module" errors across templates sharing the tests/e2e/ structure.
+exclude = [
+    "tests/e2e/",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = [
   "libs/jupyter-deploy",
   "libs/jupyter-deploy-tf-aws-ec2-base",
+  "libs/jupyter-infra-tf-aws-iam-ci",
   "libs/pytest-jupyter-deploy"
 ]
 markers = [
   "e2e: marks tests as end-to-end tests (deselect with '-m \"not e2e\"')"
 ]
-addopts = "-m 'not e2e'"
+addopts = "-m 'not e2e' --import-mode=importlib"
