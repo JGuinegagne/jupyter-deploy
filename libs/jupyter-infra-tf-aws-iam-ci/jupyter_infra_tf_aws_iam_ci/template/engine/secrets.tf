@@ -23,6 +23,23 @@ module "github_bot_account_recovery_codes" {
   tags        = local.default_tags
 }
 
+module "github_bot_account_totp_secret" {
+  source      = "./modules/secret"
+  name        = "${var.secret_name_prefix}-${local.doc_postfix}/github-bot-account-totp-secret"
+  description = "GitHub bot account TOTP seed for 2FA"
+  value       = var.github_bot_account_totp_secret
+  tags        = local.default_tags
+}
+
+# GitHub bot account email — stored in SSM Parameter Store (not secret)
+module "github_bot_account_email" {
+  source      = "./modules/ssm_parameter"
+  name        = "/${var.secret_name_prefix}-${local.doc_postfix}/github-bot-account-email"
+  description = "GitHub bot account email address"
+  value       = var.github_bot_account_email
+  tags        = local.default_tags
+}
+
 # OAuth app client IDs (x5) — stored in SSM Parameter Store (not secret)
 # App metadata (app_id, app_url, callback_url) stored as tags for reference.
 module "github_oauth_app_client_id_1" {

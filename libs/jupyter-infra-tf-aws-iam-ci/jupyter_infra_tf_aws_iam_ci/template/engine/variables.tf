@@ -110,6 +110,17 @@ variable "create_oidc_provider" {
   type        = bool
 }
 
+variable "github_bot_account_email" {
+  description = <<-EOT
+    Email address of the GitHub bot account used by E2E CI.
+
+    Stored in SSM Parameter Store for retrieval by CI workflows.
+
+    Example: my-bot@example.com
+  EOT
+  type        = string
+}
+
 variable "github_bot_account_password" {
   description = <<-EOT
     Password for the GitHub bot account used by E2E CI.
@@ -130,6 +141,19 @@ variable "github_bot_account_recovery_codes" {
   sensitive   = true
 }
 
+variable "github_bot_account_totp_secret" {
+  description = <<-EOT
+    TOTP secret (base32 seed) for the GitHub bot account 2FA.
+
+    Used with oathtool to generate TOTP codes programmatically:
+    oathtool -b --totp <secret>
+
+    Stored in Secrets Manager.
+  EOT
+  type        = string
+  sensitive   = true
+}
+
 # OAuth apps (x5)
 # Each is a map with keys: client_id, app_id, homepage_url, callback_url.
 # The client_id is stored in SSM Parameter Store.
@@ -137,11 +161,12 @@ variable "github_bot_account_recovery_codes" {
 
 variable "github_oauth_app_1" {
   description = <<-EOT
-    GitHub OAuth app #1 metadata.
+    GitHub OAuth app #1 metadata. Keys: client_id, app_id, homepage_url, callback_url.
 
-    Keys: client_id, app_id, homepage_url, callback_url.
-    The client_id is stored in SSM Parameter Store.
-    Other fields are stored as tags for reference.
+    - client_id:    20-character alphanumeric OAuth client ID (stored in SSM Parameter Store)
+    - app_id:       numeric GitHub app identifier (stored as tag)
+    - homepage_url: app homepage URL, typically https://<subdomain>.<domain> (stored as tag)
+    - callback_url: OAuth callback URL, typically https://<subdomain>.<domain>/oauth2/callback (stored as tag)
   EOT
   type        = map(string)
   validation {
@@ -156,11 +181,12 @@ variable "github_oauth_app_1" {
 
 variable "github_oauth_app_2" {
   description = <<-EOT
-    GitHub OAuth app #2 metadata.
+    GitHub OAuth app #2 metadata. Keys: client_id, app_id, homepage_url, callback_url.
 
-    Keys: client_id, app_id, homepage_url, callback_url.
-    The client_id is stored in SSM Parameter Store.
-    Other fields are stored as tags for reference.
+    - client_id:    20-character alphanumeric OAuth client ID (stored in SSM Parameter Store)
+    - app_id:       numeric GitHub app identifier (stored as tag)
+    - homepage_url: app homepage URL, typically https://<subdomain>.<domain> (stored as tag)
+    - callback_url: OAuth callback URL, typically https://<subdomain>.<domain>/oauth2/callback (stored as tag)
   EOT
   type        = map(string)
   validation {
@@ -175,11 +201,12 @@ variable "github_oauth_app_2" {
 
 variable "github_oauth_app_3" {
   description = <<-EOT
-    GitHub OAuth app #3 metadata.
+    GitHub OAuth app #3 metadata. Keys: client_id, app_id, homepage_url, callback_url.
 
-    Keys: client_id, app_id, homepage_url, callback_url.
-    The client_id is stored in SSM Parameter Store.
-    Other fields are stored as tags for reference.
+    - client_id:    20-character alphanumeric OAuth client ID (stored in SSM Parameter Store)
+    - app_id:       numeric GitHub app identifier (stored as tag)
+    - homepage_url: app homepage URL, typically https://<subdomain>.<domain> (stored as tag)
+    - callback_url: OAuth callback URL, typically https://<subdomain>.<domain>/oauth2/callback (stored as tag)
   EOT
   type        = map(string)
   validation {
@@ -194,11 +221,12 @@ variable "github_oauth_app_3" {
 
 variable "github_oauth_app_4" {
   description = <<-EOT
-    GitHub OAuth app #4 metadata.
+    GitHub OAuth app #4 metadata. Keys: client_id, app_id, homepage_url, callback_url.
 
-    Keys: client_id, app_id, homepage_url, callback_url.
-    The client_id is stored in SSM Parameter Store.
-    Other fields are stored as tags for reference.
+    - client_id:    20-character alphanumeric OAuth client ID (stored in SSM Parameter Store)
+    - app_id:       numeric GitHub app identifier (stored as tag)
+    - homepage_url: app homepage URL, typically https://<subdomain>.<domain> (stored as tag)
+    - callback_url: OAuth callback URL, typically https://<subdomain>.<domain>/oauth2/callback (stored as tag)
   EOT
   type        = map(string)
   validation {
@@ -213,11 +241,12 @@ variable "github_oauth_app_4" {
 
 variable "github_oauth_app_5" {
   description = <<-EOT
-    GitHub OAuth app #5 metadata.
+    GitHub OAuth app #5 metadata. Keys: client_id, app_id, homepage_url, callback_url.
 
-    Keys: client_id, app_id, homepage_url, callback_url.
-    The client_id is stored in SSM Parameter Store.
-    Other fields are stored as tags for reference.
+    - client_id:    20-character alphanumeric OAuth client ID (stored in SSM Parameter Store)
+    - app_id:       numeric GitHub app identifier (stored as tag)
+    - homepage_url: app homepage URL, typically https://<subdomain>.<domain> (stored as tag)
+    - callback_url: OAuth callback URL, typically https://<subdomain>.<domain>/oauth2/callback (stored as tag)
   EOT
   type        = map(string)
   validation {

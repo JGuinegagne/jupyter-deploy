@@ -4,6 +4,7 @@ required:
   # or run 'jd config' to use the interactive experience
   github_org: null
   github_repo: null
+  github_bot_account_email: null
   github_oauth_app_1: {}
   github_oauth_app_2: {}
   github_oauth_app_3: {}
@@ -11,10 +12,11 @@ required:
   github_oauth_app_5: {}
 required_sensitive:
   # either assign values below
-  # or run 'jd config -s' to use the interactive experience
+  # or run 'jd config' to use the interactive experience
   # values entered here will be masked after running 'jd config'
   github_bot_account_password: null
   github_bot_account_recovery_codes: null
+  github_bot_account_totp_secret: null
   github_oauth_app_client_secret_1: null
   github_oauth_app_client_secret_2: null
   github_oauth_app_client_secret_3: null

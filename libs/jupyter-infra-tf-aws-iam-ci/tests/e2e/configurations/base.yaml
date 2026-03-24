@@ -2,6 +2,7 @@ schema_version: 1
 required:
   github_org: "fake-test-org"
   github_repo: "fake-test-repo"
+  github_bot_account_email: "fake-bot@example.com"
   github_oauth_app_1:
     client_id: "Aa00000000000000test"
     app_id: "100001"
@@ -30,6 +31,7 @@ required:
 required_sensitive:
   github_bot_account_password: "fakebotpassword123"
   github_bot_account_recovery_codes: "fakecodes123"
+  github_bot_account_totp_secret: "FAKETOTP00SECRET00BASE32"
   github_oauth_app_client_secret_1: "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0"
   github_oauth_app_client_secret_2: "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
   github_oauth_app_client_secret_3: "c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"
