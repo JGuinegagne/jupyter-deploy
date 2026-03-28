@@ -12,7 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ci_helpers import fetch_value, jd_output
+from ci_helpers import fetch_value, jd_output, run_jd_config
 
 
 def discover_project_id() -> str:
@@ -56,7 +56,7 @@ def fetch_secrets_and_configure(ci_dir: Path) -> None:
     config_args: list[str] = []
 
     # Fetch bot account secrets
-    for var in ("github_bot_account_password", "github_bot_account_recovery_codes"):
+    for var in ("github_bot_account_password", "github_bot_account_recovery_codes", "github_bot_account_totp_secret"):
         arn = jd_output(f"{var}_secret_arn", ci_dir_str)
         val = fetch_value(arn)
         flag = f"--{var.replace('_', '-')}"
@@ -71,11 +71,7 @@ def fetch_secrets_and_configure(ci_dir: Path) -> None:
         print(f"  Fetched github_oauth_app_client_secret_{i}")
 
     print("Running jd config with fetched secrets...")
-    subprocess.run(
-        ["uv", "run", "jd", "config", *config_args],
-        cwd=ci_dir,
-        check=True,
-    )
+    run_jd_config(config_args, str(ci_dir))
 
 
 def main() -> None:

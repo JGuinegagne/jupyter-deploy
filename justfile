@@ -133,6 +133,7 @@ e2e-sync:
 # Example: just test-e2e sandbox2 test_config_changes mutate=true   # test existing project with mutating tests
 # Example: just test-e2e sandbox-e2e "" mutate=true,destroy=true    # deploy from scratch and destroy after tests
 # Example: just test-e2e sandbox2 "" log-level=debug          # test with debug logging
+# Example: just test-e2e sandbox2 test_application ci-dir=sandbox-ci  # CI mode with automated 2FA
 test-e2e project_dir="sandbox-e2e" test_filter="" options="" template=default-template:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -200,15 +201,30 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="" template=default-te
         fi
     fi
 
-    # Create temporary override file to mount the project directory and test-results
+    # Parse ci-dir from options early (needed for override file)
+    CI_DIR=""
+    OPTIONS_STR_EARLY="{{options}}"
+    if echo "$OPTIONS_STR_EARLY" | grep -qE "ci-dir="; then
+        CI_DIR=$(echo "$OPTIONS_STR_EARLY" | grep -oE "ci-dir=[^,]+" | cut -d'=' -f2)
+        if [ ! -d "$CI_DIR" ]; then
+            echo "Error: CI directory '$CI_DIR' does not exist"
+            exit 1
+        fi
+        echo "CI directory: $CI_DIR"
+    fi
+
+    # Create temporary override file to mount the project directory, test-results, and optionally CI dir
     OVERRIDE_FILE="{{justfile_directory()}}/docker-compose.e2e-override.yml"
-    cat > "$OVERRIDE_FILE" <<EOF
-    services:
-      e2e:
-        volumes:
-          - ./{{project_dir}}:/workspace/{{project_dir}}
-          - ./test-results:/workspace/test-results
-    EOF
+    {
+        echo "services:"
+        echo "  e2e:"
+        echo "    volumes:"
+        echo "      - ./{{project_dir}}:/workspace/{{project_dir}}"
+        echo "      - ./test-results:/workspace/test-results"
+        if [ -n "$CI_DIR" ]; then
+            echo "      - ./${CI_DIR}:/workspace/${CI_DIR}"
+        fi
+    } > "$OVERRIDE_FILE"
 
     # Stop and restart container with new mounts (ensures clean mount state)
     echo "Restarting E2E container with project mount..."
@@ -272,7 +288,7 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="" template=default-te
         echo "Options: $OPTIONS_STR"
 
         # List of recognized options (for validation)
-        RECOGNIZED_OPTIONS="mutate destroy log-level"
+        RECOGNIZED_OPTIONS="mutate destroy log-level ci-dir"
 
         # Validate all options are recognized
         IFS=',' read -ra OPTS <<< "$OPTIONS_STR"
@@ -316,11 +332,11 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="" template=default-te
             echo "  - log level: $LOG_LEVEL"
         fi
 
-        # Future options can be added here:
-        # if echo "$OPTIONS_STR" | grep -q "stream-logs=true"; then
-        #     RECOGNIZED_OPTIONS="$RECOGNIZED_OPTIONS stream-logs"
-        #     # handle stream-logs option
-        # fi
+        # Parse ci-dir option (enables CI mode with automated 2FA)
+        if [ -n "$CI_DIR" ]; then
+            PYTEST_ARGS="$PYTEST_ARGS --ci --ci-dir $CI_DIR"
+            echo "  - CI mode: enabled (ci-dir=$CI_DIR)"
+        fi
     fi
 
     # Add common pytest options
@@ -524,6 +540,17 @@ test-e2e-ci project_dir="sandbox-e2e-ci" test_filter="" options="":
 auth-setup-base project_dir display="${DISPLAY:-}":
     @just auth-setup {{project_dir}} "{{display}}"
 
+# Initialize a new base template project directory
+init-base project_dir:
+    uv run jd init {{project_dir}}
+
+# Configure a base template project using CI OAuth app settings
+# Usage: just config-base-from-ci <project-dir> [ci-dir] [oauth-app-num] [allowed-usernames]
+# Example: just config-base-from-ci sandbox-base sandbox-ci 1
+# Example: just config-base-from-ci sandbox-base sandbox-ci 1 '["bot-user","admin"]'
+config-base-from-ci project_dir ci_dir="sandbox-ci" oauth_app_num="1" allowed_usernames="":
+    uv run python scripts/config_base_from_ci.py {{project_dir}} {{ci_dir}} {{oauth_app_num}} "{{allowed_usernames}}"
+
 # --- CI infrastructure commands ---
 
 # Discover and restore CI project from S3 store
@@ -554,12 +581,18 @@ auth-bot-2fa ci_dir="sandbox-ci":
 auth-bot-email ci_dir="sandbox-ci":
     @uv run jd show -v github_bot_account_email --text --path {{ci_dir}}
 
-# Generate .env for base template E2E tests from deployed project + CI infrastructure
-# Reads variables from the project, OAuth creds from CI, and accepts user options
+# Print the GitHub bot account username (email prefix before @)
+auth-bot-username ci_dir="sandbox-ci":
+    @just auth-bot-email {{ci_dir}} | cut -d'@' -f1
+
+# Generate .env for base template E2E tests
+# Two modes:
+#   Existing project: reads deployment variables from the project via `jd show -v`
+#   Fresh deploy:     pass "" as project-dir, provide deployment vars as options
 # Usage: just env-setup-base <project-dir> [ci-dir] [oauth-app-num] [options]
 # Options: comma-separated key=value pairs (same format as test-e2e options)
 # Quote options containing [] values (zsh treats brackets as glob patterns)
 # Example: just env-setup-base sandbox-e2e sandbox-ci 4 user=botuser,safe-user=realuser
-# Example: just env-setup-base sandbox-e2e sandbox-ci 4 'allowed-teams=[team1],user=botuser'
+# Example: just env-setup-base "" sandbox-ci 4 'user=botuser,safe-user=realuser'
 env-setup-base project_dir ci_dir="sandbox-ci" oauth_app_num="1" options="":
-    uv run python scripts/env_setup_base.py {{project_dir}} {{ci_dir}} {{oauth_app_num}} "{{options}}"
+    uv run python scripts/env_setup_base.py "{{project_dir}}" {{ci_dir}} {{oauth_app_num}} "{{options}}"
