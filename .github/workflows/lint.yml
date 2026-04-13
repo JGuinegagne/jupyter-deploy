@@ -25,8 +25,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
           working-directory: ${{ inputs.working-directory }}
 
-      - name: Install dependencies
+      - name: Install unpinned dependencies
         run: |
+          rm -f uv.lock
           uv sync --all-extras
         working-directory: ${{ inputs.working-directory }}
 
