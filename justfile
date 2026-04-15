@@ -204,9 +204,10 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="" template=default-te
         fi
     fi
 
-    # Parse skip-sync and ci-dir from options early (needed before compose up)
+    # Parse skip-sync, ci-dir, and image from options early (needed before compose up)
     SKIP_SYNC="false"
     CI_DIR=""
+    IMAGE="jupyter-deploy-e2e-base:latest"
     OPTIONS_STR_EARLY="{{options}}"
     if echo "$OPTIONS_STR_EARLY" | grep -q "skip-sync=true"; then
         SKIP_SYNC="true"
@@ -219,6 +220,9 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="" template=default-te
         fi
         echo "CI directory: $CI_DIR"
     fi
+    if echo "$OPTIONS_STR_EARLY" | grep -qE "image="; then
+        IMAGE=$(echo "$OPTIONS_STR_EARLY" | grep -oE "image=[^,]+" | cut -d'=' -f2)
+    fi
 
     # Create temporary override file to mount the project directory, test-results,
     # optionally CI dir, and image override for pre-built CI images.
@@ -227,7 +231,7 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="" template=default-te
         echo "services:"
         echo "  e2e:"
         if [ "$SKIP_SYNC" = "true" ]; then
-            echo "    image: jupyter-deploy-e2e-base:latest"
+            echo "    image: $IMAGE"
         fi
         echo "    volumes:"
         echo "      - ./{{project_dir}}:/workspace/{{project_dir}}"
@@ -238,7 +242,7 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="" template=default-te
     } > "$OVERRIDE_FILE"
 
     if [ "$SKIP_SYNC" = "true" ]; then
-        echo "Using pre-built image: jupyter-deploy-e2e-base:latest"
+        echo "Using pre-built image: $IMAGE"
     fi
 
     # Stop and restart container with new mounts (ensures clean mount state)
@@ -285,12 +289,18 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="" template=default-te
         echo "       and: libs/jupyter-infra-{{template}}/tests/e2e"
         exit 1
     fi
+    # Default marker (can be overridden with marker= option)
+    MARKER="e2e"
+    if echo "{{options}}" | grep -qE "marker="; then
+        MARKER=$(echo "{{options}}" | grep -oE "marker=[^,]+" | cut -d'=' -f2)
+    fi
+
     if [ "$IS_DEPLOYMENT_FROM_SCRATCH" = "true" ]; then
         # Deploy from scratch - don't pass --e2e-existing-project (uses default config "base")
-        PYTEST_ARGS="$E2E_TESTS_DIR -m e2e --e2e-tests-dir=$E2E_TESTS_DIR"
+        PYTEST_ARGS="$E2E_TESTS_DIR -m $MARKER --e2e-tests-dir=$E2E_TESTS_DIR"
     else
         # Use existing project
-        PYTEST_ARGS="$E2E_TESTS_DIR -m e2e --e2e-tests-dir=$E2E_TESTS_DIR --e2e-existing-project={{project_dir}}"
+        PYTEST_ARGS="$E2E_TESTS_DIR -m $MARKER --e2e-tests-dir=$E2E_TESTS_DIR --e2e-existing-project={{project_dir}}"
     fi
 
     # Add test filter if provided
@@ -307,7 +317,7 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="" template=default-te
         echo "Options: $OPTIONS_STR"
 
         # List of recognized options (for validation)
-        RECOGNIZED_OPTIONS="mutate destroy log-level ci-dir skip-sync"
+        RECOGNIZED_OPTIONS="mutate destroy log-level ci-dir skip-sync marker image"
 
         # Validate all options are recognized
         IFS=',' read -ra OPTS <<< "$OPTIONS_STR"
@@ -380,7 +390,7 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="" template=default-te
     echo "Test filter: {{test_filter}}"
     echo "================================================"
 
-    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} exec -e XAUTHORITY=/home/testuser/.Xauthority e2e bash -c "cd /workspace && xvfb-run --auto-servernum bash -c '$PYTEST_CMD $PYTEST_ARGS'"
+    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} exec -e XAUTHORITY=/home/testuser/.Xauthority -e PYTHONUNBUFFERED=1 e2e bash -c "cd /workspace && xvfb-run --auto-servernum bash -c '$PYTEST_CMD $PYTEST_ARGS'"
 
 # Setup GitHub OAuth authentication (one-time, requires X11 forwarding)
 # Usage: just auth-setup <project-dir> [display]
@@ -780,6 +790,145 @@ ci-e2e-base-pull oauth_app_num tag="latest" ci_dir="sandbox-ci":
     {{container-tool}} pull "$ECR_URL:{{tag}}"
     {{container-tool}} tag "$ECR_URL:{{tag}}" jupyter-deploy-e2e-base:latest
     echo "✓ Pulled and tagged as jupyter-deploy-e2e-base:latest"
+
+# --- CLI release E2E commands ---
+
+# Build the CLI release E2E image
+# Reuses the same base image as ci-e2e-base-build, but layers .github/e2e-cli/Dockerfile.
+# Usage: just ci-e2e-cli-build                           # local: no cache, workspace mode
+# Usage: just ci-e2e-cli-build <ecr-url>:jd-aws          # CI: use ECR tag as layer cache
+# Usage: just ci-e2e-cli-build "" "--build-arg INSTALL_MODE=pypi --build-arg INSTALL_VARIANT=bare --build-arg PKG_VERSION=..."
+ci-e2e-cli-build cache_from="" extra_args="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    BASE_DOCKERFILE=$(uv run python -c \
+        "from pytest_jupyter_deploy.image import IMAGE_PATH; print(IMAGE_PATH / 'Dockerfile')")
+    BASE_DIR=$(dirname "$BASE_DOCKERFILE")
+
+    echo "Building base E2E image..."
+    {{container-tool}} build \
+        -f "$BASE_DOCKERFILE" \
+        --build-arg USER_UID={{HOST_UID}} \
+        --build-arg USER_GID={{HOST_GID}} \
+        -t jupyter-deploy-e2e:base \
+        "$BASE_DIR"
+
+    echo "Building CLI E2E image..."
+    CACHE_ARG=""
+    if [ -n "{{cache_from}}" ]; then
+        CACHE_ARG="--cache-from={{cache_from}}"
+        echo "Using cache from: {{cache_from}}"
+    fi
+
+    {{container-tool}} build \
+        -f .github/e2e-cli/Dockerfile \
+        --build-arg BASE_IMAGE=jupyter-deploy-e2e:base \
+        $CACHE_ARG \
+        {{extra_args}} \
+        -t jupyter-deploy-e2e-cli:latest \
+        .
+
+    echo "✓ CLI E2E image built: jupyter-deploy-e2e-cli:latest"
+
+# Push the CLI E2E image to ECR (reuses e2e-image-2 repo with jd-bare/jd-aws tags)
+# Usage: just ci-e2e-cli-push <variant> [ci-dir]
+# Example: just ci-e2e-cli-push bare
+# Example: just ci-e2e-cli-push aws
+ci-e2e-cli-push variant ci_dir="sandbox-ci":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    ECR_URL=$(just ci-e2e-base-ecr-url 2 {{ci_dir}})
+    ECR_REGISTRY=$(echo "$ECR_URL" | cut -d'/' -f1)
+    REGION=$(uv run jd show -o region --text -p {{ci_dir}})
+    TAG="jd-{{variant}}"
+
+    echo "Logging in to ECR..."
+    aws ecr get-login-password --region "$REGION" \
+        | {{container-tool}} login --username AWS --password-stdin "$ECR_REGISTRY"
+
+    echo "Pushing to $ECR_URL:$TAG..."
+    {{container-tool}} tag jupyter-deploy-e2e-cli:latest "$ECR_URL:$TAG"
+    {{container-tool}} push "$ECR_URL:$TAG"
+    echo "✓ Pushed $ECR_URL:$TAG"
+
+# Pull a CLI E2E image from ECR and tag as jupyter-deploy-e2e-cli:latest
+# Usage: just ci-e2e-cli-pull <variant> [ci-dir]
+# Example: just ci-e2e-cli-pull bare
+# Example: just ci-e2e-cli-pull aws
+ci-e2e-cli-pull variant ci_dir="sandbox-ci":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    ECR_URL=$(just ci-e2e-base-ecr-url 2 {{ci_dir}})
+    ECR_REGISTRY=$(echo "$ECR_URL" | cut -d'/' -f1)
+    REGION=$(uv run jd show -o region --text -p {{ci_dir}})
+    TAG="jd-{{variant}}"
+
+    echo "Logging in to ECR..."
+    aws ecr get-login-password --region "$REGION" \
+        | {{container-tool}} login --username AWS --password-stdin "$ECR_REGISTRY"
+
+    echo "Pulling $ECR_URL:$TAG..."
+    {{container-tool}} pull "$ECR_URL:$TAG"
+    {{container-tool}} tag "$ECR_URL:$TAG" jupyter-deploy-e2e-cli:latest
+    echo "✓ Pulled and tagged as jupyter-deploy-e2e-cli:latest"
+
+# Run CLI smoke tests in a pre-built CLI E2E image
+# For the bare track, the default workspace image has all deps (including boto3),
+# so the bare installation tests would fail. When no custom image is provided,
+# this recipe auto-builds a pypi bare image from the published PyPI version.
+# Usage: just test-smoke-cli bare                              # auto-builds pypi bare image
+# Usage: just test-smoke-cli aws                               # uses default workspace image
+# Usage: just test-smoke-cli bare my-image:tag                 # custom image (skip build)
+test-smoke-cli variant image="" log_level="INFO":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    if [ "{{variant}}" = "bare" ]; then
+        FILTER='-k "not aws_installation"'
+    elif [ "{{variant}}" = "aws" ]; then
+        FILTER='-k "not bare_installation"'
+    else
+        echo "Error: variant must be 'bare' or 'aws', got '{{variant}}'"
+        exit 1
+    fi
+
+    # Resolve image: use provided image, or auto-build a pypi variant image
+    IMAGE="{{image}}"
+    if [ -z "$IMAGE" ]; then
+        VERSION=$(cd libs/jupyter-deploy && uv version --short)
+        echo "Building pypi {{variant}} image (jupyter-deploy==$VERSION from PyPI)..."
+        just ci-e2e-cli-build "" \
+            "--build-arg INSTALL_MODE=pypi --build-arg INSTALL_VARIANT={{variant}} --build-arg PKG_VERSION=$VERSION --build-arg EXTRA_INDEX_URL=https://pypi.org/simple/"
+        IMAGE="jupyter-deploy-e2e-cli:latest"
+    fi
+
+    echo "Running CLI smoke tests ({{variant}} track, image=$IMAGE)..."
+    {{container-tool}} run --rm \
+        -e PYTHONUNBUFFERED=1 \
+        "$IMAGE" \
+        bash -c ". .venv/bin/activate && \
+            pytest libs/jupyter-deploy/tests/e2e/ \
+                $FILTER --no-cov -v --log-cli-level={{log_level}}"
+
+# Run CLI functional tests (cli marker) against an existing deployment
+# Uses the pre-built CLI E2E image via test-e2e with skip-sync
+# Usage: just test-e2e-cli <project-dir> [test-filter] [options]
+# Example: just test-e2e-cli sandbox-e2e                     # run all cli tests
+# Example: just test-e2e-cli sandbox-e2e test_show            # run specific tests
+# Example: just test-e2e-cli sandbox-e2e "" log-level=debug   # with debug logging
+# Example: just test-e2e-cli sandbox-e2e "" ci-dir=sandbox-ci # CI mode
+test-e2e-cli project_dir test_filter="" options="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Prepend CLI-specific options, then append any user-supplied options
+    CLI_OPTS="skip-sync=true,marker=cli,image=jupyter-deploy-e2e-cli"
+    if [ -n "{{options}}" ]; then
+        CLI_OPTS="$CLI_OPTS,{{options}}"
+    fi
+    just test-e2e "{{project_dir}}" "{{test_filter}}" "$CLI_OPTS" tf-aws-ec2-base
 
 # Generate .env for base template E2E tests
 # Two modes:
