@@ -18,6 +18,11 @@ docs-build:
 docs-serve: docs-build
     cd docs && uv run python -m http.server 8000 --directory build
 
+# Serve documentation on all interfaces (for remote access)
+docs-serve-host: docs-build
+    @echo "Serving at http://$(hostname):8000"
+    cd docs && uv run python -m http.server 8000 --bind 0.0.0.0 --directory build
+
 # Generate architecture diagrams from d2 sources
 # d2 sources:  diagrams/<template>/*.d2
 # SVG outputs: docs/source/templates/<template>/diagrams/*.svg
