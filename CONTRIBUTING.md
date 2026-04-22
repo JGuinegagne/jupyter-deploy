@@ -1,12 +1,17 @@
-# Contributing guidelines
------
+# Contributor Guide
 
-## Project setup
-This project leverages [uv](https://docs.astral.sh/uv/getting-started/) to manage dependencies,
+This project uses [uv](https://docs.astral.sh/uv/getting-started/) to manage dependencies,
 run tools such as linter, type-checker, testing, or publishing.
+
 The monorepo contains multiple packages managed as a `uv` [workspace](https://docs.astral.sh/uv/concepts/projects/workspaces/).
 
-Fork and clone the repository to your local workspace, then install `uv`.
+## Prerequisites
+- install [uv](https://github.com/astral-sh/uv)
+- install [just](https://github.com/casey/just)
+
+## Project setup
+
+Fork and clone the repository to your local workspace, then run:
 
 ```bash
 # Use the sync command to create your python virtual environment,
@@ -14,14 +19,17 @@ Fork and clone the repository to your local workspace, then install `uv`.
 uv sync
 ```
 
-You should see a `.venv` directory under the root of the project.
+You should see a `.venv` directory under the root of the project, activate it:
 
-## Interact with the library
 ```bash
-# Activate the virtual environment
 source .venv/bin/activate
+```
 
-# Verify the CLI installation with
+## Interact with the CLI
+
+Make sure your virtual environment is active.
+
+```bash
 jupyter-deploy --help
 ```
 
@@ -30,47 +38,25 @@ This project uses:
 1. [ruff](https://docs.astral.sh/ruff/) for linting, formatting and import sorting
 2. [mypy](https://mypy-lang.org/) for type checking enforcement
 3. [pytest](https://docs.pytest.org/en/stable/) to run unit and integration tests
+4. [playwright](https://playwright.dev/) to run e2e tests
 
-You can access each tool with the `uv` commands.
-
-### Lint your code
+### Lint and format your code
 ```bash
-# Run the linter
-uv run ruff check
-
-# You can attempt to fix linter issues
-uv run ruff check --fix
-```
-
-### Format your code
-`ruff` is a code formatter in addition to a linter
-
-```bash
-# Format the code before raising a pull request
-uv run ruff format
-
-# When contributing HCL files (.tf), run terraform formatting
-terraform fmt -write=true -recursive
-```
-
-### Verify formatting
-```bash
-# Check that you have formatted your Python code
-uv run --script scripts/verify_format.py
-
-# and your HCL files
-terraform fmt -check -recursive
-```
-
-### Enforce type checking
-```bash
-uv run mypy
+just lint
 ```
 
 ### Run unit tests
 ```bash
-uv run pytest
+just unit-test
 ```
+
+## Work on the base template
+
+### Prerequisites
+- install [aws-cli](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+- install [terraform](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli)
+- install the [aws-ssm-plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)
+- install [jq](https://jqlang.org/download/)
 
 ### Run integration tests
 
