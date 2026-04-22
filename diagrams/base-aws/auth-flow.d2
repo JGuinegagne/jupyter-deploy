@@ -1,0 +1,87 @@
+# Base AWS Template — Authentication Flow
+
+seq: "" {
+  shape: sequence_diagram
+
+  # Actors
+  Browser {
+    shape: page
+  }
+  Traefik
+  OAuth2 Proxy: "OAuth2 Proxy"
+  GitHub: "GitHub.com"
+  OAuth App: "OAuth App"
+  JupyterLab
+
+  # ── Flow 1 (blue): First visit — unauthenticated ──
+
+  Browser -> Traefik.visit: "GET /lab" {
+    style.stroke: "#1565c0"
+  }
+  Traefik.visit -> OAuth2 Proxy.check: "ForwardAuth\n/oauth2/auth" {
+    style.stroke: "#1565c0"
+  }
+  OAuth2 Proxy.check -> Traefik.visit: "401 (no cookie)" {
+    style.stroke: "#1565c0"
+    style.stroke-dash: 3
+  }
+  Traefik.visit -> Browser: "302 → /oauth2/start" {
+    style.stroke: "#1565c0"
+    style.stroke-dash: 3
+  }
+
+  # ── Flow 2 (red): OAuth dance ──
+
+  Browser -> OAuth2 Proxy.start: "GET /oauth2/start" {
+    style.stroke: "#c62828"
+  }
+  OAuth2 Proxy.start -> Browser: "302 → GitHub authorize URL" {
+    style.stroke: "#c62828"
+  }
+  Browser -> GitHub.auth: "Authorize app\n(scope: read:user, read:org)" {
+    style.stroke: "#c62828"
+  }
+  GitHub.auth -> OAuth App.verify: "Verify OAuth App" {
+    style.stroke: "#c62828"
+  }
+  OAuth App.verify -> GitHub.auth: "OK" {
+    style.stroke: "#c62828"
+  }
+  GitHub.auth -> Browser: "302 → /oauth2/callback?code=..." {
+    style.stroke: "#c62828"
+  }
+  Browser -> OAuth2 Proxy.callback: "GET /oauth2/callback" {
+    style.stroke: "#c62828"
+  }
+  OAuth2 Proxy.callback -> GitHub.token: "Exchange code for token" {
+    style.stroke: "#c62828"
+    style.stroke-dash: 3
+  }
+  GitHub.token -> OAuth2 Proxy.callback: "Access token + user info" {
+    style.stroke: "#c62828"
+  }
+
+  OAuth2 Proxy.callback.note: "Validate user/org/teams\nSet session cookie"
+
+  OAuth2 Proxy.callback -> Browser: "302 → /lab\n+ Set-Cookie (session)" {
+    style.stroke: "#c62828"
+  }
+
+  # ── Flow 3 (green): Authenticated visit ──
+
+  Browser -> Traefik.auth: "GET /lab\n+ Cookie" {
+    style.stroke: "#2e7d32"
+  }
+  Traefik.auth -> OAuth2 Proxy.session: "ForwardAuth\n(session cookie)" {
+    style.stroke: "#2e7d32"
+  }
+  OAuth2 Proxy.session -> Traefik.auth: "200 OK\nX-Auth-Request-User" {
+    style.stroke: "#2e7d32"
+  }
+  Traefik.auth -> JupyterLab: "Proxy to JupyterLab" {
+    style.stroke: "#2e7d32"
+  }
+  JupyterLab -> Browser: "JupyterLab UI" {
+    style.stroke: "#2e7d32"
+  }
+}

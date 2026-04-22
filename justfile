@@ -10,6 +10,46 @@ lint:
     terraform fmt -recursive -write=true
     uv run yamllint .
 
+# Build documentation locally
+docs-build:
+    cd docs && uv run sphinx-build -b html source build
+
+# Serve documentation locally for preview
+docs-serve: docs-build
+    cd docs && uv run python -m http.server 8000 --directory build
+
+# Serve documentation on all interfaces (for remote access)
+docs-serve-host: docs-build
+    @echo "Serving at http://$(hostname):8000"
+    cd docs && uv run python -m http.server 8000 --bind 0.0.0.0 --directory build
+
+# Generate architecture diagrams from d2 sources
+# d2 sources:  diagrams/<template>/*.d2
+# SVG outputs: docs/source/templates/<template>/diagrams/*.svg
+docs-diagrams:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    declare -A TEMPLATE_OUTPUT=(
+        ["base-aws"]="docs/source/templates/aws-base-template/diagrams"
+    )
+    for template_dir in diagrams/*/; do
+        [ -d "$template_dir" ] || continue
+        template=$(basename "$template_dir")
+        output_dir="${TEMPLATE_OUTPUT[$template]:-}"
+        if [ -z "$output_dir" ]; then
+            echo "Warning: no output mapping for diagrams/$template, skipping"
+            continue
+        fi
+        mkdir -p "$output_dir"
+        for f in "$template_dir"*.d2; do
+            [ -f "$f" ] || continue
+            name=$(basename "$f" .d2)
+            echo "Generating $template/$name.svg..."
+            d2 "$f" "$output_dir/$name.svg"
+        done
+    done
+    echo "Done."
+
 # Run unit tests
 unit-test:
     uv run pytest

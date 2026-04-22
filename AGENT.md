@@ -208,6 +208,14 @@ Essential commands for debugging a deploy project:
 More specific commands are template-dependent.
 Read the `AGENT.md` in the project directory for detailed instructions.
 
+## Writing documentation
+
+Refer to `docs/AGENT.md`
+
+## Updating architecture diagrams
+
+Refer to `diagrams/AGENT.md`
+
 ## Making changes in the GitHub CI
 
 Refer to `.github/AGENT.md`

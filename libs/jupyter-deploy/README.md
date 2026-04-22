@@ -1,32 +1,38 @@
 # Jupyter Deploy
 
 Jupyter deploy is an open-source command line interface tool (CLI) to deploy and manage
-JupyterLab applications to remote compute instances provided by a Cloud provider.
+**JupyterLab** applications to remote compute instances provided by a Cloud provider.
 Once deployed, you can access your application directly from your web browser,
 and share its dedicated URL with collaborators. Collaborators may then work together
-in real time on the same JupyterLab application.
+in real time on the same **JupyterLab** application.
 
 ## Templates
 The `jupyter-deploy` CLI interacts with templates: infrastructure-as-code packages
 that you can use to create your own project and deploy resources in your own cloud provider account.
 
 Templates are nominally python packages distributed on `PyPI`. You can install and manage templates in your virtual
-environment with `pip` or `uv`. The CLI automatically finds the templates installed in your Python environment.
+environment with `pip` or `uv`. `jupyter-deploy` automatically finds the templates installed in your Python environment.
 
-The CLI ships with a default template: [jupyter-deploy-tf-aws-ec2-base](https://pypi.org/project/jupyter-deploy-tf-aws-ec2-base/).
+`jupyter-deploy` ships with a default template: [jupyter-deploy-tf-aws-ec2-base](https://pypi.org/project/jupyter-deploy-tf-aws-ec2-base/).
 Refer to `jupyter-deploy-tf-aws-ec2-base` on PyPI for instructions on setting up the AWS infrastructure needed for your deployment.
 
 ## Installation
 
 Consider creating or activating a virtual environment.
 
-### Install with pip
+We recommend using [uv](https://docs.astral.sh/uv/).
 
+From your `uv` environment:
+```bash
+uv add jupyter-deploy
+```
+
+Or with pip:
 ```bash
 pip install jupyter-deploy
 ```
 
-## The CLI
+## The `jupyter-deploy` CLI
 
 ### Entry points
 From a terminal, run:
