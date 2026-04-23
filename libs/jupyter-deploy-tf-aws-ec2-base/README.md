@@ -155,7 +155,7 @@ On first visit, Traefik forwards the request to OAuth2 Proxy, which redirects th
 
 The template places the EC2 instance in the first subnet of the default VPC in the selected AWS region. The template assigns an Elastic IP (EIP) to the instance to keep its public IP address stable across stop/start cycles.
 
-Amazon Route 53 manages DNS. The template references a Hosted Zone for your domain (which must already exists) and adds a DNS record pointing your subdomain to the instance's Elastic IP.
+Amazon Route 53 manages DNS. The template references a Hosted Zone for your domain (which must already exist) and adds a DNS record pointing your subdomain to the instance's Elastic IP.
 
 The instance's security group only allows ingress on port 443 (HTTPS). There is no SSH access — all administrator operations go through AWS Systems Manager (SSM).
 
