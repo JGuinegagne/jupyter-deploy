@@ -1,3 +1,5 @@
+import re
+import textwrap
 from typing import Any
 
 import hcl2  # type: ignore[import-untyped]
@@ -6,6 +8,27 @@ from pydantic import ValidationError
 from jupyter_deploy.engine.terraform import tf_plan, tf_vardefs
 
 _HCL2_LITERAL_MAP: dict[str, Any] = {"null": None, "true": True, "false": False}
+_HEREDOC_RE = re.compile(r"^<<(-?)([A-Za-z_][A-Za-z0-9_]*)\n")
+
+
+def _expand_heredoc(s: str) -> str:
+    """Expand an HCL heredoc string to its content.
+
+    Handles both ``<<MARKER`` (literal) and ``<<-MARKER`` (indent-stripped)
+    forms. Returns *s* unchanged if it does not start with a heredoc prefix.
+    """
+    m = _HEREDOC_RE.match(s)
+    if not m:
+        return s
+    strip_indent = m.group(1) == "-"
+    marker = m.group(2)
+    lines = s[m.end() :].split("\n")
+    if lines and lines[-1].strip() == marker:
+        lines = lines[:-1]
+    body = "\n".join(lines)
+    if strip_indent:
+        body = textwrap.dedent(body)
+    return body.strip("\n")
 
 
 def strip_hcl2_quotes(obj: Any) -> Any:
@@ -15,13 +38,14 @@ def strip_hcl2_quotes(obj: Any) -> Any:
     - Quoted HCL strings keep their quotes: "region" → '"region"' (v7 returned 'region')
     - HCL literals returned as strings: null → 'null', true → 'true' (v7 returned None/True)
     - Comments collected in '__comments__' key (v7 discarded them)
+    - Heredoc blocks returned as literal strings with markers instead of expanded content
 
-    This recursively strips outer quotes, converts literal strings back to Python types,
-    and removes the '__comments__' key.
+    This recursively strips outer quotes, expands heredocs, converts literal strings back
+    to Python types, and removes the '__comments__' key.
     """
     if isinstance(obj, str):
         if len(obj) >= 2 and obj[0] == '"' and obj[-1] == '"':
-            return obj[1:-1]
+            return _expand_heredoc(obj[1:-1])
         if obj in _HCL2_LITERAL_MAP:
             return _HCL2_LITERAL_MAP[obj]
         return obj

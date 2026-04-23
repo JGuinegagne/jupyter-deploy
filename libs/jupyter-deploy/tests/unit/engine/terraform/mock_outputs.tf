@@ -9,3 +9,13 @@ output "aws_region" {
   description = "Name of the AWS region."
   value       = data.aws_region.current.id
 }
+
+# Public URL (heredoc description)
+output "public_url" {
+  description = <<-EOT
+    The public URL for accessing the server.
+
+    Includes the subdomain and domain.
+  EOT
+  value       = "https://example.com"
+}
