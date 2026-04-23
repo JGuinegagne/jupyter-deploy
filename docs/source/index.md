@@ -30,7 +30,7 @@ Access GPUs, scale compute, and expand storage on demand with simple commands.
 :::
 
 :::{grid-item-card} 🧩 Extensible Template-Based Architecture
-Pick a deployment template that fits your needs. Can't find what you need? Adding a template is simple!
+Pick a deployment template that fits your use case. Can't find what you need? Adding a template is simple!
 :::
 
 :::{grid-item-card} 📓 Multi-Application Support
@@ -53,6 +53,6 @@ Compatible with any cloud provider and any infrastructure-as-code engine.
 
 getting-started/index
 templates/index
-cli/index
+cli-reference/index
 contributor-guide/index
 ```

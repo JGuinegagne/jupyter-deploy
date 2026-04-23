@@ -8,7 +8,7 @@ The **AWS Base Template** is maintained and supported by AWS.
 
 ## 10k View
 
-When you navigate to the application URL in your browser, you connect to the EC2 instance over HTTPS. On the first visit, the instance redirects to GitHub for OAuth authentication; once verified, you connect to the `jupyter` container within your EC2 instance and see a **JupyterLab** application in your web browser.
+When you navigate to the application URL in your web browser, you connect to the EC2 instance over HTTPS. On the first visit, the instance redirects to GitHub for OAuth authentication; once verified, you connect to the `jupyter` container within your EC2 instance and see a **JupyterLab** application in your web browser.
 
 ![Overview](diagrams/overview.svg)
 
