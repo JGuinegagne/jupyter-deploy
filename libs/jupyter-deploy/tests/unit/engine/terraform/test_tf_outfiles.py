@@ -24,7 +24,11 @@ class TestExtractDescriptionFromDotTfFile(unittest.TestCase):
         content = self.outputs_tf_content
         result = tf_outfiles.extract_description_from_dot_tf_content(content)
 
-        expected = {"instance_id": "ID of the jupyter notebook.", "aws_region": "Name of the AWS region."}
+        expected = {
+            "instance_id": "ID of the jupyter notebook.",
+            "aws_region": "Name of the AWS region.",
+            "public_url": "The public URL for accessing the server.\n\nIncludes the subdomain and domain.",
+        }
         self.assertEqual(expected, result)
 
 

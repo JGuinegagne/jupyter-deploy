@@ -3,6 +3,12 @@
 import pytest
 from jupyter_deploy.enum import ValueSource
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
+from pytest_jupyter_deploy.terraform.utils import (
+    get_outputs_dot_tf_path,
+    get_variables_dot_tf_path,
+    parse_output_descriptions,
+    parse_variable_descriptions,
+)
 
 
 @pytest.mark.cli
@@ -289,6 +295,73 @@ def test_show_info_includes_store_and_project_id(e2e_deployment: EndToEndDeploym
     assert "Project ID" in result.stdout, "Info table should contain Project ID row"
     # On a deployed project, all store fields should have values
     assert "N/A" not in result.stdout, "Store Type, Store ID, and Project ID should not be N/A on a deployed project"
+
+
+@pytest.mark.cli
+def test_show_variable_description_single_line(e2e_deployment: EndToEndDeployment) -> None:
+    """Test that a short heredoc description is correctly expanded.
+
+    Uses 'volume_size_gb' whose first description line is a single sentence.
+    Compares CLI output against the first line parsed independently from variables.tf.
+    """
+    e2e_deployment.ensure_deployed()
+
+    variables_tf = get_variables_dot_tf_path(e2e_deployment.suite_config.project_dir)
+    expected = parse_variable_descriptions(variables_tf)
+    expected_first_line = expected["volume_size_gb"].split("\n")[0]
+
+    result = e2e_deployment.cli.run_command(
+        ["jupyter-deploy", "show", "--variable", "volume_size_gb", "--description", "--text"]
+    )
+    desc = result.stdout.strip()
+
+    assert desc.startswith(expected_first_line), (
+        f"Expected description to start with {expected_first_line!r}, got {desc!r}"
+    )
+
+
+@pytest.mark.cli
+def test_show_variable_description_multiline(e2e_deployment: EndToEndDeployment) -> None:
+    """Test that a long multi-line heredoc description is correctly expanded.
+
+    Uses 'domain' whose description spans many lines with URLs.
+    Compares CLI output against the first line parsed independently from variables.tf.
+    """
+    e2e_deployment.ensure_deployed()
+
+    variables_tf = get_variables_dot_tf_path(e2e_deployment.suite_config.project_dir)
+    expected = parse_variable_descriptions(variables_tf)
+    expected_first_line = expected["domain"].split("\n")[0]
+
+    result = e2e_deployment.cli.run_command(
+        ["jupyter-deploy", "show", "--variable", "domain", "--description", "--text"]
+    )
+    desc = result.stdout.strip()
+
+    assert desc.startswith(expected_first_line), (
+        f"Expected description to start with {expected_first_line!r}, got {desc!r}"
+    )
+
+
+@pytest.mark.cli
+def test_show_output_description_matches_template(e2e_deployment: EndToEndDeployment) -> None:
+    """Test that jd show -o <output> --description returns the correct description.
+
+    Uses 'jupyter_url' whose description is an inline string in outputs.tf.
+    Compares CLI output against the description parsed independently from outputs.tf.
+    """
+    e2e_deployment.ensure_deployed()
+
+    outputs_tf = get_outputs_dot_tf_path(e2e_deployment.suite_config.project_dir)
+    expected = parse_output_descriptions(outputs_tf)
+    expected_desc = expected["jupyter_url"]
+
+    result = e2e_deployment.cli.run_command(
+        ["jupyter-deploy", "show", "--output", "jupyter_url", "--description", "--text"]
+    )
+    desc = result.stdout.strip()
+
+    assert desc == expected_desc, f"Expected output description {expected_desc!r}, got {desc!r}"
 
 
 @pytest.mark.cli

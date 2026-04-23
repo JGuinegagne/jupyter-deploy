@@ -31,6 +31,10 @@ def test_config_help_show_variables(e2e_deployment: EndToEndDeployment) -> None:
     for var in expected_variables:
         assert var in result.stdout, f"Expected variable '{var}' in config help output"
 
+    # Verify descriptions are expanded (not raw heredoc markers)
+    assert "<<-EOT" not in result.stdout, "Config help contains unexpanded heredoc marker <<-EOT"
+    assert "<<EOT" not in result.stdout, "Config help contains unexpanded heredoc marker <<EOT"
+
 
 @pytest.mark.cli
 def test_config_set_string_variable(e2e_deployment: EndToEndDeployment) -> None:

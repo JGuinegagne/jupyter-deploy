@@ -83,14 +83,86 @@ class TestParseVariablesDotTfContent(unittest.TestCase):
         self.assertIsInstance(result["some_list_of_string"], tf_vardefs.TerraformListOfStrVariableDefinition)
         self.assertIsInstance(result["some_map_of_sring"], tf_vardefs.TerraformMapOfStrVariableDefinition)
 
-        # Verify descriptions are correctly parsed
-        self.assertIn("Recommended: t3.medium", result["some_string_value"].description)
-        self.assertIn("For example the size of the disk in GB.", result["some_int_value"].description)
-        self.assertIn("Recommended: 0.9", result["some_float_value"].description)
+        # Verify descriptions are correctly parsed (exact match to catch heredoc expansion regressions)
+        self.assertEqual(
+            "For example the instance type.\n\nRecommended: t3.medium",
+            result["some_string_value"].description,
+        )
+        self.assertEqual(
+            "For example the size of the disk in GB.\n\nRecommended: 30",
+            result["some_int_value"].description,
+        )
+        self.assertEqual(
+            "For example the max GPU utilization.\n\nRecommended: 0.9",
+            result["some_float_value"].description,
+        )
 
         # Verify sensitive flag is set correctly
         self.assertTrue(result["some_secret"].sensitive)
         self.assertFalse(result["some_string_value"].sensitive)
+
+
+class TestStripHcl2QuotesHeredocExpansion(unittest.TestCase):
+    def test_expands_indented_heredoc(self) -> None:
+        raw = '"<<-EOT\n    Line one.\n\n    Line two.\n  EOT"'
+        result = tf_varfiles.strip_hcl2_quotes(raw)
+        self.assertEqual("Line one.\n\nLine two.", result)
+
+    def test_expands_non_indented_heredoc(self) -> None:
+        raw = '"<<EOT\nLine one.\nLine two.\nEOT"'
+        result = tf_varfiles.strip_hcl2_quotes(raw)
+        self.assertEqual("Line one.\nLine two.", result)
+
+    def test_expands_heredoc_with_custom_marker(self) -> None:
+        raw = '"<<-DESC\n    Custom marker.\n  DESC"'
+        result = tf_varfiles.strip_hcl2_quotes(raw)
+        self.assertEqual("Custom marker.", result)
+
+    def test_passes_through_plain_quoted_string(self) -> None:
+        raw = '"Inline description"'
+        result = tf_varfiles.strip_hcl2_quotes(raw)
+        self.assertEqual("Inline description", result)
+
+    def test_expands_heredoc_in_nested_dict(self) -> None:
+        raw = {
+            '"var_name"': {
+                "description": '"<<-EOT\n    A description.\n  EOT"',
+                "type": "string",
+            }
+        }
+        result = tf_varfiles.strip_hcl2_quotes(raw)
+        self.assertEqual("A description.", result["var_name"]["description"])
+
+
+class TestParseVariablesDotTfHeredocDescriptions(unittest.TestCase):
+    variables_tf_content: str
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        mock_variables_path = Path(__file__).parent / "mock_variables.tf"
+        with open(mock_variables_path) as f:
+            cls.variables_tf_content = f.read()
+
+    def test_descriptions_do_not_contain_heredoc_markers(self) -> None:
+        result = tf_varfiles.parse_variables_dot_tf_content(self.variables_tf_content)
+        for var_name, var_def in result.items():
+            self.assertNotIn("<<-EOT", var_def.description, f"Variable '{var_name}' has unexpanded heredoc")
+            self.assertNotIn("EOT", var_def.description.split("\n")[-1] if var_def.description else "")
+
+    def test_heredoc_descriptions_are_fully_expanded(self) -> None:
+        result = tf_varfiles.parse_variables_dot_tf_content(self.variables_tf_content)
+        self.assertEqual(
+            "For example the instance type.\n\nRecommended: t3.medium",
+            result["some_string_value"].description,
+        )
+        self.assertEqual(
+            "For example the size of the disk in GB.\n\nRecommended: 30",
+            result["some_int_value"].description,
+        )
+        self.assertEqual(
+            "For example a resource prefix",
+            result["some_string_value_with_condition"].description,
+        )
 
 
 class TestParseDotTfvarsContentAndAddDefaults(unittest.TestCase):
