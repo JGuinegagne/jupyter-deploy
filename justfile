@@ -30,7 +30,7 @@ docs-diagrams:
     #!/usr/bin/env bash
     set -euo pipefail
     declare -A TEMPLATE_OUTPUT=(
-        ["base-aws"]="docs/source/templates/aws-base-template/diagrams"
+        ["aws-base-template"]="docs/source/templates/aws-base-template/diagrams"
     )
     for template_dir in diagrams/*/; do
         [ -d "$template_dir" ] || continue
