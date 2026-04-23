@@ -4,6 +4,8 @@ The **AWS Base Template** deploys a **JupyterLab** application to a dedicated Am
 served on your domain with encrypted HTTPS, GitHub OAuth integration,
 real-time collaboration, and fast UV-based environments.
 
+**Documentation:** [jupyter-deploy.readthedocs.io](https://jupyter-deploy.readthedocs.io)
+
 The **AWS Base Template** is maintained and supported by AWS.
 
 ## 10k View
