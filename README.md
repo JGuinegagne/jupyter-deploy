@@ -1,17 +1,20 @@
 # Jupyter Deploy
 
 [![Documentation](https://readthedocs.org/projects/jupyter-deploy/badge/?version=latest)](https://jupyter-deploy.readthedocs.io/en/latest/)
-
-## Overview
+[![CI](https://github.com/jupyter-infra/jupyter-deploy/actions/workflows/ci.yml/badge.svg)](https://github.com/jupyter-infra/jupyter-deploy/actions/workflows/ci.yml)
+[![Canary](https://img.shields.io/github/actions/workflow/status/jupyter-infra/jupyter-deploy/e2e-base-canary.yml?label=canary)](https://github.com/jupyter-infra/jupyter-deploy/actions/workflows/e2e-base-canary.yml)
+[![PyPI - jupyter-deploy](https://img.shields.io/pypi/v/jupyter-deploy?label=jupyter-deploy)](https://pypi.org/project/jupyter-deploy/)
+[![PyPI - base template](https://img.shields.io/pypi/v/jupyter-deploy-tf-aws-ec2-base?label=base-template)](https://pypi.org/project/jupyter-deploy-tf-aws-ec2-base/)
+[![PyPI - pytest plugin](https://img.shields.io/pypi/v/pytest-jupyter-deploy?label=pytest-plugin)](https://pypi.org/project/pytest-jupyter-deploy/)
 
 An open-source command line interface (CLI) to deploy interactive applications to the Cloud.
 
-- 🚀 **Cloud Deployments Made Simple** — Get started with three simple commands: `jd init`, `jd config`, `jd up`. No Cloud knowledge required.
-- ⚡ **Unlock The Power of the Cloud** — Access GPUs, scale compute, and expand storage on demand with simple commands.
-- 🧩 **Extensible Template-Based Architecture** — Pick a deployment template that fits your use case. Can't find what you need? Adding a template is simple!
-- 📓 **Multi-Application Support** — Deploy JupyterLab, Jupyter notebooks, or other interactive apps such as CodeEditor or StreamLit.
-- 👥 **Multi-User Support** — Grant users and teams access to your apps securely via their OIDC identity, then collaborate in real-time.
-- 🏗️ **Vendor Neutral** — Compatible with any cloud provider and any infrastructure-as-code engine.
+- **Cloud Deployments Made Simple** — Get started with three simple commands: `jd init`, `jd config`, `jd up`. No Cloud knowledge required.
+- **Unlock The Power of the Cloud** — Access GPUs, scale compute, and expand storage on demand with simple commands.
+- **Extensible Template-Based Architecture** — Pick a deployment template that fits your use case. Can't find what you need? Adding a template is simple!
+- **Multi-Application Support** — Deploy JupyterLab, Jupyter notebooks, or other interactive apps such as CodeEditor or StreamLit.
+- **Multi-User Support** — Grant users and teams access to your apps securely via their OIDC identity, then collaborate in real-time.
+- **Vendor Neutral** — Compatible with any cloud provider and any infrastructure-as-code engine.
 
 ## Documentation
 

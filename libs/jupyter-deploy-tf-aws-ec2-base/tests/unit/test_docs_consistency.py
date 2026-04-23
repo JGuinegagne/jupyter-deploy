@@ -39,10 +39,13 @@ def _normalize(text: str) -> str:
     normalized: list[str] = []
     for line in lines:
         line = line.rstrip()
+        if "jupyter-deploy.readthedocs.io" in line:
+            continue
         line = _promote_headings(line)
         line = line.replace(RAW_GITHUB_PREFIX, "")
         normalized.append(line)
-    return "\n".join(normalized)
+    result = "\n".join(normalized).strip()
+    return re.sub(r"\n{3,}", "\n\n", result)
 
 
 _MD_HEADING_RE = re.compile(r"^(#{1,6}) ")

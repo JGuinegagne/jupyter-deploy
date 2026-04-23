@@ -1,10 +1,8 @@
 # Jupyter Deploy
 
-Jupyter deploy is an open-source command line interface tool (CLI) to deploy and manage
-**JupyterLab** applications to remote compute instances provided by a Cloud provider.
-Once deployed, you can access your application directly from your web browser,
-and share its dedicated URL with collaborators. Collaborators may then work together
-in real time on the same **JupyterLab** application.
+Jupyter deploy is an open-source command line interface tool (CLI) to deploy and manage interactive applications such as **JupyterLab** to the Cloud.
+
+**Documentation:** [jupyter-deploy.readthedocs.io](https://jupyter-deploy.readthedocs.io)
 
 ## Templates
 The `jupyter-deploy` CLI interacts with templates: infrastructure-as-code packages
