@@ -1,5 +1,7 @@
 # Jupyter Deploy
 
+[![Documentation](https://readthedocs.org/projects/jupyter-deploy/badge/?version=latest)](https://jupyter-deploy.readthedocs.io/en/latest/)
+
 This monorepo contains packages for deploying Jupyter and interactive applications to various cloud providers.
 
 ## Packages
