@@ -5,8 +5,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "_ext"))
 
 project = "Jupyter Deploy"
-copyright = f"2025–{time.localtime().tm_year}, Jupyter Deploy Contributors"
-author = "Jupyter Deploy Contributors"
+copyright = f"2025–{time.localtime().tm_year}, Amazon Web Services"
+author = "Amazon Web Services"
 html_title = "Jupyter Deploy"
 
 extensions = [
@@ -32,23 +32,23 @@ html_logo = "_static/img/jupyter_logo.png"
 
 html_theme_options = {
     "accent_color": "orange",
-    "github_url": "https://github.com/jggg/jupyter-deploy",
+    "github_url": "https://github.com/jupyter-infra/jupyter-deploy",
     "nav_links": [
         {
             "title": "Getting Started",
             "url": "getting-started/index",
         },
         {
-            "title": "CLI",
-            "url": "cli/index",
-        },
-        {
             "title": "Templates",
             "url": "templates/index",
         },
         {
-            "title": "Contributors",
-            "url": "contributors/index",
+            "title": "CLI Reference",
+            "url": "cli-reference/index",
+        },
+        {
+            "title": "Contributor Guide",
+            "url": "contributor-guide/index",
         },
     ],
 }
