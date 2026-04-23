@@ -8,7 +8,7 @@ The **AWS Base Template** is maintained and supported by AWS.
 
 ## 10k View
 
-When you navigate to the application URL in your browser, you connect to the EC2 instance over HTTPS. On the first visit, the instance redirects to GitHub for OAuth authentication; once verified, you connect to the `jupyter` container within your EC2 instance and see a **JupyterLab** application in your web browser.
+When you navigate to the application URL in your web browser, you connect to the EC2 instance over HTTPS. On the first visit, the instance redirects to GitHub for OAuth authentication; once verified, you connect to the `jupyter` container within your EC2 instance and see a **JupyterLab** application in your web browser.
 
 ![Overview](https://raw.githubusercontent.com/jupyter-infra/jupyter-deploy/main/docs/source/templates/aws-base-template/diagrams/overview.svg)
 
@@ -139,13 +139,13 @@ jd down
 
 ### Containers
 
-The application runs as a set of containerized services orchestrated by Docker Compose. [Traefik](https://doc.traefik.io/traefik/) acts as the reverse proxy — it handles TLS termination, routes incoming HTTPS requests, and delegates authentication decisions to [OAuth2 Proxy](https://oauth2-proxy.github.io/oauth2-proxy/) via the [ForwardAuth](https://doc.traefik.io/traefik/reference/routing-configuration/http/middlewares/forwardauth/) middleware. OAuth2 Proxy manages the full [OAuth 2.0](https://datatracker.ietf.org/doc/html/rfc6749) flow with [GitHub as the identity provider](https://oauth2-proxy.github.io/oauth2-proxy/configuration/providers/github), handling redirects, token validation, and session cookies. Authenticated requests are forwarded to the **JupyterLab** container. A Fluent Bit sidecar collects service logs and a logrotate container manages log retention on disk.
+The application runs as a set of containerized services orchestrated by Docker Compose. [Traefik](https://doc.traefik.io/traefik/) acts as the reverse proxy — it handles TLS termination, routes incoming HTTPS requests, and delegates authentication decisions to [OAuth2 Proxy](https://oauth2-proxy.github.io/oauth2-proxy/) via the [ForwardAuth](https://doc.traefik.io/traefik/reference/routing-configuration/http/middlewares/forwardauth/) middleware. OAuth2 Proxy manages the full [OAuth 2.0](https://datatracker.ietf.org/doc/html/rfc6749) flow with [GitHub as the identity provider](https://oauth2-proxy.github.io/oauth2-proxy/configuration/providers/github), handling redirects, token validation, and session cookies. Traefik forwards authenticated requests to the **JupyterLab** container. A Fluent Bit sidecar collects service logs and a logrotate container manages log retention on disk.
 
 ![Containers](https://raw.githubusercontent.com/jupyter-infra/jupyter-deploy/main/docs/source/templates/aws-base-template/diagrams/containers.svg)
 
 ### Authentication flow
 
-On first visit, Traefik forwards the request to OAuth2 Proxy, which redirects the browser to GitHub for authentication. GitHub prompts the user to authorize the OAuth App, then redirects back to OAuth2 Proxy with an authorization code. OAuth2 Proxy exchanges the code for an access token, verifies the user's identity against the configured allowlist, sets a session cookie, and lets the request through to **JupyterLab**. Subsequent requests are authenticated via the session cookie without repeating the OAuth dance. See the [OAuth2 Proxy GitHub provider documentation](https://oauth2-proxy.github.io/oauth2-proxy/configuration/providers/github) for details.
+On first visit, Traefik forwards the request to OAuth2 Proxy, which redirects the browser to GitHub for authentication. GitHub prompts the user to authorize the OAuth App, then redirects back to OAuth2 Proxy with an authorization code. OAuth2 Proxy exchanges the code for an access token, verifies the user's identity against the configured allowlist, sets a session cookie, and lets the request through to **JupyterLab**. The session cookie authenticates subsequent requests without repeating the OAuth dance. See the [OAuth2 Proxy GitHub provider documentation](https://oauth2-proxy.github.io/oauth2-proxy/configuration/providers/github) for details.
 
 ![Authentication flow](https://raw.githubusercontent.com/jupyter-infra/jupyter-deploy/main/docs/source/templates/aws-base-template/diagrams/auth-flow.svg)
 
@@ -155,7 +155,7 @@ On first visit, Traefik forwards the request to OAuth2 Proxy, which redirects th
 
 The template places the EC2 instance in the first subnet of the default VPC in the selected AWS region. The template assigns an Elastic IP (EIP) to the instance to keep its public IP address stable across stop/start cycles.
 
-DNS is managed through Amazon Route 53. The template references a Hosted Zone for your domain (which must already exists) and adds a DNS record pointing your subdomain to the instance's Elastic IP.
+Amazon Route 53 manages DNS. The template references a Hosted Zone for your domain (which must already exist) and adds a DNS record pointing your subdomain to the instance's Elastic IP.
 
 The instance's security group only allows ingress on port 443 (HTTPS). There is no SSH access — all administrator operations go through AWS Systems Manager (SSM).
 
@@ -169,7 +169,7 @@ You can also provide a specific AMI ID to override automatic selection.
 
 ### Storage
 
-The instance has two volumes. The root volume inherits its size and settings from the selected AMI, with a configurable minimum size. It persists across instance restarts and instance type changes, as long as the new instance type is compatible with the existing root volume. A separate EBS data volume is attached and mounted into the **JupyterLab** container at `/home/jovyan` — this volume persists user data across container restarts and instance stop/start cycles.
+The instance has two volumes. The root volume inherits its size and settings from the selected AMI, with a configurable minimum size. It persists across instance restarts and instance type changes, as long as the new instance type is compatible with the existing root volume. The template attaches a separate EBS data volume and mounts it into the **JupyterLab** container at `/home/jovyan` — this volume persists user data across container restarts and instance stop/start cycles.
 
 You can optionally attach additional EBS volumes or EFS file systems and mount them into the Jupyter home directory.
 
@@ -181,7 +181,7 @@ You can optionally attach additional EBS volumes or EFS file systems and mount t
 
 The template creates an IAM role for the EC2 instance with permissions for SSM, Route 53, S3, and (optionally) EFS access.
 
-Two AWS Secrets Manager secrets are created:
+The template creates two AWS Secrets Manager secrets:
 - One to store the OAuth App client secret
 - One to store TLS certificates from Let's Encrypt, ensuring they persist across instance replacements
 
@@ -208,7 +208,7 @@ The template creates an SSM startup document that orchestrates instance configur
 | `fluent-bit.conf` | Fluent-bit log collection configuration |
 | `parsers.conf` | Fluent-bit Docker log parsers |
 
-If you selected `pixi` as the dependency manager, `pixi.jupyter.toml` is used instead of `pyproject.jupyter.toml`.
+If you selected `pixi` as the dependency manager, the template uses `pixi.jupyter.toml` instead of `pyproject.jupyter.toml`.
 
 An SSM association triggers the startup script on the instance whenever the configuration changes.
 
@@ -227,7 +227,7 @@ The template creates SSM documents that the `jd` CLI uses to manage the deployme
 
 ### Logging
 
-Docker service logs are collected by Fluent-bit and written to `/var/log/services` on the instance volume. A logrotate sidecar container handles automatic rotation of all log files based on configurable size and retention settings.
+Fluent-bit collects Docker service logs and writes them to `/var/log/services` on the instance volume. A logrotate sidecar container handles automatic rotation of all log files based on configurable size and retention settings.
 
 ### Presets
 

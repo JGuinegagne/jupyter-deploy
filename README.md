@@ -1,36 +1,51 @@
 # Jupyter Deploy
 
-This monorepo contains packages for deploying Jupyter and interactive applications to various cloud providers.
+[![Documentation](https://readthedocs.org/projects/jupyter-deploy/badge/?version=latest)](https://jupyter-deploy.readthedocs.io/en/latest/)
 
-## Packages
+## Overview
 
-- [jupyter-deploy](./libs/jupyter-deploy/README.md): Core package providing a command line interface tool (CLI) that you can use to deploy Jupyter and interactive applications to remote compute instances provided by a Cloud provider.
-- [jupyter-deploy-tf-aws-ec2-base](./libs/jupyter-deploy-tf-aws-ec2-base/README.md): A Terraform template for Jupyter deployment on AWS EC2 with a Traefik proxy.
-- [jupyter-infra-tf-aws-iam-ci](./libs/jupyter-infra-tf-aws-iam-ci/README.md): A Terraform template for CI configuration of AWS resources.
-- [pytest-jupyter-deploy](./libs/pytest-jupyter-deploy/README.md): A pytest plugin for E2E tests that uses Playwright.
+An open-source command line interface (CLI) to deploy interactive applications to the Cloud.
 
-### Installation
+- 🚀 **Cloud Deployments Made Simple** — Get started with three simple commands: `jd init`, `jd config`, `jd up`. No Cloud knowledge required.
+- ⚡ **Unlock The Power of the Cloud** — Access GPUs, scale compute, and expand storage on demand with simple commands.
+- 🧩 **Extensible Template-Based Architecture** — Pick a deployment template that fits your use case. Can't find what you need? Adding a template is simple!
+- 📓 **Multi-Application Support** — Deploy JupyterLab, Jupyter notebooks, or other interactive apps such as CodeEditor or StreamLit.
+- 👥 **Multi-User Support** — Grant users and teams access to your apps securely via their OIDC identity, then collaborate in real-time.
+- 🏗️ **Vendor Neutral** — Compatible with any cloud provider and any infrastructure-as-code engine.
+
+## Documentation
+
+https://jupyter-deploy.readthedocs.io
+
+## Installation
 
 We recommend using [uv](https://github.com/astral-sh/uv) for dependency management.
 
 ```bash
-# prepare your virtual environment
+# create a uv project with a virtual environment
 uv init . --bare
 uv venv
 source .venv/bin/activate
 
-# install the CLI and the base template
+# install the CLI and the AWS Base Template
 uv add jupyter-deploy[aws]
 uv add jupyter-deploy-tf-aws-ec2-base
 ```
 
-### Usage
+## Usage
 
-To get started, run from the uv virtual environment:
+To get started, run from your virtual environment:
 
 ```bash
 jd --help
 ```
+
+## Packages
+
+- [jupyter-deploy](./libs/jupyter-deploy/README.md): Core package providing the command line interface tool (CLI).
+- [jupyter-deploy-tf-aws-ec2-base](./libs/jupyter-deploy-tf-aws-ec2-base/README.md): The AWS Base Template to deploy a JupyterLab to an EC2 instance, serve it on your own domain and control access with GitHub OIDC.
+- [jupyter-infra-tf-aws-iam-ci](./libs/jupyter-infra-tf-aws-iam-ci/README.md): The template to configure the AWS resources for the CI.
+- [pytest-jupyter-deploy](./libs/pytest-jupyter-deploy/README.md): The pytest plugin for E2E tests that integrates with Playwright.
 
 ## Contributing
 

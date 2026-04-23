@@ -1,6 +1,6 @@
 # CLI Reference
 
-Jupyter Deploy provides the `jd` command (also available as `jupyter-deploy` or `jupyter deploy`)
+`jupyter-deploy` exposes the `jd` command (also available as `jupyter-deploy` or `jupyter deploy`)
 for managing cloud deployments of interactive applications.
 
 ## Command Overview

@@ -22,7 +22,7 @@ uv add jupyter-deploy[aws]
 uv add jupyter-deploy-tf-aws-ec2-base
 ```
 
-Or with pip:
+Or with `pip`:
 ```bash
 pip install jupyter-deploy[aws]
 pip install jupyter-deploy-tf-aws-ec2-base
@@ -99,5 +99,5 @@ and serves your **JupyterLab** application to a URL in your domain.
 ## What's Next
 
 - Explore the [**AWS Base Template**](../templates/aws-base-template/index) in detail
-- Learn about the [**CLI Commands**](../cli/index) available
+- Learn about the [**CLI Reference**](../cli-reference/index) available
 - Read the [**Contributor Guide**](../contributor-guide/index) to get involved

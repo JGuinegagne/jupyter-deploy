@@ -29,6 +29,11 @@ Prefer active voice over passive. For example:
 Never embed bold (`**`), backticks (`` ` ``), or other inline formatting in
 markdown headings (`#`, `##`, `###`, etc.).
 
+### Naming and ordering consistency
+
+Directory names, page titles, and `nav_links` entries must match each other (e.g. `cli-reference/` dir, "CLI Reference" title).
+The order of `nav_links` in `conf.py` must match the `{toctree}` order in `index.md`.
+
 ### README and docs sync
 
 The base template README and its docs pages share content.

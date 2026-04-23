@@ -4,7 +4,7 @@
 
 The template places the EC2 instance in the first subnet of the default VPC in the selected AWS region. The template assigns an Elastic IP (EIP) to the instance to keep its public IP address stable across stop/start cycles.
 
-DNS is managed through Amazon Route 53. The template references a Hosted Zone for your domain (which must already exists) and adds a DNS record pointing your subdomain to the instance's Elastic IP.
+Amazon Route 53 manages DNS. The template references a Hosted Zone for your domain (which must already exist) and adds a DNS record pointing your subdomain to the instance's Elastic IP.
 
 The instance's security group only allows ingress on port 443 (HTTPS). There is no SSH access — all administrator operations go through AWS Systems Manager (SSM).
 
@@ -18,7 +18,7 @@ You can also provide a specific AMI ID to override automatic selection.
 
 ## Storage
 
-The instance has two volumes. The root volume inherits its size and settings from the selected AMI, with a configurable minimum size. It persists across instance restarts and instance type changes, as long as the new instance type is compatible with the existing root volume. A separate EBS data volume is attached and mounted into the **JupyterLab** container at `/home/jovyan` — this volume persists user data across container restarts and instance stop/start cycles.
+The instance has two volumes. The root volume inherits its size and settings from the selected AMI, with a configurable minimum size. It persists across instance restarts and instance type changes, as long as the new instance type is compatible with the existing root volume. The template attaches a separate EBS data volume and mounts it into the **JupyterLab** container at `/home/jovyan` — this volume persists user data across container restarts and instance stop/start cycles.
 
 You can optionally attach additional EBS volumes or EFS file systems and mount them into the Jupyter home directory.
 
@@ -30,7 +30,7 @@ You can optionally attach additional EBS volumes or EFS file systems and mount t
 
 The template creates an IAM role for the EC2 instance with permissions for SSM, Route 53, S3, and (optionally) EFS access.
 
-Two AWS Secrets Manager secrets are created:
+The template creates two AWS Secrets Manager secrets:
 - One to store the OAuth App client secret
 - One to store TLS certificates from Let's Encrypt, ensuring they persist across instance replacements
 
@@ -57,7 +57,7 @@ The template creates an SSM startup document that orchestrates instance configur
 | `fluent-bit.conf` | Fluent-bit log collection configuration |
 | `parsers.conf` | Fluent-bit Docker log parsers |
 
-If you selected `pixi` as the dependency manager, `pixi.jupyter.toml` is used instead of `pyproject.jupyter.toml`.
+If you selected `pixi` as the dependency manager, the template uses `pixi.jupyter.toml` instead of `pyproject.jupyter.toml`.
 
 An SSM association triggers the startup script on the instance whenever the configuration changes.
 
@@ -76,7 +76,7 @@ The template creates SSM documents that the `jd` CLI uses to manage the deployme
 
 ## Logging
 
-Docker service logs are collected by Fluent-bit and written to `/var/log/services` on the instance volume. A logrotate sidecar container handles automatic rotation of all log files based on configurable size and retention settings.
+Fluent-bit collects Docker service logs and writes them to `/var/log/services` on the instance volume. A logrotate sidecar container handles automatic rotation of all log files based on configurable size and retention settings.
 
 ## Presets
 
