@@ -134,7 +134,7 @@ class GitHubOAuth2ProxyApplication:
         logger.debug("Clicked authorize button on reauthorization page")
 
         # Wait for redirect after clicking (back to app domain, not GitHub)
-        self.page.wait_for_url(lambda url: "github.com" not in url, timeout=30000)
+        self.page.wait_for_url(lambda url: urlparse(url).hostname != "github.com", timeout=30000)
 
         # Add 60-second delay post-authorization to allow GitHub processing
         logger.debug("Waiting 60 seconds for GitHub to process reauthorization...")
@@ -159,7 +159,7 @@ class GitHubOAuth2ProxyApplication:
                 authorize_button.click()
                 logger.debug("Clicked authorize button")
                 # Wait for redirect after clicking (back to app domain, not GitHub)
-                self.page.wait_for_url(lambda url: "github.com" not in url, timeout=10000)
+                self.page.wait_for_url(lambda url: urlparse(url).hostname != "github.com", timeout=10000)
             else:
                 # No authorize button visible, might need manual auth
                 error_msg = (
@@ -202,6 +202,7 @@ class GitHubOAuth2ProxyApplication:
                 # Normal case: no 2FA interstitial, proceed with standard authorize flow
                 return False
         except Exception as e:
+            # Log a warning and continue here, the assertions will likely fail afterwards
             logger.warning(f"Error finding skip 2FA verification: {e}")
             return False
 
@@ -209,7 +210,7 @@ class GitHubOAuth2ProxyApplication:
         skip_button.click()
         # After skipping, GitHub shows a meta-refresh redirect page that is still on github.com.
         # Wait for the redirect to actually complete (leave github.com).
-        self.page.wait_for_url(lambda url: "github.com" not in url, timeout=30000)
+        self.page.wait_for_url(lambda url: urlparse(url).hostname != "github.com", timeout=30000)
         logger.debug(f"2FA verification dismissed, now at: {self.page.url}")
         return True
 
@@ -295,7 +296,7 @@ class GitHubOAuth2ProxyApplication:
             # 3. Show a reauthorization page with a disabled button that becomes enabled
             try:
                 # Check if we're redirected automatically (back to app domain, not GitHub)
-                self.page.wait_for_url(lambda url: "github.com" not in url, timeout=5000)
+                self.page.wait_for_url(lambda url: urlparse(url).hostname != "github.com", timeout=5000)
             except Exception:
                 # Still on authorize page - handle both normal and reauthorization flows
                 self._handle_oauth_authorize_page()
@@ -393,13 +394,13 @@ class GitHubOAuth2ProxyApplication:
         current_url = self.page.url
         if "github.com/login/oauth/authorize" in current_url:
             try:
-                self.page.wait_for_url(lambda url: "github.com" not in url, timeout=5000)
+                self.page.wait_for_url(lambda url: urlparse(url).hostname != "github.com", timeout=5000)
             except Exception:
                 self._handle_oauth_authorize_page()
         elif "github.com" in current_url:
             # Wait a bit for any redirects to complete
             with contextlib.suppress(Exception):
-                self.page.wait_for_url(lambda url: "github.com" not in url, timeout=10000)
+                self.page.wait_for_url(lambda url: urlparse(url).hostname != "github.com", timeout=10000)
 
         self.save_storage_state()
         logger.info("2FA login complete, storage state saved")

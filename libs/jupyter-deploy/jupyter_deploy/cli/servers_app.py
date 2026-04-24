@@ -136,7 +136,7 @@ def logs(
     ctx: typer.Context,
     project_dir: Annotated[
         Path | None,
-        typer.Option("--path", "-p", help="Directory of the project whose server to restart."),
+        typer.Option("--path", "-p", help="Directory of the project whose server logs to display."),
     ] = None,
     service: Annotated[
         str, typer.Option("--service", "-s", help="Name of the service whose logs to display.")
