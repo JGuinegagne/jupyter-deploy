@@ -187,16 +187,51 @@ class GitHubOAuth2ProxyApplication:
             )
             raise RuntimeError(error_msg) from e
 
+    def _handle_2fa_verification_interstitial(self) -> bool:
+        """Dismiss GitHub's one-time 2FA verification interstitial if present.
+
+        GitHub periodically shows a "Verify your two-factor authentication (2FA) settings"
+        page during OAuth flows. Clicks "skip 2FA verification" to dismiss it.
+
+        Returns:
+            True if the interstitial was detected and dismissed, False otherwise.
+        """
+        try:
+            skip_button = self.page.get_by_role("button", name="skip 2FA verification")
+            if not skip_button.is_visible(timeout=2000):
+                # Normal case: no 2FA interstitial, proceed with standard authorize flow
+                return False
+        except Exception as e:
+            logger.warning(f"Error finding skip 2FA verification: {e}")
+            return False
+
+        logger.info("GitHub 2FA verification interstitial detected, skipping...")
+        skip_button.click()
+        # After skipping, GitHub shows a meta-refresh redirect page that is still on github.com.
+        # Wait for the redirect to actually complete (leave github.com).
+        self.page.wait_for_url(lambda url: "github.com" not in url, timeout=30000)
+        logger.debug(f"2FA verification dismissed, now at: {self.page.url}")
+        return True
+
     def _handle_oauth_authorize_page(self) -> None:
         """Handle GitHub OAuth authorize page, dispatching to appropriate handler.
 
-        Detects whether this is a standard authorization page or a reauthorization page
-        (shown when GitHub detects unusually high authorization request volume) and
-        dispatches to the appropriate handler.
+        Detects whether this is a standard authorization page, a reauthorization page
+        (shown when GitHub detects unusually high authorization request volume), or
+        a 2FA verification interstitial, and dispatches to the appropriate handler.
 
         Raises:
             RuntimeError: If authorization fails
         """
+        if self._handle_2fa_verification_interstitial():
+            # After dismissing, GitHub may redirect back to authorize page or to the app
+            current_url = self.page.url
+            if "github.com" not in current_url:
+                return
+            if "github.com/login/oauth/authorize" not in current_url:
+                return
+            # Still on authorize page — fall through to handle normal/reauth flow
+
         # Check if this is a reauthorization page by looking for the heading
         try:
             reauth_heading = self.page.get_by_role("heading", name="Reauthorization required")
