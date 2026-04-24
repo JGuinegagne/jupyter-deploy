@@ -76,8 +76,7 @@ def handle_cli_errors(console: Console) -> Generator[None, None, None]:
         console.print(f":x: {e}", style="bold red")
         console.line()
         console.print(
-            ":bulb: Change your working directory to a jupyter-deploy project "
-            "or create one with [bold cyan]jd init PATH[/]"
+            ":bulb: Change your working directory to a project directory or create one with [bold cyan]jd init PATH[/]"
         )
         raise typer.Exit(code=1) from None
 

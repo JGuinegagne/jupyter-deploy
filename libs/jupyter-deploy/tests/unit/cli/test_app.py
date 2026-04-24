@@ -2,6 +2,7 @@ import sys
 import unittest
 from collections.abc import Generator
 from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import typer
@@ -83,7 +84,7 @@ class TestJupyterDeployCliRunner(unittest.TestCase):
 
         # Check that the command ran successfully
         self.assertEqual(result.exit_code, 0)
-        self.assertTrue(result.stdout.index("Jupyter-deploy") >= 0)
+        self.assertTrue(result.stdout.index("Deploy interactive") >= 0)
         self.assertTrue(result.stdout.index("server") >= 0)
         self.assertTrue(result.stdout.index("host") >= 0)
         self.assertTrue(result.stdout.index("users") >= 0)
@@ -96,7 +97,7 @@ class TestJupyterDeployCliRunner(unittest.TestCase):
 
         # Check that the command ran successfully
         self.assertEqual(result.exit_code, 0)
-        self.assertTrue(result.stdout.index("Jupyter-deploy") >= 0)
+        self.assertTrue(result.stdout.index("Deploy interactive") >= 0)
 
 
 class TestJupyterDeployApp(unittest.TestCase):
@@ -183,7 +184,7 @@ class TestDownCommand(unittest.TestCase):
         result = runner.invoke(app_runner.app, ["down", "--path", "/custom/path"])
 
         self.assertEqual(result.exit_code, 0)
-        mock_project_ctx_manager.assert_called_once_with("/custom/path")
+        mock_project_ctx_manager.assert_called_once_with(Path("/custom/path"))
         mock_down_fns["destroy"].assert_called_once()
 
     @patch("jupyter_deploy.cli.app.DownHandler")

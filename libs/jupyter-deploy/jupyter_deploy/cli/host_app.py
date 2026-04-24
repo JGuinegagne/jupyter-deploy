@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -10,7 +11,7 @@ from jupyter_deploy.enum import HostStatusType
 from jupyter_deploy.handlers.resource import host_handler
 
 host_app = typer.Typer(
-    help=("""Interact with the host running your Jupyter server."""),
+    help="Interact with the host machine running your app.",
     no_args_is_help=True,
 )
 
@@ -18,8 +19,8 @@ host_app = typer.Typer(
 @host_app.command()
 def status(
     project_dir: Annotated[
-        str | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project whose host to check status."),
+        Path | None,
+        typer.Option("--path", "-p", help="Directory of the project whose host to check status."),
     ] = None,
     status_for: Annotated[
         HostStatusType | None,
@@ -28,8 +29,8 @@ def status(
 ) -> None:
     """Check the status of the host machine.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
@@ -50,14 +51,14 @@ def status(
 @host_app.command()
 def stop(
     project_dir: Annotated[
-        str | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project whose host to stop."),
+        Path | None,
+        typer.Option("--path", "-p", help="Directory of the project whose host to stop."),
     ] = None,
 ) -> None:
     """Stop the host machine.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
@@ -71,14 +72,14 @@ def stop(
 @host_app.command()
 def start(
     project_dir: Annotated[
-        str | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project whose host to start."),
+        Path | None,
+        typer.Option("--path", "-p", help="Directory of the project whose host to start."),
     ] = None,
 ) -> None:
     """Start the host machine.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
@@ -92,14 +93,14 @@ def start(
 @host_app.command()
 def restart(
     project_dir: Annotated[
-        str | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project whose host to restart."),
+        Path | None,
+        typer.Option("--path", "-p", help="Directory of the project."),
     ] = None,
 ) -> None:
     """Restart the host machine.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
@@ -113,14 +114,14 @@ def restart(
 @host_app.command()
 def connect(
     project_dir: Annotated[
-        str | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project whose host to restart."),
+        Path | None,
+        typer.Option("--path", "-p", help="Directory of the project."),
     ] = None,
 ) -> None:
     """Start an SSH-style connection to the host machine.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
@@ -135,20 +136,20 @@ def connect(
 def exec(
     ctx: typer.Context,
     project_dir: Annotated[
-        str | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
+        Path | None,
+        typer.Option("--path", "-p", help="Directory of the project."),
     ] = None,
 ) -> None:
     """Execute a non-interactive command on the host machine.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
 
     Pass the command after '--', for example:
 
-    jd host exec -- df -h
+    <jd host exec -- df -h>
 
-    jd host exec -- "docker container list | grep jupyter"
+    <jd host exec -- "docker container list | grep jupyter">
     """
     # Arguments after -- are in ctx.args
     command_args = ctx.args

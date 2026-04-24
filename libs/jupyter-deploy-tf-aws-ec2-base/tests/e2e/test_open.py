@@ -23,11 +23,11 @@ def test_open_show_correct_url(e2e_deployment: EndToEndDeployment) -> None:
     result = e2e_deployment.cli.run_command(["jupyter-deploy", "open"])
 
     # Verify the output contains expected text
-    assert "Opening Jupyter app at:" in result.stdout, "Expected 'Opening Jupyter app at:' in jd open output"
+    assert "Opening app at:" in result.stdout, "Expected 'Opening app at:' in jd open output"
 
     # Extract the URL from the output using regex
-    # Expected format: "Opening Jupyter app at: https://subdomain.domain.com"
-    url_pattern = r"Opening Jupyter app at:\s+(https://[^\s]+)"
+    # Expected format: "Opening app at: https://subdomain.domain.com"
+    url_pattern = r"Opening app at:\s+(https://[^\s]+)"
     match = re.search(url_pattern, result.stdout)
     assert match is not None, "Could not extract URL from jd open output"
 

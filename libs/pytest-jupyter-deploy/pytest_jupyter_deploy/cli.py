@@ -124,9 +124,9 @@ class JDCli:
         """
         result = self.run_command(["jupyter-deploy", "server", "status"])
 
-        # Parse output for line "Jupyter server status: <status>"
+        # Parse output for line "Server status: <status>"
         for line in result.stdout.splitlines():
-            if line.startswith("Jupyter server status:"):
+            if line.startswith("Server status:"):
                 # Extract status after the colon and color codes
                 status = line.split(":", 1)[1].strip()
                 # Remove ANSI color codes if present

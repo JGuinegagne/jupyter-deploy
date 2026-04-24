@@ -13,7 +13,7 @@ from jupyter_deploy.enum import HistoryEnabledCommandType
 from jupyter_deploy.handlers.command_history_handler import CommandHistoryHandler
 
 history_app = typer.Typer(
-    help=("View and manage logs emitted by the infrastructure-as-code engine within jupyter-deploy commands."),
+    help="View and manage logs emitted by the infrastructure-as-code engine.",
     no_args_is_help=True,
 )
 
@@ -22,11 +22,11 @@ history_app = typer.Typer(
 def list(
     command: Annotated[
         HistoryEnabledCommandType,
-        typer.Argument(help="Jupyter-deploy command that generated the logs."),
+        typer.Argument(help="Command that generated the logs."),
     ],
     project_dir: Annotated[
-        str | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
+        Path | None,
+        typer.Option("--path", "-p", help="Directory of the project."),
     ] = None,
     n: Annotated[
         int,
@@ -39,8 +39,8 @@ def list(
 ) -> None:
     """Show the list of execution logs available in the project for a specific command.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
@@ -77,12 +77,12 @@ def show(
     command: Annotated[
         HistoryEnabledCommandType | None,
         typer.Argument(
-            help="Jupyter-deploy command that generated the log. If omitted, show latest log from any command.",
+            help="Command that generated the log. If omitted, show latest log from any command.",
         ),
     ] = None,
     project_dir: Annotated[
-        str | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
+        Path | None,
+        typer.Option("--path", "-p", help="Directory of the project."),
     ] = None,
     n: Annotated[
         int,
@@ -99,8 +99,8 @@ def show(
 ) -> None:
     """Display the content of a specific command execution log.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
 
     By default, displays the content of the entire log.
 
@@ -165,8 +165,8 @@ def clear(
         ),
     ],
     project_dir: Annotated[
-        str | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
+        Path | None,
+        typer.Option("--path", "-p", help="Directory of the project."),
     ] = None,
     keep: Annotated[
         int,
@@ -175,8 +175,8 @@ def clear(
 ) -> None:
     """Delete execution logs for a specific command, keeping only the most recent N logs.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):

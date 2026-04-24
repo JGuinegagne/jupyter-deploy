@@ -106,6 +106,14 @@ Always run from the root of the repository:
 2. you MUST NOT write docstrings that merely repeat a method name
 3. you MUST NOT use `TYPE_CHECKING` imports anywhere
 
+## CLI docstring style
+In CLI command docstrings and help strings (`libs/jupyter-deploy/jupyter_deploy/cli/`):
+1. Avoid mentioning "jupyter", "jupyterlab", or "jupyter-deploy project" — use "project" or "app".
+2. Reference commands with angle brackets: `<jd init>`, `<jd up>`.
+3. Reference optional flags bare (no backticks): --overwrite or -o.
+4. Reference flag values in lowercase angle brackets: --path <project-dir>, --variable <variable-name>.
+**Note:** Rules 2-4 DO NOT apply to `console.print()` statements, only to cli docstrings.
+
 ## Writing unit tests
 Unit tests are located in `libs/<package-name>/tests/unit`
 

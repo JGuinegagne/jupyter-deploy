@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from typer.testing import CliRunner
@@ -52,7 +53,7 @@ class TestOpenCommand(unittest.TestCase):
         result = runner.invoke(app_runner.app, ["open", "--path", "/custom/path"])
 
         self.assertEqual(result.exit_code, 0)
-        mock_project_ctx_manager.assert_called_once_with("/custom/path")
+        mock_project_ctx_manager.assert_called_once_with(Path("/custom/path"))
         mock_open_fns["open"].assert_called_once()
 
     @patch("jupyter_deploy.cli.app.OpenHandler")
@@ -88,7 +89,7 @@ class TestOpenCommand(unittest.TestCase):
 
         self.assertEqual(result.exit_code, 0)
         # Check that success message is displayed
-        self.assertIn("Opening Jupyter app at:", result.output)
+        self.assertIn("Opening app at:", result.output)
         self.assertIn("https://example.com/jupyter", result.output)
         # Check that hint is displayed
         self.assertIn("Having trouble?", result.output)
@@ -248,7 +249,7 @@ class TestOpenCommand(unittest.TestCase):
         result = runner.invoke(app_runner.app, ["open"])
 
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("Opening Jupyter app at:", result.output)
+        self.assertIn("Opening app at:", result.output)
         # Check that hint is NOT displayed
         self.assertNotIn("Having trouble?", result.output)
 

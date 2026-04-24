@@ -47,7 +47,7 @@ class JupyterDeployCliRunner:
     def __init__(self) -> None:
         """Setup the CLI shell, add sub-commands."""
         self.app = typer.Typer(
-            help=("Jupyter-deploy CLI helps you deploy notebooks application to your favorite Cloud provider."),
+            help="Deploy interactive applications to the cloud.",
             no_args_is_help=True,
         )
         self._setup_basic_commands()
@@ -82,9 +82,9 @@ runner = JupyterDeployCliRunner()
 @runner.app.command()
 def init(
     path: Annotated[
-        str | None,
+        Path | None,
         typer.Argument(
-            help="Path to the directory where jupyter-deploy will create your project files. "
+            help="Path to the directory where the project files will be created. "
             "Pass '.' to use your current working directory."
         ),
     ] = None,
@@ -130,13 +130,13 @@ def init(
         typer.Option("--store-id", help="ID of a specific store to restore from."),
     ] = None,
 ) -> None:
-    """Initialize a project directory containing the specified infrastructure-as-code template.
+    """Initialize a project from a template in the target directory.
 
     Template will be selected based on the provided parameters - the matching
     template package must have already been installed.
 
     You must specify a project path which must be a directory. If such a directory is not empty,
-    the command will fail unless you passed the `--overwrite` or `-o` flag. `--overwrite` will prompt
+    the command will fail unless you passed --overwrite or -o. --overwrite will prompt
     for confirmation before deleting existing content.
 
     Alternatively, use --restore-project to restore a project from a remote store.
@@ -156,7 +156,7 @@ def init(
 
 def _init_from_template(
     console: Console,
-    path: str,
+    path: Path,
     engine: EngineType,
     provider: ProviderType,
     infrastructure: InfrastructureType,
@@ -215,7 +215,7 @@ def _init_from_template(
 
 def _init_from_store(
     console: Console,
-    path: str,
+    path: Path,
     project_id: str,
     store_type: StoreType | None,
     store_id: str | None,
@@ -296,14 +296,14 @@ def config(
 ) -> None:
     """Verify the system configuration, prompt inputs and prepare for deployment.
 
-    You must run this command from a jupyter-deploy project directory created with `jd init`.
+    Run from a project directory created with <jd init>.
 
-    The `config` command will remember your variable values so that you do not need to
-    specify them again next time you run `config`.
+    The config command will remember your variable values so that you do not need to
+    specify them again next time you run <jd config>.
 
-    You can reset these recorded values with `--reset` or `-r`.
+    You can reset these recorded values with --reset or -r.
 
-    You can specify where to save the planned change with `--output-file` or `-f`.
+    You can specify where to save the planned change with --output-file or -f.
     """
     console = Console()
     with handle_cli_errors(console):
@@ -455,12 +455,14 @@ def config(
 @runner.app.command()
 def up(
     project_dir: Annotated[
-        str | None, typer.Option("--path", "-p", help="Directory of the jupyter-deploy project to bring up.")
+        Path | None, typer.Option("--path", "-p", help="Directory of the project to bring up.")
     ] = None,
     config_filename: Annotated[
         str | None,
         typer.Option(
-            "--config-filename", "-f", help="Name of a file in the project_dir containing the execution configuration."
+            "--config-filename",
+            "-f",
+            help="Name of a file in the project directory containing the execution configuration.",
         ),
     ] = None,
     auto_approve: Annotated[
@@ -468,13 +470,13 @@ def up(
     ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show full output without progress bar.")] = False,
 ) -> None:
-    """Apply the changes defined in the infrastructure-as-code template.
+    """Apply the project configuration to the cloud resources.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory. Optionally, you can also pass a --config-file
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>. Optionally, you can also pass a --config-file
     argument.
 
-    Call `jd config` first to set the input variables and
+    Call <jd config> first to set the input variables and
     verify the configuration.
     """
     console = Console()
@@ -526,20 +528,20 @@ def up(
 @runner.app.command()
 def down(
     project_dir: Annotated[
-        str | None, typer.Option("--path", "-p", help="Directory of the jupyter-deploy project to bring down.")
+        Path | None, typer.Option("--path", "-p", help="Directory of the project to bring down.")
     ] = None,
     auto_approve: Annotated[
         bool, typer.Option("--answer-yes", "-y", help="Destroy resources without confirmation prompt.")
     ] = False,
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show full output without progress bar.")] = False,
 ) -> None:
-    """Destroy the resources defined in the infrastructure-as-code template.
+    """Destroy the cloud resources defined in the project configuration.
 
-    Run either from a jupyter-deploy project directed that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
 
-    No-op if you have not already created the infrastructure with `jd up`, or if you
-    already ran `jd down`.
+    No-op if you have not already created the infrastructure with <jd up>, or if you
+    already ran <jd down>.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
@@ -587,16 +589,14 @@ def down(
 
 @runner.app.command()
 def open(
-    project_dir: Annotated[
-        str | None, typer.Option("--path", "-p", help="Directory of the jupyter-deploy project to open.")
-    ] = None,
+    project_dir: Annotated[Path | None, typer.Option("--path", "-p", help="Directory of the project to open.")] = None,
 ) -> None:
-    """Open the Jupyter app in your webbrowser.
+    """Open the app in your web browser.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
 
-    Call `jd config` and `jd up` first.
+    Call <jd config> and <jd up> first.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
@@ -607,7 +607,7 @@ def open(
 
         try:
             url = handler.open()
-            console.print(f"\nOpening Jupyter app at: {url}", style="green")
+            console.print(f"\nOpening app at: {url}", style="green")
         except UrlNotAvailableError as e:
             # URL not available - show helpful message but don't fail (project not deployed)
             console.print(f":x: {e}", style="bold red")
@@ -663,7 +663,7 @@ def open(
 @runner.app.command()
 def show(
     project_dir: Annotated[
-        str | None, typer.Option("--path", "-p", help="Directory of the jupyter-deploy project to show information.")
+        Path | None, typer.Option("--path", "-p", help="Directory of the project to show information.")
     ] = None,
     info: Annotated[bool, typer.Option("--info", help="Display core project and template information.")] = False,
     outputs: Annotated[bool, typer.Option("--outputs", help="Display outputs information.")] = False,
@@ -706,13 +706,13 @@ def show(
         typer.Option("--text", help="Output plain text without Rich markup."),
     ] = False,
 ) -> None:
-    """Display information about the jupyter-deploy project.
+    """Display information about the project.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
 
     If the project is up, shows the values of the output as defined in
-    the infrastructure as code project.
+    the infrastructure-as-code project.
 
     Pass --variable <variable-name> to display the value of a single variable, or
     -v <variable-name> --description to display its description.

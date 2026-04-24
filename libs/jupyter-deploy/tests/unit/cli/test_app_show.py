@@ -1,6 +1,7 @@
 import unittest
 from collections.abc import Generator
 from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from typer.testing import CliRunner
@@ -156,7 +157,7 @@ class TestShowCommand(unittest.TestCase):
         result = runner.invoke(app_runner.app, ["show", "--path", "/custom/path"])
 
         self.assertEqual(result.exit_code, 0)
-        mock_project_ctx_manager.assert_called_once_with("/custom/path")
+        mock_project_ctx_manager.assert_called_once_with(Path("/custom/path"))
 
     @patch("jupyter_deploy.cli.app.ShowHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")

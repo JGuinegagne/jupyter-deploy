@@ -17,7 +17,7 @@ class InitHandler:
 
     def __init__(
         self,
-        project_dir: str | None,
+        project_dir: Path | None,
         engine: EngineType = EngineType.TERRAFORM,
         provider: ProviderType = ProviderType.AWS,
         infrastructure: InfrastructureType = AWSInfrastructureType.EC2,
@@ -27,7 +27,7 @@ class InitHandler:
         if not project_dir:
             self.project_path = fs_utils.get_default_project_path()
         else:
-            self.project_path = Path(project_dir)
+            self.project_path = project_dir
 
         self.abs_project_path = Path.resolve(self.project_path)
         self.engine = engine
@@ -94,7 +94,7 @@ class InitHandler:
 
     @staticmethod
     def restore(
-        project_dir: str,
+        project_dir: Path,
         project_id: str,
         store_type: StoreType,
         display_manager: DisplayManager,
@@ -105,7 +105,7 @@ class InitHandler:
         Returns:
             The absolute path to the restored project.
         """
-        dest_path = Path(project_dir)
+        dest_path = project_dir
         store_manager = StoreManagerFactory.get_manager(store_type=store_type, store_id=store_id)
         store_manager.pull(project_id, dest_path, display_manager)
 

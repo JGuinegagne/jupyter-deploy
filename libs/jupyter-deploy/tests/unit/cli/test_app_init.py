@@ -37,7 +37,7 @@ class TestInitCommand(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, "init command should work")
 
         mock_handler_cls.assert_called_once_with(
-            project_dir=".",
+            project_dir=Path("."),
             engine=EngineType.TERRAFORM,
             provider="aws",
             infrastructure="ec2",
@@ -68,7 +68,7 @@ class TestInitCommand(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, "init command should work")
 
         mock_handler_cls.assert_called_once_with(
-            project_dir="custom-dir",
+            project_dir=Path("custom-dir"),
             engine=EngineType.TERRAFORM,
             provider="aws",
             infrastructure="ec2",
@@ -88,7 +88,7 @@ class TestInitCommand(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, "init command should work")
 
         mock_handler_cls.assert_called_once_with(
-            project_dir="custom-dir",
+            project_dir=Path("custom-dir"),
             engine=EngineType.TERRAFORM,
             provider="aws",
             infrastructure="ec2",
@@ -188,7 +188,7 @@ class TestInitRestoreCommand(unittest.TestCase):
         self.assertEqual(result.exit_code, 0, result.output)
         mock_handler_cls.restore.assert_called_once()
         call_kwargs = mock_handler_cls.restore.call_args.kwargs
-        self.assertEqual(call_kwargs["project_dir"], "/tmp/restored")
+        self.assertEqual(call_kwargs["project_dir"], Path("/tmp/restored"))
         self.assertEqual(call_kwargs["project_id"], "tpl-abc123")
         self.assertIsNone(call_kwargs["store_id"])
         self.assertIn("restored", result.output)

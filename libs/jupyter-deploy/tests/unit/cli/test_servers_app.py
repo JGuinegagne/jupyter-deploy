@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from typer.testing import CliRunner
@@ -116,7 +117,7 @@ class TestServerStatusCmd(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -232,7 +233,7 @@ class TestServerStartCmd(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
@@ -367,7 +368,7 @@ class TestServerStopCmd(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
@@ -502,7 +503,7 @@ class TestServerRestartCmd(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.cli.servers_app.Console")
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")

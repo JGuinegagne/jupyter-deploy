@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from typer.testing import CliRunner
@@ -81,7 +82,7 @@ class TestTeamAddCmd(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.handlers.access.team_handler.TeamsHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -154,7 +155,7 @@ class TestTeamRemoveCmd(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.handlers.access.team_handler.TeamsHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -228,7 +229,7 @@ class TestTeamSetCmd(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.handlers.access.team_handler.TeamsHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -378,7 +379,7 @@ class TestTeamListCmd(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.handlers.access.team_handler.TeamsHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
