@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from typer.testing import CliRunner
@@ -80,7 +81,7 @@ class TestUserAddCmd(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.handlers.access.user_handler.UsersHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -152,7 +153,7 @@ class TestUserRemoveCmd(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.handlers.access.user_handler.UsersHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -225,7 +226,7 @@ class TestUserSetCmd(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.handlers.access.user_handler.UsersHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -375,7 +376,7 @@ class TestUserListCmd(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.handlers.access.user_handler.UsersHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")

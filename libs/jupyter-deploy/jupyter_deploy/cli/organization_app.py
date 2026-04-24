@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -18,7 +19,7 @@ organization_app = typer.Typer(
 def set(
     organization: Annotated[str, typer.Argument(help="Name of the organization to allowlist.")],
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
     ] = None,
 ) -> None:
@@ -39,7 +40,7 @@ def set(
 @organization_app.command()
 def unset(
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
     ] = None,
 ) -> None:
@@ -60,7 +61,7 @@ def unset(
 @organization_app.command()
 def get(
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
     ] = None,
 ) -> None:

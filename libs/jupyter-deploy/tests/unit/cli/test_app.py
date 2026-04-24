@@ -2,6 +2,7 @@ import sys
 import unittest
 from collections.abc import Generator
 from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import typer
@@ -183,7 +184,7 @@ class TestDownCommand(unittest.TestCase):
         result = runner.invoke(app_runner.app, ["down", "--path", "/custom/path"])
 
         self.assertEqual(result.exit_code, 0)
-        mock_project_ctx_manager.assert_called_once_with("/custom/path")
+        mock_project_ctx_manager.assert_called_once_with(Path("/custom/path"))
         mock_down_fns["destroy"].assert_called_once()
 
     @patch("jupyter_deploy.cli.app.DownHandler")

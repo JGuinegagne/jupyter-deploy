@@ -82,7 +82,7 @@ runner = JupyterDeployCliRunner()
 @runner.app.command()
 def init(
     path: Annotated[
-        str | None,
+        Path | None,
         typer.Argument(
             help="Path to the directory where jupyter-deploy will create your project files. "
             "Pass '.' to use your current working directory."
@@ -156,7 +156,7 @@ def init(
 
 def _init_from_template(
     console: Console,
-    path: str,
+    path: Path,
     engine: EngineType,
     provider: ProviderType,
     infrastructure: InfrastructureType,
@@ -215,7 +215,7 @@ def _init_from_template(
 
 def _init_from_store(
     console: Console,
-    path: str,
+    path: Path,
     project_id: str,
     store_type: StoreType | None,
     store_id: str | None,
@@ -455,7 +455,7 @@ def config(
 @runner.app.command()
 def up(
     project_dir: Annotated[
-        str | None, typer.Option("--path", "-p", help="Directory of the jupyter-deploy project to bring up.")
+        Path | None, typer.Option("--path", "-p", help="Directory of the jupyter-deploy project to bring up.")
     ] = None,
     config_filename: Annotated[
         str | None,
@@ -526,7 +526,7 @@ def up(
 @runner.app.command()
 def down(
     project_dir: Annotated[
-        str | None, typer.Option("--path", "-p", help="Directory of the jupyter-deploy project to bring down.")
+        Path | None, typer.Option("--path", "-p", help="Directory of the jupyter-deploy project to bring down.")
     ] = None,
     auto_approve: Annotated[
         bool, typer.Option("--answer-yes", "-y", help="Destroy resources without confirmation prompt.")
@@ -588,7 +588,7 @@ def down(
 @runner.app.command()
 def open(
     project_dir: Annotated[
-        str | None, typer.Option("--path", "-p", help="Directory of the jupyter-deploy project to open.")
+        Path | None, typer.Option("--path", "-p", help="Directory of the jupyter-deploy project to open.")
     ] = None,
 ) -> None:
     """Open the Jupyter app in your webbrowser.
@@ -663,7 +663,7 @@ def open(
 @runner.app.command()
 def show(
     project_dir: Annotated[
-        str | None, typer.Option("--path", "-p", help="Directory of the jupyter-deploy project to show information.")
+        Path | None, typer.Option("--path", "-p", help="Directory of the jupyter-deploy project to show information.")
     ] = None,
     info: Annotated[bool, typer.Option("--info", help="Display core project and template information.")] = False,
     outputs: Annotated[bool, typer.Option("--outputs", help="Display outputs information.")] = False,

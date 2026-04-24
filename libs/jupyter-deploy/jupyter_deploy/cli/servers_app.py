@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -17,7 +18,7 @@ servers_app = typer.Typer(
 @servers_app.command()
 def status(
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option(
             "--path", "-p", help="Directory of the jupyter-deploy project whose server to send an health check."
         ),
@@ -42,7 +43,7 @@ def status(
 @servers_app.command()
 def start(
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project whose server to start."),
     ] = None,
     service: Annotated[
@@ -73,7 +74,7 @@ def start(
 @servers_app.command()
 def stop(
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project whose server to stop."),
     ] = None,
     service: Annotated[
@@ -104,7 +105,7 @@ def stop(
 @servers_app.command()
 def restart(
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project whose server to restart."),
     ] = None,
     service: Annotated[
@@ -136,7 +137,7 @@ def restart(
 def logs(
     ctx: typer.Context,
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project whose server to restart."),
     ] = None,
     service: Annotated[
@@ -195,7 +196,7 @@ def logs(
 def exec(
     ctx: typer.Context,
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
     ] = None,
     service: Annotated[
@@ -257,7 +258,7 @@ def exec(
 @servers_app.command()
 def connect(
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
     ] = None,
     service: Annotated[str, typer.Option("--service", "-s", help="Name of the service to connect to.")] = "default",

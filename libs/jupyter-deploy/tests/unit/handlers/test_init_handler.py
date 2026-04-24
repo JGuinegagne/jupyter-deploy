@@ -20,7 +20,7 @@ class TestInitHandler(unittest.TestCase):
     ) -> None:
         """Test initialization with project_dir provided."""
         # Setup
-        project_dir = "/test/project/dir"
+        project_dir = Path("/test/project/dir")
         mock_template_path = Path("/mock/template/path")
         mock_find_template_path.return_value = mock_template_path
 
@@ -58,7 +58,7 @@ class TestInitHandler(unittest.TestCase):
     def test_init_with_enum_parameters(self, mock_find_template_path: MagicMock) -> None:
         """Test initialization with enum types for provider and infrastructure."""
         # Setup
-        project_dir = "/test/project/dir"
+        project_dir = Path("/test/project/dir")
         mock_template_path = Path("/mock/template/path")
         mock_find_template_path.return_value = mock_template_path
 
@@ -83,7 +83,7 @@ class TestInitHandler(unittest.TestCase):
         # Setup
         mock_find_template_path.return_value = Path("/mock/template/path")
 
-        handler = InitHandler(project_dir="/test/project/dir")
+        handler = InitHandler(project_dir=Path("/test/project/dir"))
 
         # Execute
         mock_find_template_path.return_value = Path("/mock/template/path")
@@ -101,7 +101,7 @@ class TestInitHandler(unittest.TestCase):
             ValueError("Template name cannot be empty"),  # For the actual test
         ]
 
-        handler = InitHandler(project_dir="/test/project/dir")
+        handler = InitHandler(project_dir=Path("/test/project/dir"))
 
         # Execute and Assert
         with self.assertRaisesRegex(ValueError, "Template name cannot be empty"):
@@ -119,7 +119,7 @@ class TestInitHandler(unittest.TestCase):
             ValueError("Engine 'terraform' is not supported. Available engines: none available"),  # For the actual test
         ]
 
-        handler = InitHandler(project_dir="/test/project/dir")
+        handler = InitHandler(project_dir=Path("/test/project/dir"))
 
         # Execute and Assert
         with self.assertRaisesRegex(ValueError, "Engine 'terraform' is not supported"):
@@ -138,7 +138,7 @@ class TestInitHandler(unittest.TestCase):
             ),  # For the actual test
         ]
 
-        handler = InitHandler(project_dir="/test/project/dir")
+        handler = InitHandler(project_dir=Path("/test/project/dir"))
 
         # Execute and Assert
         with self.assertRaisesRegex(ValueError, "Template 'aws:ec2:base' not found"):
@@ -157,7 +157,7 @@ class TestInitHandler(unittest.TestCase):
         mock_path.exists = mock_exists
         mock_find_template_path.return_value = Path("/mock/template/path")
 
-        handler = InitHandler(project_dir="/test/project/dir")
+        handler = InitHandler(project_dir=Path("/test/project/dir"))
         handler.project_path = mock_path
 
         # Execute
@@ -181,7 +181,7 @@ class TestInitHandler(unittest.TestCase):
         mock_is_empty_dir.return_value = True
         mock_find_template_path.return_value = Path("/mock/template/path")
 
-        handler = InitHandler(project_dir="/test/project/dir")
+        handler = InitHandler(project_dir=Path("/test/project/dir"))
         handler.project_path = mock_path
 
         # Execute
@@ -205,7 +205,7 @@ class TestInitHandler(unittest.TestCase):
         mock_is_empty_dir.return_value = False
         mock_find_template_path.return_value = Path("/mock/template/path")
 
-        handler = InitHandler(project_dir="/test/project/dir")
+        handler = InitHandler(project_dir=Path("/test/project/dir"))
         handler.project_path = mock_path
 
         # Execute
@@ -224,7 +224,7 @@ class TestInitHandler(unittest.TestCase):
         mock_path = Path("/test/project/dir")
         mock_find_template_path.return_value = Path("/mock/template/path")
 
-        handler = InitHandler(project_dir="/test/project/dir")
+        handler = InitHandler(project_dir=Path("/test/project/dir"))
         handler.project_path = mock_path
 
         # Execute
@@ -251,7 +251,7 @@ class TestInitHandler(unittest.TestCase):
         mock_docs_generator = MagicMock()
         mock_docs_generator_class.return_value = mock_docs_generator
 
-        handler = InitHandler(project_dir="/test/project/dir")
+        handler = InitHandler(project_dir=Path("/test/project/dir"))
         handler.project_path = mock_project_path
 
         # Execute
@@ -276,7 +276,7 @@ class TestInitHandlerRestore(unittest.TestCase):
         mock_factory.get_manager.return_value = mock_store_manager
 
         result = InitHandler.restore(
-            project_dir="/tmp/restored",
+            project_dir=Path("/tmp/restored"),
             project_id="tpl-abc123",
             store_type=StoreType.S3_ONLY,
             display_manager=NullDisplay(),
@@ -294,7 +294,7 @@ class TestInitHandlerRestore(unittest.TestCase):
         mock_factory.get_manager.return_value = mock_store_manager
 
         InitHandler.restore(
-            project_dir="/tmp/restored",
+            project_dir=Path("/tmp/restored"),
             project_id="tpl-abc123",
             store_type=StoreType.S3_ONLY,
             display_manager=NullDisplay(),
@@ -311,7 +311,7 @@ class TestInitHandlerRestore(unittest.TestCase):
         mock_factory.get_manager.return_value = mock_store_manager
 
         InitHandler.restore(
-            project_dir="/tmp/restored",
+            project_dir=Path("/tmp/restored"),
             project_id="tpl-abc123",
             store_type=StoreType.S3_ONLY,
             display_manager=NullDisplay(),
@@ -334,7 +334,7 @@ class TestInitHandlerRestore(unittest.TestCase):
         mock_factory.get_manager.return_value = mock_store_manager
 
         InitHandler.restore(
-            project_dir="/tmp/restored",
+            project_dir=Path("/tmp/restored"),
             project_id="tpl-abc123",
             store_type=StoreType.S3_ONLY,
             display_manager=NullDisplay(),

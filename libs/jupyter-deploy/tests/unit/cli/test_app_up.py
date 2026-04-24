@@ -1,6 +1,7 @@
 import unittest
 from collections.abc import Generator
 from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from typer.testing import CliRunner
@@ -74,7 +75,7 @@ class TestUpCommand(unittest.TestCase):
 
         # Should exit with code 1 when config file doesn't exist
         self.assertEqual(result.exit_code, 1)
-        mock_project_ctx_manager.assert_called_once_with("/custom/path")
+        mock_project_ctx_manager.assert_called_once_with(Path("/custom/path"))
 
     @patch("jupyter_deploy.cli.app.UpHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -139,7 +140,7 @@ class TestUpCommand(unittest.TestCase):
         result = runner.invoke(app_runner.app, ["up", "--path", "/custom/path", "--answer-yes"])
 
         self.assertEqual(result.exit_code, 0)
-        mock_project_ctx_manager.assert_called_once_with("/custom/path")
+        mock_project_ctx_manager.assert_called_once_with(Path("/custom/path"))
         mock_up_fns["get_config_file_path"].assert_called_once_with(None)
         mock_up_fns["apply"].assert_called_once_with("/path/to/config", True)
 

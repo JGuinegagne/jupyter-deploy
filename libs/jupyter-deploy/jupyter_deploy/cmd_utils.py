@@ -185,7 +185,7 @@ def run_cmd_and_pipe_to_terminal(
 
 
 @contextmanager
-def project_dir(dir: str | None) -> Generator:
+def project_dir(dir: Path | None) -> Generator:
     """Execute the inner function within a `cd` to the dir_path argument.
 
     If target_path is None, just execute the inner function.
@@ -202,7 +202,7 @@ def project_dir(dir: str | None) -> Generator:
         return
 
     original_dir = Path(os.getcwd())
-    target_path = Path(dir)
+    target_path = dir
 
     if not target_path.exists():
         raise InvalidProjectPathError(f"Target path not found: {target_path}")

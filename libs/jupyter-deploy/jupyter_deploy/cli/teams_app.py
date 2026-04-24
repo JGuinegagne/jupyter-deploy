@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -18,7 +19,7 @@ teams_app = typer.Typer(
 def add(
     teams: Annotated[list[str], typer.Argument(help="Names of the teams to add to the allowlist.")],
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
     ] = None,
 ) -> None:
@@ -40,7 +41,7 @@ def add(
 def remove(
     teams: Annotated[list[str], typer.Argument(help="Names of the teams to remove from the allowlist.")],
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
     ] = None,
 ) -> None:
@@ -62,7 +63,7 @@ def remove(
 def set(
     teams: Annotated[list[str], typer.Argument(help="Names of the teams to allowlist.")],
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
     ] = None,
 ) -> None:
@@ -84,7 +85,7 @@ def set(
 @teams_app.command("list")
 def list_teams(
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
     ] = None,
 ) -> None:

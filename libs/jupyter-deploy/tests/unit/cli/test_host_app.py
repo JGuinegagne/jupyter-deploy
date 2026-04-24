@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from typer.testing import CliRunner
@@ -111,7 +112,7 @@ class TestHostStatusCommand(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.handlers.resource.host_handler.HostHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -176,7 +177,7 @@ class TestHostStartCommand(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.handlers.resource.host_handler.HostHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -241,7 +242,7 @@ class TestHostStopCommand(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.handlers.resource.host_handler.HostHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -306,7 +307,7 @@ class TestHostRestartCommand(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.handlers.resource.host_handler.HostHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -396,7 +397,7 @@ class TestHostStatusForFlag(unittest.TestCase):
         result = runner.invoke(host_app, ["status", "--for", "connection", "--path", "/test/project/path"])
 
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.handlers.resource.host_handler.HostHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -486,7 +487,7 @@ class TestHostConnectCommand(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.cli.host_app.SimpleDisplayManager")
     @patch("jupyter_deploy.cli.host_app.Console")
@@ -651,7 +652,7 @@ class TestHostExecCommand(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.cli.host_app.Console")
     def test_fails_when_no_command_provided(self, mock_console_class: Mock) -> None:

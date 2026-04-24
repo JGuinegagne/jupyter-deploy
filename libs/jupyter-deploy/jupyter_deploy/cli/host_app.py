@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -18,7 +19,7 @@ host_app = typer.Typer(
 @host_app.command()
 def status(
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project whose host to check status."),
     ] = None,
     status_for: Annotated[
@@ -50,7 +51,7 @@ def status(
 @host_app.command()
 def stop(
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project whose host to stop."),
     ] = None,
 ) -> None:
@@ -71,7 +72,7 @@ def stop(
 @host_app.command()
 def start(
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project whose host to start."),
     ] = None,
 ) -> None:
@@ -92,7 +93,7 @@ def start(
 @host_app.command()
 def restart(
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project whose host to restart."),
     ] = None,
 ) -> None:
@@ -113,7 +114,7 @@ def restart(
 @host_app.command()
 def connect(
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project whose host to restart."),
     ] = None,
 ) -> None:
@@ -135,7 +136,7 @@ def connect(
 def exec(
     ctx: typer.Context,
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
     ] = None,
 ) -> None:

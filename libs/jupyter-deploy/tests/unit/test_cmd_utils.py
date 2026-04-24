@@ -595,7 +595,7 @@ class TestProjectManagerDirContextManager(unittest.TestCase):
         mock_is_dir.return_value = True
 
         # Call the context manager with a valid directory
-        with project_dir("/target/dir"):
+        with project_dir(Path("/target/dir")):
             # Verify directory was changed to target
             pass
 
@@ -618,7 +618,7 @@ class TestProjectManagerDirContextManager(unittest.TestCase):
 
         # Call the context manager with a valid directory and raise an exception inside
         with self.assertRaises(ValueError):  # noqa: SIM117
-            with project_dir("/target/dir"):
+            with project_dir(Path("/target/dir")):
                 raise ValueError("Test exception")
 
         # Verify directory was changed back to original despite the exception
@@ -636,7 +636,7 @@ class TestProjectManagerDirContextManager(unittest.TestCase):
 
         # Call the context manager with a non-existent directory
         with self.assertRaises(InvalidProjectPathError) as context:  # noqa: SIM117
-            with project_dir("/nonexistent/dir"):
+            with project_dir(Path("/nonexistent/dir")):
                 pass
 
         # Verify the correct error message
@@ -656,7 +656,7 @@ class TestProjectManagerDirContextManager(unittest.TestCase):
 
         # Call the context manager with a path that's not a directory
         with self.assertRaises(InvalidProjectPathError) as context:  # noqa: SIM117
-            with project_dir("/path/to/file.txt"):
+            with project_dir(Path("/path/to/file.txt")):
                 pass
 
         # Verify the correct error message

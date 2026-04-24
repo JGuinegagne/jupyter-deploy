@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from typer.testing import CliRunner
@@ -84,7 +85,7 @@ class TestOrganizationSetCmd(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.handlers.access.organization_handler.OrganizationHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -160,7 +161,7 @@ class TestOrganizationUnsetCmd(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.handlers.access.organization_handler.OrganizationHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
@@ -312,7 +313,7 @@ class TestOrganizationGetCmd(unittest.TestCase):
 
         # Assert
         self.assertEqual(result.exit_code, 0)
-        mock_project_dir.assert_called_once_with("/test/project/path")
+        mock_project_dir.assert_called_once_with(Path("/test/project/path"))
 
     @patch("jupyter_deploy.handlers.access.organization_handler.OrganizationHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")

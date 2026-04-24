@@ -25,7 +25,7 @@ def list(
         typer.Argument(help="Jupyter-deploy command that generated the logs."),
     ],
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
     ] = None,
     n: Annotated[
@@ -81,7 +81,7 @@ def show(
         ),
     ] = None,
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
     ] = None,
     n: Annotated[
@@ -165,7 +165,7 @@ def clear(
         ),
     ],
     project_dir: Annotated[
-        str | None,
+        Path | None,
         typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
     ] = None,
     keep: Annotated[
