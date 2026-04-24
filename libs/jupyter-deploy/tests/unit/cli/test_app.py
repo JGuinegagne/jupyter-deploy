@@ -84,7 +84,7 @@ class TestJupyterDeployCliRunner(unittest.TestCase):
 
         # Check that the command ran successfully
         self.assertEqual(result.exit_code, 0)
-        self.assertTrue(result.stdout.index("Jupyter-deploy") >= 0)
+        self.assertTrue(result.stdout.index("Deploy interactive") >= 0)
         self.assertTrue(result.stdout.index("server") >= 0)
         self.assertTrue(result.stdout.index("host") >= 0)
         self.assertTrue(result.stdout.index("users") >= 0)
@@ -97,7 +97,7 @@ class TestJupyterDeployCliRunner(unittest.TestCase):
 
         # Check that the command ran successfully
         self.assertEqual(result.exit_code, 0)
-        self.assertTrue(result.stdout.index("Jupyter-deploy") >= 0)
+        self.assertTrue(result.stdout.index("Deploy interactive") >= 0)
 
 
 class TestJupyterDeployApp(unittest.TestCase):

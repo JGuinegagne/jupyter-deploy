@@ -10,7 +10,7 @@ from jupyter_deploy.cli.simple_display import SimpleDisplayManager
 from jupyter_deploy.handlers.resource import server_handler
 
 servers_app = typer.Typer(
-    help=("""Interact with the services running your Jupyter app."""),
+    help="Interact with the services running your app.",
     no_args_is_help=True,
 )
 
@@ -19,15 +19,13 @@ servers_app = typer.Typer(
 def status(
     project_dir: Annotated[
         Path | None,
-        typer.Option(
-            "--path", "-p", help="Directory of the jupyter-deploy project whose server to send an health check."
-        ),
+        typer.Option("--path", "-p", help="Directory of the project whose server to send a health check."),
     ] = None,
 ) -> None:
     """Sends a health check to the services.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
@@ -37,14 +35,14 @@ def status(
         with simple_display_manager.spinner("Checking server status..."):
             server_status = handler.get_server_status()
 
-        console.print(f"Jupyter server status: [bold cyan]{server_status}[/]")
+        console.print(f"Server status: [bold cyan]{server_status}[/]")
 
 
 @servers_app.command()
 def start(
     project_dir: Annotated[
         Path | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project whose server to start."),
+        typer.Option("--path", "-p", help="Directory of the project whose server to start."),
     ] = None,
     service: Annotated[
         str, typer.Option("--service", "-s", help="Service to start ('all', 'jupyter', or other available services).")
@@ -54,8 +52,8 @@ def start(
 
     By default, starts all services. Specify --service to target a specific service.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
@@ -66,7 +64,7 @@ def start(
             handler.start_server(service)
 
         if service == "all":
-            simple_display_manager.success("Started the Jupyter server and all the sidecars.")
+            simple_display_manager.success("Started all services.")
         else:
             simple_display_manager.success(f"Started the '{service}' service.")
 
@@ -75,7 +73,7 @@ def start(
 def stop(
     project_dir: Annotated[
         Path | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project whose server to stop."),
+        typer.Option("--path", "-p", help="Directory of the project whose server to stop."),
     ] = None,
     service: Annotated[
         str, typer.Option("--service", "-s", help="Service to stop ('all', 'jupyter', or other available services).")
@@ -85,8 +83,8 @@ def stop(
 
     By default, stops all services. Specify --service to target a specific service.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
@@ -97,7 +95,7 @@ def stop(
             handler.stop_server(service)
 
         if service == "all":
-            simple_display_manager.success("Stopped the Jupyter server and all the sidecars.")
+            simple_display_manager.success("Stopped all services.")
         else:
             simple_display_manager.success(f"Stopped the '{service}' service.")
 
@@ -106,7 +104,7 @@ def stop(
 def restart(
     project_dir: Annotated[
         Path | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project whose server to restart."),
+        typer.Option("--path", "-p", help="Directory of the project whose server to restart."),
     ] = None,
     service: Annotated[
         str, typer.Option("--service", "-s", help="Service to restart ('all', 'jupyter', or other available services).")
@@ -116,8 +114,8 @@ def restart(
 
     By default, restarts all services. Specify --service to target a specific service.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
@@ -128,7 +126,7 @@ def restart(
             handler.restart_server(service)
 
         if service == "all":
-            simple_display_manager.success("Restarted the Jupyter server and all the sidecars.")
+            simple_display_manager.success("Restarted all services.")
         else:
             simple_display_manager.success(f"Restarted the '{service}' service.")
 
@@ -138,7 +136,7 @@ def logs(
     ctx: typer.Context,
     project_dir: Annotated[
         Path | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project whose server to restart."),
+        typer.Option("--path", "-p", help="Directory of the project whose server to restart."),
     ] = None,
     service: Annotated[
         str, typer.Option("--service", "-s", help="Name of the service whose logs to display.")
@@ -148,8 +146,8 @@ def logs(
 
     By default, logs your main application service. Specify --service to target a specific service.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path <PATH> to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
 
     You can pass additional arguments after '--'
 
@@ -197,7 +195,7 @@ def exec(
     ctx: typer.Context,
     project_dir: Annotated[
         Path | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
+        typer.Option("--path", "-p", help="Directory of the project."),
     ] = None,
     service: Annotated[
         str, typer.Option("--service", "-s", help="Name of the service in which to execute the command.")
@@ -207,14 +205,14 @@ def exec(
 
     By default, executes in your main application service. Specify --service to target a specific service.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
 
     Pass the command after '--', for example:
 
-    jd server exec -s SERVICE -- pwd
+    <jd server exec -s SERVICE -- pwd>
 
-    jd server exec -s SERVICE -- "df -h"
+    <jd server exec -s SERVICE -- "df -h">
 
     Note: the commands you can execute depend on the service;
     distroless images in particular expose very limited commands.
@@ -259,7 +257,7 @@ def exec(
 def connect(
     project_dir: Annotated[
         Path | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
+        typer.Option("--path", "-p", help="Directory of the project."),
     ] = None,
     service: Annotated[str, typer.Option("--service", "-s", help="Name of the service to connect to.")] = "default",
 ) -> None:
@@ -267,14 +265,14 @@ def connect(
 
     By default, connects to your main application service. Specify --service to target a specific service.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
 
     Example:
 
-    jd server connect
+    <jd server connect>
 
-    jd server connect -s SERVICE
+    <jd server connect -s SERVICE>
 
     Note: you may not be able to connect to all services;
     some containers do not have any shell installed.

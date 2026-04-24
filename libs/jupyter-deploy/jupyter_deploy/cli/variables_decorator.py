@@ -19,7 +19,7 @@ def with_project_variables() -> Callable:
     typer sees a new method defined by the decorator with all the template variables.
 
     The variable definition discovery relies on retrieving the current working directory,
-    so the user must have changed dir to a jupyter-deploy project dir.
+    so the user must have changed dir to a project directory.
 
     Usage:
         @cli_app.app.command()

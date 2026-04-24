@@ -10,7 +10,7 @@ from jupyter_deploy.cli.simple_display import SimpleDisplayManager
 from jupyter_deploy.handlers.access import user_handler
 
 users_app = typer.Typer(
-    help=("""Control access to your jupyter app at user level."""),
+    help="Control access to your app at user level.",
     no_args_is_help=True,
 )
 
@@ -20,13 +20,13 @@ def add(
     users: Annotated[list[str], typer.Argument(help="Name of the users to add to the allowlist.")],
     project_dir: Annotated[
         Path | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
+        typer.Option("--path", "-p", help="Directory of the project."),
     ] = None,
 ) -> None:
-    """Add user(s) to the list authorized to access the Jupyter app.
+    """Add user(s) to the list authorized to access the app.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
@@ -42,13 +42,13 @@ def remove(
     users: Annotated[list[str], typer.Argument(help="Name of the users to remove from the allowlist.")],
     project_dir: Annotated[
         Path | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
+        typer.Option("--path", "-p", help="Directory of the project."),
     ] = None,
 ) -> None:
-    """Remove user(s) from the list authorized to access the Jupyter app.
+    """Remove user(s) from the list authorized to access the app.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
@@ -64,13 +64,13 @@ def set(
     users: Annotated[list[str], typer.Argument(help="Names of the users to allowlist.")],
     project_dir: Annotated[
         Path | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
+        typer.Option("--path", "-p", help="Directory of the project."),
     ] = None,
 ) -> None:
-    """Set the list of username(s) authorized to access the Jupyter app.
+    """Set the list of username(s) authorized to access the app.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
@@ -86,13 +86,13 @@ def set(
 def list_users(
     project_dir: Annotated[
         Path | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
+        typer.Option("--path", "-p", help="Directory of the project."),
     ] = None,
 ) -> None:
-    """Show the name(s) of user(s) authorized to access the Jupyter app.
+    """Show the name(s) of user(s) authorized to access the app.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):

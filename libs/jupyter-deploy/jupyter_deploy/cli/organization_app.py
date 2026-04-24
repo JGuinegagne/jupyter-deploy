@@ -10,7 +10,7 @@ from jupyter_deploy.cli.simple_display import SimpleDisplayManager
 from jupyter_deploy.handlers.access import organization_handler
 
 organization_app = typer.Typer(
-    help=("""Control access to your jupyter app at the organization level."""),
+    help="Control access to your app at the organization level.",
     no_args_is_help=True,
 )
 
@@ -20,13 +20,13 @@ def set(
     organization: Annotated[str, typer.Argument(help="Name of the organization to allowlist.")],
     project_dir: Annotated[
         Path | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
+        typer.Option("--path", "-p", help="Directory of the project."),
     ] = None,
 ) -> None:
-    """Allowlist an organization to access the Jupyter app.
+    """Allowlist an organization to access the app.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
@@ -41,13 +41,13 @@ def set(
 def unset(
     project_dir: Annotated[
         Path | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
+        typer.Option("--path", "-p", help="Directory of the project."),
     ] = None,
 ) -> None:
-    """Remove organization-based access to the Jupyter app.
+    """Remove organization-based access from the app.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):
@@ -62,13 +62,13 @@ def unset(
 def get(
     project_dir: Annotated[
         Path | None,
-        typer.Option("--path", "-p", help="Directory of the jupyter-deploy project."),
+        typer.Option("--path", "-p", help="Directory of the project."),
     ] = None,
 ) -> None:
-    """Show the name of the organization authorized to access the Jupyter app.
+    """Show the name of the organization authorized to access the app.
 
-    Run either from a jupyter-deploy project directory that you created with `jd init`;
-    or pass a --path PATH to such a directory.
+    Run either from a project directory that you created with <jd init>;
+    or pass --path <project-dir>.
     """
     console = Console()
     with handle_cli_errors(console), cmd_utils.project_dir(project_dir):

@@ -89,7 +89,7 @@ class TestOpenCommand(unittest.TestCase):
 
         self.assertEqual(result.exit_code, 0)
         # Check that success message is displayed
-        self.assertIn("Opening Jupyter app at:", result.output)
+        self.assertIn("Opening app at:", result.output)
         self.assertIn("https://example.com/jupyter", result.output)
         # Check that hint is displayed
         self.assertIn("Having trouble?", result.output)
@@ -249,7 +249,7 @@ class TestOpenCommand(unittest.TestCase):
         result = runner.invoke(app_runner.app, ["open"])
 
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("Opening Jupyter app at:", result.output)
+        self.assertIn("Opening app at:", result.output)
         # Check that hint is NOT displayed
         self.assertNotIn("Having trouble?", result.output)
 
