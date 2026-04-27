@@ -927,7 +927,7 @@ test-smoke-cli variant image="" log_level="INFO":
     set -euo pipefail
 
     if [ "{{variant}}" = "bare" ]; then
-        FILTER='-k "not aws_installation"'
+        FILTER='-k "not aws_installation and not k8s_installation"'
     elif [ "{{variant}}" = "aws" ]; then
         FILTER='-k "not bare_installation"'
     else
