@@ -1,5 +1,10 @@
 from mypy_boto3_eks.client import EKSClient
-from mypy_boto3_eks.type_defs import ClusterTypeDef, DescribeNodegroupResponseTypeDef, NodegroupTypeDef
+from mypy_boto3_eks.type_defs import (
+    ClusterTypeDef,
+    DescribeNodegroupResponseTypeDef,
+    ListNodegroupsRequestTypeDef,
+    NodegroupTypeDef,
+)
 
 
 def describe_cluster(client: EKSClient, cluster_name: str) -> ClusterTypeDef:
@@ -12,7 +17,7 @@ def list_nodegroups(
     client: EKSClient, cluster_name: str, starting_token: str | None = None
 ) -> tuple[list[str], str | None]:
     """Call EKS:ListNodegroups and return nodegroup names with optional next token."""
-    kwargs: dict[str, str] = {"clusterName": cluster_name}
+    kwargs: ListNodegroupsRequestTypeDef = {"clusterName": cluster_name}
     if starting_token:
         kwargs["nextToken"] = starting_token
 

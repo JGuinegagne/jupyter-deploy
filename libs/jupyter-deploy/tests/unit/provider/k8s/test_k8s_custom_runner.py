@@ -6,15 +6,15 @@ from jupyter_deploy.api.k8s.custom import CustomObjectResult, CustomResourceRef
 from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.exceptions import InstructionNotFoundError
 from jupyter_deploy.provider.k8s.k8s_custom_runner import K8sCustomRunner
-from jupyter_deploy.provider.resolved_argdefs import StrResolvedInstructionArgument
+from jupyter_deploy.provider.resolved_argdefs import ResolvedInstructionArgument, StrResolvedInstructionArgument
 
 WORKSPACE_REF = CustomResourceRef(group="workspace.jupyter.org", version="v1alpha1", plural="workspaces")
 
 
 def _crd_args(
     scope: str = "default",
-) -> dict[str, StrResolvedInstructionArgument]:
-    args: dict[str, StrResolvedInstructionArgument] = {
+) -> dict[str, ResolvedInstructionArgument]:
+    args: dict[str, ResolvedInstructionArgument] = {
         "group": StrResolvedInstructionArgument(argument_name="group", value=WORKSPACE_REF.group),
         "version": StrResolvedInstructionArgument(argument_name="version", value=WORKSPACE_REF.version),
         "plural": StrResolvedInstructionArgument(argument_name="plural", value=WORKSPACE_REF.plural),

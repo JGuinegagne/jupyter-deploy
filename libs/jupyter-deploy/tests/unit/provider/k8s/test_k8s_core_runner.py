@@ -9,16 +9,15 @@ from jupyter_deploy.provider.resolved_argdefs import StrResolvedInstructionArgum
 
 
 class TestK8sCoreRunner(unittest.TestCase):
-    def _make_runner(self) -> tuple[K8sCoreRunner, Mock]:
+    def _make_runner(self) -> K8sCoreRunner:
         mock_api_client: Mock = Mock()
         with patch("jupyter_deploy.provider.k8s.k8s_core_runner.client") as mock_client_mod:
             mock_client_mod.CoreV1Api.return_value = Mock()
-            runner = K8sCoreRunner(NullDisplay(), api_client=mock_api_client)
-        return runner, runner.core_api
+            return K8sCoreRunner(NullDisplay(), api_client=mock_api_client)
 
     @patch("jupyter_deploy.provider.k8s.k8s_core_runner.k8s_core")
     def test_list_nodes_returns_names_and_count(self, mock_k8s_core: Mock) -> None:
-        runner, _ = self._make_runner()
+        runner = self._make_runner()
         mock_k8s_core.list_nodes.return_value = (
             [
                 NodeInfo(name="node-1", status=NodeConditionStatus.READY),
@@ -37,7 +36,7 @@ class TestK8sCoreRunner(unittest.TestCase):
 
     @patch("jupyter_deploy.provider.k8s.k8s_core_runner.k8s_core")
     def test_list_nodes_with_label_selector(self, mock_k8s_core: Mock) -> None:
-        runner, _ = self._make_runner()
+        runner = self._make_runner()
         mock_k8s_core.list_nodes.return_value = ([], None)
 
         runner.execute_instruction(
@@ -53,7 +52,7 @@ class TestK8sCoreRunner(unittest.TestCase):
 
     @patch("jupyter_deploy.provider.k8s.k8s_core_runner.k8s_core")
     def test_list_nodes_with_pagination(self, mock_k8s_core: Mock) -> None:
-        runner, _ = self._make_runner()
+        runner = self._make_runner()
         mock_k8s_core.list_nodes.return_value = (
             [NodeInfo(name="node-1", status=NodeConditionStatus.READY)],
             "abc123",
@@ -71,7 +70,7 @@ class TestK8sCoreRunner(unittest.TestCase):
 
     @patch("jupyter_deploy.provider.k8s.k8s_core_runner.k8s_core")
     def test_list_nodes_with_pagination_token(self, mock_k8s_core: Mock) -> None:
-        runner, _ = self._make_runner()
+        runner = self._make_runner()
         mock_k8s_core.list_nodes.return_value = ([], None)
 
         runner.execute_instruction(
@@ -87,7 +86,7 @@ class TestK8sCoreRunner(unittest.TestCase):
 
     @patch("jupyter_deploy.provider.k8s.k8s_core_runner.k8s_core")
     def test_get_node_ready(self, mock_k8s_core: Mock) -> None:
-        runner, _ = self._make_runner()
+        runner = self._make_runner()
         mock_k8s_core.get_node.return_value = NodeInfo(name="node-1", status=NodeConditionStatus.READY)
 
         result = runner.execute_instruction(
@@ -102,7 +101,7 @@ class TestK8sCoreRunner(unittest.TestCase):
 
     @patch("jupyter_deploy.provider.k8s.k8s_core_runner.k8s_core")
     def test_get_node_not_ready(self, mock_k8s_core: Mock) -> None:
-        runner, _ = self._make_runner()
+        runner = self._make_runner()
         mock_k8s_core.get_node.return_value = NodeInfo(name="node-1", status=NodeConditionStatus.NOT_READY)
 
         result = runner.execute_instruction(
@@ -116,7 +115,7 @@ class TestK8sCoreRunner(unittest.TestCase):
 
     @patch("jupyter_deploy.provider.k8s.k8s_core_runner.k8s_core")
     def test_list_pods_returns_names_and_count(self, mock_k8s_core: Mock) -> None:
-        runner, _ = self._make_runner()
+        runner = self._make_runner()
         mock_k8s_core.list_pods.return_value = (
             [
                 PodInfo(name="pod-1", phase=PodPhase.RUNNING),
@@ -140,7 +139,7 @@ class TestK8sCoreRunner(unittest.TestCase):
 
     @patch("jupyter_deploy.provider.k8s.k8s_core_runner.k8s_core")
     def test_list_pods_with_pagination(self, mock_k8s_core: Mock) -> None:
-        runner, _ = self._make_runner()
+        runner = self._make_runner()
         mock_k8s_core.list_pods.return_value = (
             [PodInfo(name="pod-1", phase=PodPhase.RUNNING)],
             "xyz789",
@@ -161,7 +160,7 @@ class TestK8sCoreRunner(unittest.TestCase):
 
     @patch("jupyter_deploy.provider.k8s.k8s_core_runner.k8s_core")
     def test_list_pods_with_pagination_token(self, mock_k8s_core: Mock) -> None:
-        runner, _ = self._make_runner()
+        runner = self._make_runner()
         mock_k8s_core.list_pods.return_value = ([], None)
 
         runner.execute_instruction(
@@ -178,7 +177,7 @@ class TestK8sCoreRunner(unittest.TestCase):
 
     @patch("jupyter_deploy.provider.k8s.k8s_core_runner.k8s_core")
     def test_get_pod_running(self, mock_k8s_core: Mock) -> None:
-        runner, _ = self._make_runner()
+        runner = self._make_runner()
         mock_k8s_core.get_pod.return_value = PodInfo(name="pod-1", phase=PodPhase.RUNNING)
 
         result = runner.execute_instruction(
@@ -193,7 +192,7 @@ class TestK8sCoreRunner(unittest.TestCase):
         self.assertEqual(result["Phase"].value, "Running")
 
     def test_unknown_instruction_raises_error(self) -> None:
-        runner, _ = self._make_runner()
+        runner = self._make_runner()
 
         with self.assertRaises(InstructionNotFoundError):
             runner.execute_instruction(instruction_name="unknown", resolved_arguments={})
