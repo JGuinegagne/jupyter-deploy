@@ -63,6 +63,27 @@ class TestAwsApiRunner(unittest.TestCase):
         )
         self.assertEqual(result, expected_result)
 
+    @patch("jupyter_deploy.provider.aws.aws_runner.AwsEksRunner")
+    def test_execute_instantiate_eks_runner_and_call_execute(self, mock_eks_runner_class: Mock) -> None:
+        mock_eks_runner = Mock()
+        mock_eks_runner_class.return_value = mock_eks_runner
+
+        expected_result = {"result_key": Mock(spec=ResolvedInstructionResult)}
+        mock_eks_runner.execute_instruction.return_value = expected_result
+
+        runner = AwsApiRunner(NullDisplay(), region_name="us-west-2")
+        resolved_args: dict[str, ResolvedInstructionArgument] = {"arg1": Mock(spec=ResolvedInstructionArgument)}
+
+        result = runner.execute_instruction(
+            instruction_name="aws.eks.describe-cluster", resolved_arguments=resolved_args
+        )
+
+        mock_eks_runner_class.assert_called_once_with(ANY, region_name="us-west-2")
+        mock_eks_runner.execute_instruction.assert_called_once_with(
+            instruction_name="describe-cluster", resolved_arguments=resolved_args
+        )
+        self.assertEqual(result, expected_result)
+
     @patch("jupyter_deploy.provider.aws.aws_runner.AwsSecretsManagerRunner")
     def test_execute_instantiate_secretsmanager_runner_and_call_execute(self, mock_sm_runner_class: Mock) -> None:
         mock_sm_runner = Mock()
