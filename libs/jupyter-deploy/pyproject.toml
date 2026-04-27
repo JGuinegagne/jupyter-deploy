@@ -35,11 +35,15 @@ aws = [
     "boto3>=1.38.23",
     "boto3-stubs>=1.38.23",
     "mypy-boto3-ec2>=1.40.4",
+    "mypy-boto3-eks>=1.38.0",
     "mypy-boto3-ssm>=1.38.5",
     "mypy-boto3-s3>=1.38.0",
     "mypy-boto3-dynamodb>=1.38.0",
     "mypy-boto3-sts>=1.38.0",
     "mypy-boto3-secretsmanager>=1.38.0",
+]
+k8s = [
+    "kubernetes>=31.0.0",
 ]
 
 [tool.uv.sources]
@@ -76,6 +80,12 @@ mypy_path = ["."]
 packages = ["jupyter_deploy"]
 plugins = ["pydantic.mypy"]
 
+# kubernetes package ships without py.typed and no maintained stubs exist (kubernetes-stubs stuck at v22)
+[[tool.mypy.overrides]]
+module = "kubernetes.*"
+ignore_missing_imports = true
+follow_untyped_imports = true
+
 [tool.ruff]
 extend-exclude = [".conda/"]
 line-length = 120
@@ -105,6 +115,7 @@ ignore = [
 # E2E install track tests use inline imports to test optional dependency boundaries
 "tests/e2e/test_bare_installation.py" = ["PLC0415"]
 "tests/e2e/test_aws_installation.py" = ["PLC0415"]
+"tests/e2e/test_k8s_installation.py" = ["PLC0415"]
 
 [tool.ruff.format]
 quote-style = "double"

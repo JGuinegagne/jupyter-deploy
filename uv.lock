@@ -310,6 +310,15 @@ wheels = [
 ]
 
 [[package]]
+name = "durationpy"
+version = "0.10"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9d/a4/e44218c2b394e31a6dd0d6b095c4e1f32d0be54c2a4b250032d717647bab/durationpy-0.10.tar.gz", hash = "sha256:1fa6893409a6e739c9c72334fc65cca1f355dbdd93405d30f726deb5bde42fba", size = 3335, upload-time = "2025-05-17T13:52:37.26Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b0/0d/9feae160378a3553fa9a339b0e9c1a048e147a4127210e286ef18b730f03/durationpy-0.10-py3-none-any.whl", hash = "sha256:3b41e1b601234296b4fb368338fdcd3e13e0b4fb5b67345948f4f2bf9868b286", size = 3922, upload-time = "2025-05-17T13:52:36.463Z" },
+]
+
+[[package]]
 name = "greenlet"
 version = "3.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -440,10 +449,14 @@ aws = [
     { name = "boto3-stubs" },
     { name = "mypy-boto3-dynamodb" },
     { name = "mypy-boto3-ec2" },
+    { name = "mypy-boto3-eks" },
     { name = "mypy-boto3-s3" },
     { name = "mypy-boto3-secretsmanager" },
     { name = "mypy-boto3-ssm" },
     { name = "mypy-boto3-sts" },
+]
+k8s = [
+    { name = "kubernetes" },
 ]
 
 [package.dev-dependencies]
@@ -463,8 +476,10 @@ requires-dist = [
     { name = "click", specifier = "<8.2.0" },
     { name = "decorator", specifier = ">=5.2.1" },
     { name = "jupyter-core", specifier = ">=5.0.0" },
+    { name = "kubernetes", marker = "extra == 'k8s'", specifier = ">=31.0.0" },
     { name = "mypy-boto3-dynamodb", marker = "extra == 'aws'", specifier = ">=1.38.0" },
     { name = "mypy-boto3-ec2", marker = "extra == 'aws'", specifier = ">=1.40.4" },
+    { name = "mypy-boto3-eks", marker = "extra == 'aws'", specifier = ">=1.38.0" },
     { name = "mypy-boto3-s3", marker = "extra == 'aws'", specifier = ">=1.38.0" },
     { name = "mypy-boto3-secretsmanager", marker = "extra == 'aws'", specifier = ">=1.38.0" },
     { name = "mypy-boto3-ssm", marker = "extra == 'aws'", specifier = ">=1.38.5" },
@@ -477,7 +492,7 @@ requires-dist = [
     { name = "typer", specifier = ">=0.15.4" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20250516" },
 ]
-provides-extras = ["aws"]
+provides-extras = ["aws", "k8s"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -494,7 +509,7 @@ name = "jupyter-deploy-monorepo"
 version = "0.5.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "jupyter-deploy", extra = ["aws"] },
+    { name = "jupyter-deploy", extra = ["aws", "k8s"] },
 ]
 
 [package.dev-dependencies]
@@ -522,7 +537,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "jupyter-deploy", extras = ["aws"], editable = "libs/jupyter-deploy" }]
+requires-dist = [{ name = "jupyter-deploy", extras = ["aws", "k8s"], editable = "libs/jupyter-deploy" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -557,6 +572,7 @@ dependencies = [
     { name = "boto3-stubs" },
     { name = "mypy-boto3-dynamodb" },
     { name = "mypy-boto3-ec2" },
+    { name = "mypy-boto3-eks" },
     { name = "mypy-boto3-s3" },
     { name = "mypy-boto3-secretsmanager" },
     { name = "mypy-boto3-ssm" },
@@ -583,6 +599,7 @@ requires-dist = [
     { name = "boto3-stubs" },
     { name = "mypy-boto3-dynamodb" },
     { name = "mypy-boto3-ec2" },
+    { name = "mypy-boto3-eks" },
     { name = "mypy-boto3-s3" },
     { name = "mypy-boto3-secretsmanager" },
     { name = "mypy-boto3-ssm" },
@@ -607,6 +624,26 @@ dev = [
 name = "jupyter-infra-tf-aws-iam-ci"
 version = "0.1.0"
 source = { editable = "libs/jupyter-infra-tf-aws-iam-ci" }
+
+[[package]]
+name = "kubernetes"
+version = "35.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "certifi" },
+    { name = "durationpy" },
+    { name = "python-dateutil" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "requests-oauthlib" },
+    { name = "six" },
+    { name = "urllib3" },
+    { name = "websocket-client" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2c/8f/85bf51ad4150f64e8c665daf0d9dfe9787ae92005efb9a4d1cba592bd79d/kubernetes-35.0.0.tar.gz", hash = "sha256:3d00d344944239821458b9efd484d6df9f011da367ecb155dadf9513f05f09ee", size = 1094642, upload-time = "2026-01-16T01:05:27.76Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0c/70/05b685ea2dffcb2adbf3cdcea5d8865b7bc66f67249084cf845012a0ff13/kubernetes-35.0.0-py2.py3-none-any.whl", hash = "sha256:39e2b33b46e5834ef6c3985ebfe2047ab39135d41de51ce7641a7ca5b372a13d", size = 2017602, upload-time = "2026-01-16T01:05:25.991Z" },
+]
 
 [[package]]
 name = "lark"
@@ -835,6 +872,15 @@ wheels = [
 ]
 
 [[package]]
+name = "mypy-boto3-eks"
+version = "1.42.85"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2c/a4/14cefb52795fd3fd8c57276ba58dfff81f3a7c9c024d7c23cd2db3ed6d63/mypy_boto3_eks-1.42.85.tar.gz", hash = "sha256:c54d1077ef9df35540b7a0259f3e3add475f55db1bb3d2d89d5f3ea569e90ba1", size = 46068, upload-time = "2026-04-07T19:51:12.557Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e5/00/3787b7c8a18bc4daafa124f88f546d85e331ead23a83fb7964322272651c/mypy_boto3_eks-1.42.85-py3-none-any.whl", hash = "sha256:fc9d9b8eb1006573d1f4c0d94f596ee8c6c82801083c059c11ffdf66f6bed2ea", size = 54583, upload-time = "2026-04-07T19:51:09.849Z" },
+]
+
+[[package]]
 name = "mypy-boto3-s3"
 version = "1.42.94"
 source = { registry = "https://pypi.org/simple" }
@@ -894,6 +940,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/33/fa/7b45eef11b7971f0beb29d27b7bfe0d747d063aa29e170d9edd004733c8a/myst_parser-5.0.0.tar.gz", hash = "sha256:f6f231452c56e8baa662cc352c548158f6a16fcbd6e3800fc594978002b94f3a", size = 98535, upload-time = "2026-01-15T09:08:18.036Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d3/ac/686789b9145413f1a61878c407210e41bfdb097976864e0913078b24098c/myst_parser-5.0.0-py3-none-any.whl", hash = "sha256:ab31e516024918296e169139072b81592336f2fef55b8986aa31c9f04b5f7211", size = 84533, upload-time = "2026-01-15T09:08:16.788Z" },
+]
+
+[[package]]
+name = "oauthlib"
+version = "3.3.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0b/5f/19930f824ffeb0ad4372da4812c50edbd1434f678c90c2733e1188edfc63/oauthlib-3.3.1.tar.gz", hash = "sha256:0f0f8aa759826a193cf66c12ea1af1637f87b9b4622d46e866952bb022e538c9", size = 185918, upload-time = "2025-06-19T22:48:08.269Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/be/9c/92789c596b8df838baa98fa71844d84283302f7604ed565dafe5a6b5041a/oauthlib-3.3.1-py3-none-any.whl", hash = "sha256:88119c938d2b8fb88561af5f6ee0eec8cc8d552b7bb1f712743136eb7523b7a1", size = 160065, upload-time = "2025-06-19T22:48:06.508Z" },
 ]
 
 [[package]]
@@ -1413,6 +1468,19 @@ wheels = [
 ]
 
 [[package]]
+name = "requests-oauthlib"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "oauthlib" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/42/f2/05f29bc3913aea15eb670be136045bf5c5bbf4b99ecb839da9b422bb2c85/requests-oauthlib-2.0.0.tar.gz", hash = "sha256:b3dffaebd884d8cd778494369603a9e7b58d29111bf6b41bdc2dcd87203af4e9", size = 55650, upload-time = "2024-03-22T20:32:29.939Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3b/5d/63d4ae3b9daea098d5d6f5da83984853c1bbacd5dc826764b249fe119d24/requests_oauthlib-2.0.0-py2.py3-none-any.whl", hash = "sha256:7dd8a5c40426b779b0868c404bdef9768deccf22749cde15852df527e6269b36", size = 24179, upload-time = "2024-03-22T20:32:28.055Z" },
+]
+
+[[package]]
 name = "rich"
 version = "15.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1763,6 +1831,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/c7/24/5f1b3bdffd70275f6661c76461e25f024d5a38a46f04aaca912426a2b1d3/urllib3-2.6.3.tar.gz", hash = "sha256:1b62b6884944a57dbe321509ab94fd4d3b307075e0c2eae991ac71ee15ad38ed", size = 435556, upload-time = "2026-01-07T16:24:43.925Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/39/08/aaaad47bc4e9dc8c725e68f9d04865dbcb2052843ff09c97b08904852d84/urllib3-2.6.3-py3-none-any.whl", hash = "sha256:bf272323e553dfb2e87d9bfd225ca7b0f467b919d7bbd355436d3fd37cb0acd4", size = 131584, upload-time = "2026-01-07T16:24:42.685Z" },
+]
+
+[[package]]
+name = "websocket-client"
+version = "1.9.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2c/41/aa4bf9664e4cda14c3b39865b12251e8e7d239f4cd0e3cc1b6c2ccde25c1/websocket_client-1.9.0.tar.gz", hash = "sha256:9e813624b6eb619999a97dc7958469217c3176312b3a16a4bd1bc7e08a46ec98", size = 70576, upload-time = "2025-10-07T21:16:36.495Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/34/db/b10e48aa8fff7407e67470363eac595018441cf32d5e1001567a7aeba5d2/websocket_client-1.9.0-py3-none-any.whl", hash = "sha256:af248a825037ef591efbf6ed20cc5faa03d3b47b9e5a2230a529eeee1c1fc3ef", size = 82616, upload-time = "2025-10-07T21:16:34.951Z" },
 ]
 
 [[package]]
