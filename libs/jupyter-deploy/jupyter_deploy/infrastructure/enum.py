@@ -5,6 +5,7 @@ class AWSInfrastructureType(str, Enum):
     """Enum to list the types of AWS infrastructure."""
 
     EC2 = "ec2"
+    EKS = "eks"
     IAM = "iam"
 
 

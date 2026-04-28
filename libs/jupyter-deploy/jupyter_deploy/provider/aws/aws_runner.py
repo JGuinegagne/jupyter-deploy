@@ -3,6 +3,7 @@ from enum import Enum
 from jupyter_deploy.engine.supervised_execution import DisplayManager
 from jupyter_deploy.exceptions import InstructionNotFoundError
 from jupyter_deploy.provider.aws.aws_ec2_runner import AwsEc2Runner
+from jupyter_deploy.provider.aws.aws_eks_runner import AwsEksRunner
 from jupyter_deploy.provider.aws.aws_error_handler import aws_error_context_manager
 from jupyter_deploy.provider.aws.aws_secretsmanager_runner import AwsSecretsManagerRunner
 from jupyter_deploy.provider.aws.aws_ssm_runner import AwsSsmRunner
@@ -15,6 +16,7 @@ class AwsService(str, Enum):
     """AWS services mapped to jupyter-deploy instructions."""
 
     EC2 = "ec2"
+    EKS = "eks"
     SECRETSMANAGER = "secretsmanager"
     SSM = "ssm"
 
@@ -56,6 +58,10 @@ class AwsApiRunner(InstructionRunner):
             return service_runner
         elif service_name == AwsService.EC2:
             service_runner = AwsEc2Runner(self.display_manager, region_name=self.region_name)
+            self.service_runners[service_name] = service_runner
+            return service_runner
+        elif service_name == AwsService.EKS:
+            service_runner = AwsEksRunner(self.display_manager, region_name=self.region_name)
             self.service_runners[service_name] = service_runner
             return service_runner
         elif service_name == AwsService.SECRETSMANAGER:

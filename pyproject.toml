@@ -5,7 +5,7 @@ description = "Monorepo for Jupyter deploy packages"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "jupyter-deploy[aws]",
+    "jupyter-deploy[aws,k8s]",
 ]
 
 [tool.uv.sources]
@@ -98,6 +98,12 @@ files = [
 exclude = [
     "tests/e2e/",
 ]
+
+# kubernetes package ships without py.typed and no maintained stubs exist (kubernetes-stubs stuck at v22)
+[[tool.mypy.overrides]]
+module = "kubernetes.*"
+ignore_missing_imports = true
+follow_untyped_imports = true
 
 [tool.pytest.ini_options]
 pythonpath = [

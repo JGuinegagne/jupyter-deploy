@@ -21,6 +21,14 @@ class TestBareInstallation(unittest.TestCase):
         with self.assertRaises(ImportError):
             import botocore  # noqa: F401
 
-    def test_provider_import_fails(self) -> None:
+    def test_no_kubernetes(self) -> None:
+        with self.assertRaises(ImportError):
+            import kubernetes  # noqa: F401
+
+    def test_aws_provider_import_fails(self) -> None:
         with self.assertRaises(ImportError):
             from jupyter_deploy.provider.aws import aws_runner  # noqa: F401
+
+    def test_k8s_provider_import_fails(self) -> None:
+        with self.assertRaises(ImportError):
+            from jupyter_deploy.provider.k8s import k8s_runner  # noqa: F401

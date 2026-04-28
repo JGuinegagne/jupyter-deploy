@@ -1,7 +1,7 @@
 from jupyter_deploy.engine.engine_outputs import EngineOutputsHandler
 from jupyter_deploy.engine.outdefs import StrTemplateOutputDefinition
 from jupyter_deploy.engine.supervised_execution import DisplayManager
-from jupyter_deploy.provider.enum import ProviderType
+from jupyter_deploy.provider.enum import ApiGroup
 from jupyter_deploy.provider.instruction_runner import InstructionRunner
 
 
@@ -11,30 +11,43 @@ class InstructionRunnerFactory:
     This ensures that the base jupyter-deploy does not depend on any cloud provider SDK.
     """
 
-    _provider_runner_map: dict[ProviderType, InstructionRunner] = {}
+    _api_group_runner_map: dict[ApiGroup, InstructionRunner] = {}
 
     @staticmethod
     def get_provider_instruction_runner(
         api_name: str, outputs_handler: EngineOutputsHandler, display_manager: DisplayManager
     ) -> InstructionRunner:
-        """Return the instruction runner for the cloud provider.
+        """Return the instruction runner for the given API group.
 
         Raises:
-            NotImplementedError if the provider is not recognized.
-            ValueError if the provider runner requires declared values that are missing in manifest.
+            NotImplementedError if the API group is not recognized.
+            ValueError if the runner requires declared values that are missing in manifest.
         """
-        provider = ProviderType.from_api_name(api_name)
-        if provider_runner := InstructionRunnerFactory._provider_runner_map.get(provider):
-            return provider_runner
+        api_group = ApiGroup.from_api_name(api_name)
+        if runner := InstructionRunnerFactory._api_group_runner_map.get(api_group):
+            return runner
 
-        if provider == ProviderType.AWS:
+        if api_group == ApiGroup.AWS:
             aws_region_def = outputs_handler.get_declared_output_def("aws_region", StrTemplateOutputDefinition)
 
             # do NOT move import to top level
             from jupyter_deploy.provider.aws import aws_runner
 
-            provider_runner = aws_runner.AwsApiRunner(display_manager=display_manager, region_name=aws_region_def.value)
-            InstructionRunnerFactory._provider_runner_map[provider] = provider_runner
-            return provider_runner
+            runner = aws_runner.AwsApiRunner(display_manager=display_manager, region_name=aws_region_def.value)
+            InstructionRunnerFactory._api_group_runner_map[api_group] = runner
+            return runner
 
-        raise NotImplementedError(f"No runner implementation for provider: {provider}")
+        if api_group == ApiGroup.K8S:
+            kubeconfig_def = outputs_handler.get_declared_output_def("kubeconfig_path", StrTemplateOutputDefinition)
+
+            # do NOT move import to top level
+            from jupyter_deploy.provider.k8s import k8s_runner
+
+            runner = k8s_runner.K8sApiRunner(
+                display_manager=display_manager,
+                kubeconfig_path=kubeconfig_def.value,
+            )
+            InstructionRunnerFactory._api_group_runner_map[api_group] = runner
+            return runner
+
+        raise NotImplementedError(f"No runner implementation for API group: {api_group}")
