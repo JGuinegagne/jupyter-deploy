@@ -147,7 +147,7 @@ def infer_deployment_vars(ci_dir: str, oauth_app_num: str) -> dict[str, str]:
     subdomain = parts[0]
     domain = parts[1]
 
-    # Read bot email
+    # Read bot email and username
     result = subprocess.run(
         ["uv", "run", "jd", "show", "-v", "github_bot_account_email", "--text", "-p", ci_dir],
         capture_output=True,
@@ -155,7 +155,13 @@ def infer_deployment_vars(ci_dir: str, oauth_app_num: str) -> dict[str, str]:
         check=True,
     )
     bot_email = result.stdout.strip()
-    bot_username = bot_email.split("@")[0] if "@" in bot_email else bot_email
+    result = subprocess.run(
+        ["uv", "run", "jd", "show", "-v", "github_bot_account_username", "--text", "-p", ci_dir],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    bot_username = result.stdout.strip()
 
     return {
         "JD_E2E_VAR_DOMAIN": domain,
@@ -244,15 +250,14 @@ def main() -> None:
             set_env_var(env_var, value)
             print(f"  {env_var}={value}")
 
-    # 1b. Derive bot username from CI and set JD_E2E_USER + allowed usernames
+    # 1b. Read bot username from CI and set JD_E2E_USER + allowed usernames
     result = subprocess.run(
-        ["uv", "run", "jd", "show", "-v", "github_bot_account_email", "--text", "-p", ci_dir],
+        ["uv", "run", "jd", "show", "-v", "github_bot_account_username", "--text", "-p", ci_dir],
         capture_output=True,
         text=True,
         check=True,
     )
-    bot_email = result.stdout.strip()
-    bot_username = bot_email.split("@")[0] if "@" in bot_email else bot_email
+    bot_username = result.stdout.strip()
 
     if "JD_E2E_USER" not in option_env_vars:
         set_env_var("JD_E2E_USER", bot_username)
