@@ -1,0 +1,20 @@
+cluster_name                     = "jupyter-deploy-eks"
+region                           = "us-west-2"
+kubernetes_version               = "1.35"
+cluster_log_retention_days       = 30
+custom_tags                      = {}
+workspace_operator_namespace     = "jupyter-k8s-system"
+workspace_router_namespace       = "jupyter-k8s-router"
+workspace_operator_chart_version = "0.1.0-rc.2"
+traefik_crd_chart_version        = "1.17.0"
+
+node_groups = [
+  {
+    name          = "system"
+    instance_type = "t3.medium"
+    disk_size_gb  = "50"
+    min_size      = "1"
+    max_size      = "5"
+    desired_size  = "2"
+  }
+]

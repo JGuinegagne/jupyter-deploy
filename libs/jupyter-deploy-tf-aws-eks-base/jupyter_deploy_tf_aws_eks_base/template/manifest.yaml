@@ -1,0 +1,49 @@
+schema_version: 1
+template:
+  name: tf-aws-eks-base
+  engine: terraform
+  version: 0.1.0
+requirements:
+- name: terraform
+- name: awscli
+- name: kubectl
+values:
+- name: deployment_id
+  source: output
+  source-key: deployment_id
+- name: aws_region
+  source: output
+  source-key: region
+services: []
+secrets: []
+commands: []
+supervised-execution:
+  config:
+    config.terraform-plan:
+      default-phase:
+        label: Reading data sources
+        progress-pattern: (Read complete after|Refreshing state)
+        progress-events-estimate: 120
+  up:
+    up.terraform-apply:
+      phases:
+      - enter-pattern: 'module.vpc'
+        exit-pattern: 'module.vpc.*Creation complete'
+        label: Creating VPC
+        weight: 5
+      - enter-pattern: 'module.eks_cluster'
+        exit-pattern: 'module.eks_cluster.*Creation complete'
+        label: Creating EKS cluster
+        weight: 40
+      - enter-pattern: 'aws_eks_addon'
+        exit-pattern: 'aws_eks_addon.*Creation complete'
+        label: Installing EKS add-ons
+        weight: 20
+      - enter-pattern: 'helm_release.jupyter_k8s'
+        exit-pattern: 'helm_release.jupyter_k8s.*Creation complete'
+        label: Deploying Jupyter K8s operator
+        weight: 15
+      - enter-pattern: 'helm_release.traefik_dex'
+        exit-pattern: 'helm_release.traefik_dex.*Creation complete'
+        label: Deploying OIDC routing
+        weight: 20

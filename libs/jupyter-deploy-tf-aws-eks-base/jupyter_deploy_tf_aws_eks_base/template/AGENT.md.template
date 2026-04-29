@@ -1,0 +1,77 @@
+# Jupyter-deploy: Terraform AWS EKS base template
+
+## Project organization
+
+This project manages the AWS resources to deploy JupyterLab workspaces on an Amazon EKS cluster.
+It uses Terraform as the infrastructure-as-code engine, provisions an EKS cluster with the
+jupyter-k8s operator for workspace lifecycle management, and controls access with GitHub identities via Dex.
+
+**IMPORTANT:** An Amazon Route53 hosted zone for the domain MUST exist in the AWS account.
+
+The template deploys:
+- A VPC with public and private subnets across 2 AZs
+- An EKS cluster with managed node groups
+- EKS add-ons: vpc-cni, kube-proxy, coredns, pod-identity-agent, ebs-csi-driver, cert-manager, external-dns
+- Helm releases: traefik-crds, jupyter-k8s operator, aws-traefik-dex (OIDC routing)
+- Dex as an OIDC identity provider on the cluster for kubectl authentication
+
+## Usage
+{{ jupyter-deploy-cli-general-instructions }}
+
+## General project information
+{{ show-info-instructions }}
+
+### Configure and create the infrastructure
+{{ config-up-instructions }}
+
+{{ set-variables-with-cmd-instructions }}
+
+{{ set-variables-with-file-instructions }}
+
+{{ read-variables-with-cmd-instructions }}
+
+### View the full terraform logs
+
+{{ history-logs-instructions }}
+
+### Delete all the resources
+
+{{ down-instructions }}
+
+## The terraform project
+
+### Engine directory
+
+The core terraform files are located in `./engine`, including `main.tf`, `variables.tf` and `outputs.tf`.
+Reusable modules are defined in `./engine/modules`:
+- `iam_role` — creates an IAM role with attached policies
+- `iam_policy` — creates an IAM policy from a list of statements
+- `vpc` — VPC with public/private subnets, IGW, NAT gateways
+- `eks_cluster` — EKS cluster and managed node groups
+
+From the `engine` directory, this is a classic terraform project.
+It is possible to use the `terraform` CLI directly, but the recommended way is to use the jupyter-deploy commands.
+
+#### Presets
+`./engine/presets` correspond to optional set of default variables. Users SHOULD NOT modify these files.
+
+## The deployed EKS cluster
+
+### Accessing the cluster
+
+After deployment, configure kubectl:
+```
+aws eks update-kubeconfig --name CLUSTER_NAME --region REGION
+```
+
+### Key namespaces
+- `jupyter-k8s-system` — jupyter-k8s operator
+- `jupyter-k8s-router` — traefik + dex (OIDC routing)
+
+### Useful kubectl commands
+- `kubectl get nodes` — list cluster nodes
+- `kubectl get pods -n jupyter-k8s-system` — operator pods
+- `kubectl get pods -n jupyter-k8s-router` — routing pods
+- `kubectl get workspaces -A` — list all workspaces
+
+{{ generated-by-footer }}
