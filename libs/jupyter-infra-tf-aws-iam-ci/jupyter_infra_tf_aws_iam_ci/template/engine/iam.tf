@@ -36,6 +36,7 @@ locals {
   # SSM parameter ARNs — GitHub roles get read-only
   ssm_parameter_ro_arns = [
     module.github_bot_account_email.parameter_arn,
+    module.github_bot_account_username.parameter_arn,
     module.github_oauth_app_client_id_1.parameter_arn,
     module.github_oauth_app_client_id_2.parameter_arn,
     module.github_oauth_app_client_id_3.parameter_arn,

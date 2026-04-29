@@ -150,6 +150,16 @@ variable "github_bot_account_email" {
   type        = string
 }
 
+variable "github_bot_account_username" {
+  description = <<-EOT
+    GitHub username of the bot account used by E2E CI.
+
+    This is the actual GitHub login (e.g. "MyBotUser"), which may differ
+    from the email prefix. Stored in SSM Parameter Store.
+  EOT
+  type        = string
+}
+
 variable "github_bot_account_password" {
   description = <<-EOT
     Password for the GitHub bot account used by E2E CI.

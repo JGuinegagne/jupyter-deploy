@@ -96,8 +96,13 @@ def main() -> None:
     if allowed_usernames_arg:
         allowed_usernames = allowed_usernames_arg
     else:
-        # Default: allow the bot account (extract username from email)
-        bot_username = bot_email.split("@")[0] if "@" in bot_email else bot_email
+        result = subprocess.run(
+            ["uv", "run", "jd", "show", "-v", "github_bot_account_username", "--text", "-p", ci_dir],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        bot_username = result.stdout.strip()
         allowed_usernames = f'["{bot_username}"]'
 
     print(f"  allowed_usernames: {allowed_usernames}")

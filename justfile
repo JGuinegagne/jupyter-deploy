@@ -716,9 +716,9 @@ auth-bot-2fa ci_dir="sandbox-ci":
 auth-bot-email ci_dir="sandbox-ci":
     @uv run jd show -v github_bot_account_email --text --path {{ci_dir}}
 
-# Print the GitHub bot account username (email prefix before @)
+# Print the GitHub bot account username
 auth-bot-username ci_dir="sandbox-ci":
-    @just auth-bot-email {{ci_dir}} | cut -d'@' -f1
+    @uv run jd show -v github_bot_account_username --text --path {{ci_dir}}
 
 # Get the ECR repository URL for a given OAuth app number
 ci-e2e-base-ecr-url oauth_app_num ci_dir="sandbox-ci":

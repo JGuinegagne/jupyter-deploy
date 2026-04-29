@@ -48,6 +48,11 @@ output "github_bot_account_email_arn" {
   value       = module.github_bot_account_email.parameter_arn
 }
 
+output "github_bot_account_username_arn" {
+  description = "ARN of the SSM parameter for GitHub bot account username."
+  value       = module.github_bot_account_username.parameter_arn
+}
+
 # OAuth app client IDs (x5) — SSM parameters
 output "github_oauth_app_client_id_1_arn" {
   description = "ARN of the SSM parameter for GitHub OAuth app #1 client ID."
