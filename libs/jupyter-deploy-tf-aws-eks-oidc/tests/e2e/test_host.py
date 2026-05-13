@@ -124,7 +124,7 @@ def test_host_status_happy_case(e2e_deployment: EndToEndDeployment) -> None:
     data = _list_hosts_json(e2e_deployment)
     first_host = data["hosts"][0]
 
-    result = e2e_deployment.cli.run_command(["jupyter-deploy", "host", "status", first_host])
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "host", "status", "--name", first_host])
     assert "Host status:" in result.stdout, f"Expected 'Host status:' in output:\n{result.stdout}"
 
 
@@ -133,7 +133,7 @@ def test_host_status_not_found(e2e_deployment: EndToEndDeployment) -> None:
     e2e_deployment.ensure_deployed()
 
     with pytest.raises(JDCliError):
-        e2e_deployment.cli.run_command(["jupyter-deploy", "host", "status", "i-do-not-exist"])
+        e2e_deployment.cli.run_command(["jupyter-deploy", "host", "status", "--name", "i-do-not-exist"])
 
 
 # ── host show ────────────────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ def test_host_show_happy_case(e2e_deployment: EndToEndDeployment) -> None:
     data = _list_hosts_json(e2e_deployment)
     first_host = data["hosts"][0]
 
-    result = e2e_deployment.cli.run_command(["jupyter-deploy", "host", "show", first_host])
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "host", "show", "--name", first_host])
     assert result.stdout, f"Expected non-empty output for host show {first_host}"
 
 
@@ -157,7 +157,7 @@ def test_host_show_json(e2e_deployment: EndToEndDeployment) -> None:
     data = _list_hosts_json(e2e_deployment)
     first_host = data["hosts"][0]
 
-    result = e2e_deployment.cli.run_command(["jupyter-deploy", "host", "show", first_host, "--json"])
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "host", "show", "--name", first_host, "--json"])
     show_data = json.loads(result.stdout, strict=False)
     assert "name" in show_data, f"Expected 'name' in JSON response, got: {list(show_data.keys())}"
     assert "status" in show_data, "Expected 'status' in JSON response"
@@ -170,4 +170,4 @@ def test_host_show_not_found(e2e_deployment: EndToEndDeployment) -> None:
     e2e_deployment.ensure_deployed()
 
     with pytest.raises(JDCliError):
-        e2e_deployment.cli.run_command(["jupyter-deploy", "host", "show", "i-do-not-exist"])
+        e2e_deployment.cli.run_command(["jupyter-deploy", "host", "show", "--name", "i-do-not-exist"])

@@ -589,7 +589,7 @@ def down(
 
 @runner.app.command()
 def open(
-    server_name: Annotated[str | None, typer.Argument(help="Name of the server to open.")] = None,
+    server_name: Annotated[str | None, typer.Option("--name", help="Name of the server to open.")] = None,
     scope: Annotated[str, typer.Option("--scope", help="Scope or group the server belongs to.")] = "",
     project_dir: Annotated[Path | None, typer.Option("--path", "-p", help="Directory of the project to open.")] = None,
 ) -> None:
@@ -600,7 +600,7 @@ def open(
 
     Call <jd config> and <jd up> first.
 
-    For a multi-apps template, open a specific app with: <jd open SERVER_NAME>.
+    For a multi-apps template, open a specific app with: <jd open --name SERVER_NAME>.
     Pass --scope <scope>.
     """
     console = Console()

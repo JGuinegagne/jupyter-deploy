@@ -20,7 +20,7 @@ servers_app = typer.Typer(
 def status(
     name: Annotated[
         str | None,
-        typer.Argument(help="Name of the server to check status for."),
+        typer.Option("--name", help="Name of the server to check status for."),
     ] = None,
     project_dir: Annotated[
         Path | None,
@@ -48,7 +48,7 @@ def status(
 def start(
     name: Annotated[
         str | None,
-        typer.Argument(help="Name of the server to start."),
+        typer.Option("--name", help="Name of the server to start."),
     ] = None,
     project_dir: Annotated[
         Path | None,
@@ -84,7 +84,7 @@ def start(
 def stop(
     name: Annotated[
         str | None,
-        typer.Argument(help="Name of the server to stop."),
+        typer.Option("--name", help="Name of the server to stop."),
     ] = None,
     project_dir: Annotated[
         Path | None,
@@ -120,7 +120,7 @@ def stop(
 def restart(
     name: Annotated[
         str | None,
-        typer.Argument(help="Name of the server to restart."),
+        typer.Option("--name", help="Name of the server to restart."),
     ] = None,
     project_dir: Annotated[
         Path | None,
@@ -152,12 +152,12 @@ def restart(
             simple_display_manager.success(f"Restarted the '{service}' service.")
 
 
-@servers_app.command(context_settings={"allow_extra_args": True})
+@servers_app.command(context_settings={"allow_extra_args": True, "allow_interspersed_args": False})
 def logs(
     ctx: typer.Context,
     name: Annotated[
         str | None,
-        typer.Argument(help="Name of the server whose logs to display."),
+        typer.Option("--name", help="Name of the server whose logs to display."),
     ] = None,
     project_dir: Annotated[
         Path | None,
@@ -218,12 +218,12 @@ def logs(
             raise typer.Exit(code=returncode)
 
 
-@servers_app.command(context_settings={"allow_extra_args": True})
+@servers_app.command(context_settings={"allow_extra_args": True, "allow_interspersed_args": False})
 def exec(
     ctx: typer.Context,
     name: Annotated[
         str | None,
-        typer.Argument(help="Name of the server in which to execute the command."),
+        typer.Option("--name", help="Name of the server in which to execute the command."),
     ] = None,
     project_dir: Annotated[
         Path | None,
@@ -243,9 +243,9 @@ def exec(
 
     Pass the command after '--', for example:
 
-    <jd server exec SERVER_NAME -- pwd>
+    <jd server exec -- pwd>
 
-    <jd server exec SERVER_NAME -s SERVICE -- "df -h">
+    <jd server exec -s SERVICE -- "df -h">
 
     Note: the commands you can execute depend on the service;
     distroless images in particular expose very limited commands.
@@ -256,7 +256,7 @@ def exec(
     if not command_args:
         console = Console()
         console.print(":x: No command provided. Pass a command after '--'", style="red")
-        console.print("Example: jd server exec SERVER_NAME -- pwd", style="red")
+        console.print("Example: jd server exec -- pwd", style="red")
         raise typer.Exit(code=1)
 
     console = Console()
@@ -292,7 +292,7 @@ def exec(
 def connect(
     name: Annotated[
         str | None,
-        typer.Argument(help="Name of the server to connect to."),
+        typer.Option("--name", help="Name of the server to connect to."),
     ] = None,
     project_dir: Annotated[
         Path | None,
@@ -375,7 +375,7 @@ def list_servers(
 
 @servers_app.command()
 def show(
-    name: Annotated[str, typer.Argument(help="Name of the server to show details for.")],
+    name: Annotated[str, typer.Option("--name", help="Name of the server to show details for.")],
     project_dir: Annotated[
         Path | None,
         typer.Option("--path", "-p", help="Directory of the project."),

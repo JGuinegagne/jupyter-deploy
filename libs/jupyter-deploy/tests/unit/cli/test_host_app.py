@@ -172,7 +172,7 @@ class TestHostStartCommand(unittest.TestCase):
         mock_project_dir.return_value.__enter__.return_value = None
 
         runner = CliRunner()
-        result = runner.invoke(host_app, ["start", "node-1"])
+        result = runner.invoke(host_app, ["start", "--name", "node-1"])
 
         self.assertEqual(result.exit_code, 0)
         mock_handler_fns["start_host"].assert_called_once_with(name="node-1")
@@ -250,7 +250,7 @@ class TestHostStopCommand(unittest.TestCase):
         mock_project_dir.return_value.__enter__.return_value = None
 
         runner = CliRunner()
-        result = runner.invoke(host_app, ["stop", "node-1"])
+        result = runner.invoke(host_app, ["stop", "--name", "node-1"])
 
         self.assertEqual(result.exit_code, 0)
         mock_handler_fns["stop_host"].assert_called_once_with(name="node-1")
@@ -328,7 +328,7 @@ class TestHostRestartCommand(unittest.TestCase):
         mock_project_dir.return_value.__enter__.return_value = None
 
         runner = CliRunner()
-        result = runner.invoke(host_app, ["restart", "node-1"])
+        result = runner.invoke(host_app, ["restart", "--name", "node-1"])
 
         self.assertEqual(result.exit_code, 0)
         mock_handler_fns["restart_host"].assert_called_once_with(name="node-1")
@@ -521,7 +521,7 @@ class TestHostConnectCommand(unittest.TestCase):
         mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         runner = CliRunner()
-        result = runner.invoke(host_app, ["connect", "node-1"])
+        result = runner.invoke(host_app, ["connect", "--name", "node-1"])
 
         self.assertEqual(result.exit_code, 0)
         mock_handler_fns["connect"].assert_called_once_with(name="node-1")
@@ -924,7 +924,7 @@ class TestHostShowCommand(unittest.TestCase):
         mock_project_dir.return_value.__enter__.return_value = None
 
         runner = CliRunner()
-        result = runner.invoke(host_app, ["show", "node-1"])
+        result = runner.invoke(host_app, ["show", "--name", "node-1"])
 
         self.assertEqual(result.exit_code, 0)
         mock_host_handler_class.assert_called_once()
@@ -932,7 +932,7 @@ class TestHostShowCommand(unittest.TestCase):
 
     @patch("jupyter_deploy.handlers.resource.host_handler.HostHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_requires_name_argument(self, mock_project_dir: Mock, mock_host_handler_class: Mock) -> None:
+    def test_requires_name_option(self, mock_project_dir: Mock, mock_host_handler_class: Mock) -> None:
         mock_host_handler, _ = self.get_mock_host_handler()
         mock_host_handler_class.return_value = mock_host_handler
         mock_project_dir.return_value.__enter__.return_value = None
@@ -950,7 +950,7 @@ class TestHostShowCommand(unittest.TestCase):
         mock_project_dir.return_value.__enter__.return_value = None
 
         runner = CliRunner()
-        result = runner.invoke(host_app, ["show", "node-1", "--path", "/test/project/path"])
+        result = runner.invoke(host_app, ["show", "--name", "node-1", "--path", "/test/project/path"])
 
         self.assertEqual(result.exit_code, 0)
         mock_project_dir.assert_called_once_with(Path("/test/project/path"))
@@ -964,7 +964,7 @@ class TestHostShowCommand(unittest.TestCase):
         mock_project_dir.return_value.__enter__.return_value = None
 
         runner = CliRunner()
-        result = runner.invoke(host_app, ["show", "node-1", "--json"])
+        result = runner.invoke(host_app, ["show", "--name", "node-1", "--json"])
 
         self.assertEqual(result.exit_code, 0)
         data = json.loads(result.stdout)
@@ -981,6 +981,6 @@ class TestHostShowCommand(unittest.TestCase):
         mock_project_dir.return_value.__enter__.return_value = None
 
         runner = CliRunner()
-        result = runner.invoke(host_app, ["show", "node-1"])
+        result = runner.invoke(host_app, ["show", "--name", "node-1"])
 
         self.assertNotEqual(result.exit_code, 0)

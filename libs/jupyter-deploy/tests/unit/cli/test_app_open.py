@@ -325,7 +325,7 @@ class TestOpenCommand(unittest.TestCase):
         mock_open_handler_cls.return_value = mock_open_handler_instance
 
         runner = CliRunner()
-        result = runner.invoke(app_runner.app, ["open", "my-ws"])
+        result = runner.invoke(app_runner.app, ["open", "--name", "my-ws"])
 
         self.assertEqual(result.exit_code, 0)
         mock_open_fns["open"].assert_called_once_with(name="my-ws", scope=None)
@@ -342,7 +342,7 @@ class TestOpenCommand(unittest.TestCase):
         mock_open_handler_cls.return_value = mock_open_handler_instance
 
         runner = CliRunner()
-        result = runner.invoke(app_runner.app, ["open", "my-ws", "--scope", "team-a"])
+        result = runner.invoke(app_runner.app, ["open", "--name", "my-ws", "--scope", "team-a"])
 
         self.assertEqual(result.exit_code, 0)
         mock_open_fns["open"].assert_called_once_with(name="my-ws", scope="team-a")

@@ -21,7 +21,7 @@ host_app = typer.Typer(
 def status(
     name: Annotated[
         str | None,
-        typer.Argument(help="Name of the host to check status for."),
+        typer.Option("--name", help="Name of the host to check status for."),
     ] = None,
     project_dir: Annotated[
         Path | None,
@@ -57,7 +57,7 @@ def status(
 def stop(
     name: Annotated[
         str | None,
-        typer.Argument(help="Name of the host to stop."),
+        typer.Option("--name", help="Name of the host to stop."),
     ] = None,
     project_dir: Annotated[
         Path | None,
@@ -82,7 +82,7 @@ def stop(
 def start(
     name: Annotated[
         str | None,
-        typer.Argument(help="Name of the host to start."),
+        typer.Option("--name", help="Name of the host to start."),
     ] = None,
     project_dir: Annotated[
         Path | None,
@@ -107,7 +107,7 @@ def start(
 def restart(
     name: Annotated[
         str | None,
-        typer.Argument(help="Name of the host to restart."),
+        typer.Option("--name", help="Name of the host to restart."),
     ] = None,
     project_dir: Annotated[
         Path | None,
@@ -132,7 +132,7 @@ def restart(
 def connect(
     name: Annotated[
         str | None,
-        typer.Argument(help="Name of the host to connect to."),
+        typer.Option("--name", help="Name of the host to connect to."),
     ] = None,
     project_dir: Annotated[
         Path | None,
@@ -260,7 +260,7 @@ def list_hosts(
 
 @host_app.command()
 def show(
-    name: Annotated[str, typer.Argument(help="Name of the host to show details for.")],
+    name: Annotated[str, typer.Option("--name", help="Name of the host to show details for.")],
     project_dir: Annotated[
         Path | None,
         typer.Option("--path", "-p", help="Directory of the project."),

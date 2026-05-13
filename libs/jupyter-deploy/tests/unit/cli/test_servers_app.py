@@ -281,7 +281,7 @@ class TestServerStartCmd(unittest.TestCase):
         mock_project_dir.return_value.__enter__.return_value = None
 
         runner = CliRunner()
-        result = runner.invoke(servers_app, ["start", "my-ws", "--scope", "team-a"])
+        result = runner.invoke(servers_app, ["start", "--name", "my-ws", "--scope", "team-a"])
 
         self.assertEqual(result.exit_code, 0)
         mock_handler_fns["start_server"].assert_called_once_with("all", name="my-ws", scope="team-a")
@@ -429,7 +429,7 @@ class TestServerStopCmd(unittest.TestCase):
         mock_project_dir.return_value.__enter__.return_value = None
 
         runner = CliRunner()
-        result = runner.invoke(servers_app, ["stop", "my-ws", "--scope", "team-a"])
+        result = runner.invoke(servers_app, ["stop", "--name", "my-ws", "--scope", "team-a"])
 
         self.assertEqual(result.exit_code, 0)
         mock_handler_fns["stop_server"].assert_called_once_with("all", name="my-ws", scope="team-a")
@@ -577,7 +577,7 @@ class TestServerRestartCmd(unittest.TestCase):
         mock_project_dir.return_value.__enter__.return_value = None
 
         runner = CliRunner()
-        result = runner.invoke(servers_app, ["restart", "my-ws", "--scope", "team-a"])
+        result = runner.invoke(servers_app, ["restart", "--name", "my-ws", "--scope", "team-a"])
 
         self.assertEqual(result.exit_code, 0)
         mock_handler_fns["restart_server"].assert_called_once_with("all", name="my-ws", scope="team-a")
@@ -754,7 +754,7 @@ class TestServerLogsCmd(unittest.TestCase):
         mock_handler_fns["get_server_logs"].return_value = "some-logs", "", 0
 
         runner = CliRunner()
-        result = runner.invoke(servers_app, ["logs", "my-ws", "--scope", "team-a"])
+        result = runner.invoke(servers_app, ["logs", "--name", "my-ws", "--scope", "team-a"])
 
         self.assertEqual(result.exit_code, 0)
         mock_handler_fns["get_server_logs"].assert_called_once_with(
@@ -838,7 +838,7 @@ class TestServerExecCmd(unittest.TestCase):
 
         # Execute
         runner = CliRunner()
-        result = runner.invoke(servers_app, ["exec", "my-ws", "-s", "jupyter", "--", "pwd"])
+        result = runner.invoke(servers_app, ["exec", "--name", "my-ws", "-s", "jupyter", "--", "pwd"])
 
         # Assert
         self.assertEqual(result.exit_code, 0)
@@ -860,7 +860,7 @@ class TestServerExecCmd(unittest.TestCase):
 
         # Execute
         runner = CliRunner()
-        result = runner.invoke(servers_app, ["exec", "my-ws", "-s", "jupyter", "--", "ls", "-la"])
+        result = runner.invoke(servers_app, ["exec", "--name", "my-ws", "-s", "jupyter", "--", "ls", "-la"])
 
         # Assert
         self.assertEqual(result.exit_code, 0)
@@ -897,7 +897,7 @@ class TestServerExecCmd(unittest.TestCase):
 
         # Execute
         runner = CliRunner()
-        result = runner.invoke(servers_app, ["exec", "my-ws", "-s", "jupyter", "--", "whoami"])
+        result = runner.invoke(servers_app, ["exec", "--name", "my-ws", "-s", "jupyter", "--", "whoami"])
 
         # Assert
         self.assertEqual(result.exit_code, 0)
@@ -920,7 +920,7 @@ class TestServerExecCmd(unittest.TestCase):
 
         # Execute
         runner = CliRunner()
-        result = runner.invoke(servers_app, ["exec", "my-ws", "-s", "jupyter", "--", "false"])
+        result = runner.invoke(servers_app, ["exec", "--name", "my-ws", "-s", "jupyter", "--", "false"])
 
         # Assert
         self.assertEqual(result.exit_code, 1)
@@ -936,7 +936,7 @@ class TestServerExecCmd(unittest.TestCase):
 
         # Execute
         runner = CliRunner()
-        result = runner.invoke(servers_app, ["exec", "my-ws", "-s", "jupyter"])
+        result = runner.invoke(servers_app, ["exec", "--name", "my-ws", "-s", "jupyter"])
 
         # Assert
         self.assertEqual(result.exit_code, 1)
@@ -973,7 +973,7 @@ class TestServerExecCmd(unittest.TestCase):
 
         # Execute
         runner = CliRunner()
-        result = runner.invoke(servers_app, ["exec", "my-ws", "-s", "invalid_service", "--", "pwd"])
+        result = runner.invoke(servers_app, ["exec", "--name", "my-ws", "-s", "invalid_service", "--", "pwd"])
 
         # Assert
         self.assertEqual(result.exit_code, 1)
@@ -1010,7 +1010,9 @@ class TestServerExecCmd(unittest.TestCase):
         mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         runner = CliRunner()
-        result = runner.invoke(servers_app, ["exec", "my-ws", "--scope", "team-a", "-s", "jupyter", "--", "pwd"])
+        result = runner.invoke(
+            servers_app, ["exec", "--name", "my-ws", "--scope", "team-a", "-s", "jupyter", "--", "pwd"]
+        )
 
         self.assertEqual(result.exit_code, 0)
         mock_handler_fns["exec_command"].assert_called_once_with(
@@ -1030,7 +1032,7 @@ class TestServerExecCmd(unittest.TestCase):
 
         # Execute
         runner = CliRunner()
-        result = runner.invoke(servers_app, ["exec", "my-ws", "-s", "jupyter", "--", "whoami"])
+        result = runner.invoke(servers_app, ["exec", "--name", "my-ws", "-s", "jupyter", "--", "whoami"])
 
         # Assert
         self.assertNotEqual(result.exit_code, 0)
@@ -1196,7 +1198,7 @@ class TestServerConnectCmd(unittest.TestCase):
         mock_simple_display_manager_class.return_value = mock_simple_display_manager
 
         runner = CliRunner()
-        result = runner.invoke(servers_app, ["connect", "my-ws", "--scope", "team-a", "-s", "jupyter"])
+        result = runner.invoke(servers_app, ["connect", "--name", "my-ws", "--scope", "team-a", "-s", "jupyter"])
 
         self.assertEqual(result.exit_code, 0)
         mock_handler_fns["connect"].assert_called_once_with(service="jupyter", name="my-ws", scope="team-a")
@@ -1378,7 +1380,7 @@ class TestServerShowCmd(unittest.TestCase):
         mock_project_dir.return_value.__enter__.return_value = None
 
         runner = CliRunner()
-        result = runner.invoke(servers_app, ["show", "my-ws"])
+        result = runner.invoke(servers_app, ["show", "--name", "my-ws"])
 
         self.assertEqual(result.exit_code, 0)
         mock_server_handler_class.assert_called_once()
@@ -1392,14 +1394,14 @@ class TestServerShowCmd(unittest.TestCase):
         mock_project_dir.return_value.__enter__.return_value = None
 
         runner = CliRunner()
-        result = runner.invoke(servers_app, ["show", "my-ws", "--scope", "team-a"])
+        result = runner.invoke(servers_app, ["show", "--name", "my-ws", "--scope", "team-a"])
 
         self.assertEqual(result.exit_code, 0)
         mock_handler_fns["show_server"].assert_called_once_with(name="my-ws", scope="team-a")
 
     @patch("jupyter_deploy.handlers.resource.server_handler.ServerHandler")
     @patch("jupyter_deploy.cmd_utils.project_dir")
-    def test_requires_name_argument(self, mock_project_dir: Mock, mock_server_handler_class: Mock) -> None:
+    def test_requires_name_option(self, mock_project_dir: Mock, mock_server_handler_class: Mock) -> None:
         mock_server_handler, _ = self.get_mock_server_handler()
         mock_server_handler_class.return_value = mock_server_handler
         mock_project_dir.return_value.__enter__.return_value = None
@@ -1418,7 +1420,7 @@ class TestServerShowCmd(unittest.TestCase):
         mock_project_dir.return_value.__enter__.return_value = None
 
         runner = CliRunner()
-        result = runner.invoke(servers_app, ["show", "my-ws", "--json"])
+        result = runner.invoke(servers_app, ["show", "--name", "my-ws", "--json"])
 
         self.assertEqual(result.exit_code, 0)
         data = json.loads(result.stdout)
@@ -1434,6 +1436,6 @@ class TestServerShowCmd(unittest.TestCase):
         mock_project_dir.return_value.__enter__.return_value = None
 
         runner = CliRunner()
-        result = runner.invoke(servers_app, ["show", "my-ws"])
+        result = runner.invoke(servers_app, ["show", "--name", "my-ws"])
 
         self.assertNotEqual(result.exit_code, 0)
