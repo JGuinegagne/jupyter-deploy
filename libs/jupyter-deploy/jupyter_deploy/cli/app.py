@@ -10,8 +10,8 @@ from rich.console import Console
 from rich.table import Table
 
 from jupyter_deploy import cmd_utils
-from jupyter_deploy.cli.component_app import component_app
 from jupyter_deploy.cli.cluster_app import cluster_app
+from jupyter_deploy.cli.component_app import component_app
 from jupyter_deploy.cli.error_decorator import handle_cli_errors
 from jupyter_deploy.cli.history_app import history_app
 from jupyter_deploy.cli.host_app import host_app

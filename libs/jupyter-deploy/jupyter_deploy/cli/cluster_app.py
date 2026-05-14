@@ -11,7 +11,7 @@ from jupyter_deploy.cli.simple_display import SimpleDisplayManager
 from jupyter_deploy.handlers.resource import cluster_handler
 
 cluster_app = typer.Typer(
-    help="Interact with the cluster managing your hosts where your apps run.",
+    help="Interact with the cluster managing the host machines where your apps run.",
     no_args_is_help=True,
 )
 
