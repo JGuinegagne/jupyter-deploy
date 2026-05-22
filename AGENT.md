@@ -73,6 +73,16 @@ IMPORTANT: Do not copy files to `/home/jovyan` during Docker build time.
 The EBS volume for Jupyter data is mounted at runtime, and any files copied during build will be hidden by this mount.
 Instead, copy files to a location like `/opt` during build and then copy them to `/home/jovyan` in startup scripts.
 
+## EKS OIDC template package
+Code: `./libs/jupyter-deploy-tf-aws-eks-oidc`
+
+- infrastructure-as-code engine: `terraform`
+- cloud provider: `aws`
+- identity provider: `github` (via Dex OIDC)
+
+All `local-exec` provisioners MUST set `interpreter = ["/bin/bash", "-c"]` — Terraform defaults to `/bin/sh`.
+With `bootstrap_cluster_creator_admin_permissions = false`, the caller's IAM role MUST be listed in `admin_role_names` to retain cluster access. A `check` block validates this at plan time.
+
 ## CI infrastructure template package
 Code: `./libs/jupyter-infra-tf-aws-iam-ci`
 
@@ -179,14 +189,7 @@ To run the configuration test:
 2. if testing modified template files, ensure they've been copied to `<project-dir>`
 3. run `just test-e2e-base <project-dir> test_configuration`
 
-### Authentication Setup for the base template
-Before running E2E tests, ask the user to run GitHub OAuth authentication: `just auth-setup-base <project-dir>`.
-This will:
-- Launch a browser for the user to authenticate with GitHub (with 2FA presumably)
-- Save authentication state to `.auth/github-oauth-state.json`
-- Allow automated tests to reuse the session
-
-### Running E2E Tests
+### Running Base Template E2E Tests
 Run E2E tests against an existing deployment: `just test-e2e-base <project-dir> TEST-SELECTOR`
 
 Examples (for project-dir == sandbox3):
@@ -197,6 +200,16 @@ Examples (for project-dir == sandbox3):
 
 **NOTE:** mutate tests are long, pipe to log stream to file: `just test-e2e <project-dir> TEST-SELECTOR mutate=true 2>&1 | tee results.log`   
 The test container saves screenshots of failed tests to `./test-results`, use the read image tool.
+
+### Running EKS OIDC Template E2E Tests
+Run E2E tests: `just test-e2e-eks-oidc <project-dir> TEST-SELECTOR`
+
+Examples (for project-dir == sandbox-e2e):
+- Run all tests: `just test-e2e-eks-oidc sandbox-e2e "" mutate=true,full-deploy=true`
+- Run workspace tests only: `just test-e2e-eks-oidc sandbox-e2e test_workspace mutate=true,full-deploy=true`
+
+**Gotcha:** `JD_E2E_RBAC_TEAM` in `.env` MUST match the team in `oauth_allowed_teams` that the sandbox was deployed with.
+The RBAC RoleBinding on the cluster grants workspace access to that group — if they don't match, all impersonation-based workspace tests will fail with `Forbidden`.
 
 ## Debugging and Investigating Deployments
 
