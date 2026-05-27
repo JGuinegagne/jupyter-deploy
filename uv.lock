@@ -432,6 +432,7 @@ name = "jupyter-deploy"
 version = "0.5.1"
 source = { editable = "libs/jupyter-deploy" }
 dependencies = [
+    { name = "certifi" },
     { name = "click" },
     { name = "decorator" },
     { name = "jupyter-core" },
@@ -451,6 +452,8 @@ aws = [
     { name = "mypy-boto3-dynamodb" },
     { name = "mypy-boto3-ec2" },
     { name = "mypy-boto3-eks" },
+    { name = "mypy-boto3-elbv2" },
+    { name = "mypy-boto3-resourcegroupstaggingapi" },
     { name = "mypy-boto3-s3" },
     { name = "mypy-boto3-secretsmanager" },
     { name = "mypy-boto3-ssm" },
@@ -474,6 +477,7 @@ dev = [
 requires-dist = [
     { name = "boto3", marker = "extra == 'aws'", specifier = ">=1.38.23" },
     { name = "boto3-stubs", marker = "extra == 'aws'", specifier = ">=1.38.23" },
+    { name = "certifi", specifier = ">=2024.0.0" },
     { name = "click", specifier = "<8.2.0" },
     { name = "decorator", specifier = ">=5.2.1" },
     { name = "jupyter-core", specifier = ">=5.0.0" },
@@ -481,6 +485,8 @@ requires-dist = [
     { name = "mypy-boto3-dynamodb", marker = "extra == 'aws'", specifier = ">=1.38.0" },
     { name = "mypy-boto3-ec2", marker = "extra == 'aws'", specifier = ">=1.40.4" },
     { name = "mypy-boto3-eks", marker = "extra == 'aws'", specifier = ">=1.38.0" },
+    { name = "mypy-boto3-elbv2", marker = "extra == 'aws'", specifier = ">=1.38.0" },
+    { name = "mypy-boto3-resourcegroupstaggingapi", marker = "extra == 'aws'", specifier = ">=1.38.0" },
     { name = "mypy-boto3-s3", marker = "extra == 'aws'", specifier = ">=1.38.0" },
     { name = "mypy-boto3-secretsmanager", marker = "extra == 'aws'", specifier = ">=1.38.0" },
     { name = "mypy-boto3-ssm", marker = "extra == 'aws'", specifier = ">=1.38.5" },
@@ -574,6 +580,8 @@ dependencies = [
     { name = "mypy-boto3-dynamodb" },
     { name = "mypy-boto3-ec2" },
     { name = "mypy-boto3-eks" },
+    { name = "mypy-boto3-elbv2" },
+    { name = "mypy-boto3-resourcegroupstaggingapi" },
     { name = "mypy-boto3-s3" },
     { name = "mypy-boto3-secretsmanager" },
     { name = "mypy-boto3-ssm" },
@@ -601,6 +609,8 @@ requires-dist = [
     { name = "mypy-boto3-dynamodb" },
     { name = "mypy-boto3-ec2" },
     { name = "mypy-boto3-eks" },
+    { name = "mypy-boto3-elbv2" },
+    { name = "mypy-boto3-resourcegroupstaggingapi" },
     { name = "mypy-boto3-s3" },
     { name = "mypy-boto3-secretsmanager" },
     { name = "mypy-boto3-ssm" },
@@ -928,6 +938,24 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/2c/a4/14cefb52795fd3fd8c57276ba58dfff81f3a7c9c024d7c23cd2db3ed6d63/mypy_boto3_eks-1.42.85.tar.gz", hash = "sha256:c54d1077ef9df35540b7a0259f3e3add475f55db1bb3d2d89d5f3ea569e90ba1", size = 46068, upload-time = "2026-04-07T19:51:12.557Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e5/00/3787b7c8a18bc4daafa124f88f546d85e331ead23a83fb7964322272651c/mypy_boto3_eks-1.42.85-py3-none-any.whl", hash = "sha256:fc9d9b8eb1006573d1f4c0d94f596ee8c6c82801083c059c11ffdf66f6bed2ea", size = 54583, upload-time = "2026-04-07T19:51:09.849Z" },
+]
+
+[[package]]
+name = "mypy-boto3-elbv2"
+version = "1.43.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e7/3a/bbf43ec3ad594cba4207935b0f4f7abe8f50fc3afc2d53c0d876b44135dd/mypy_boto3_elbv2-1.43.0.tar.gz", hash = "sha256:76e87ff7f79485d5649a412075fe440799dba7f4e55d040b30c028ae560f46ef", size = 37631, upload-time = "2026-04-29T23:00:25.317Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9d/b1/da435af0ba42b63fdb3fc36a1a38fffe7e32c51daa28cc7f6b93cce9be55/mypy_boto3_elbv2-1.43.0-py3-none-any.whl", hash = "sha256:cc451cece7d2701fb10bf76e0cd2dc9f6e9ce3b61e07e267f9fe8b8873ac93b1", size = 44390, upload-time = "2026-04-29T23:00:22.228Z" },
+]
+
+[[package]]
+name = "mypy-boto3-resourcegroupstaggingapi"
+version = "1.43.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2b/3b/4e61fefeecb62c7f191bea20ed2ce0ab585641030471f9b622468102d302/mypy_boto3_resourcegroupstaggingapi-1.43.0.tar.gz", hash = "sha256:dcce5d616deb4b8d48fc15ba2a6f34af4b931201ba1affb5bdc147245d7d8b68", size = 18599, upload-time = "2026-04-29T23:04:59.145Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8b/a9/0a04dd2140430c9b08f958b8b4ee97ea22692cc372841dd3bfde36c45823/mypy_boto3_resourcegroupstaggingapi-1.43.0-py3-none-any.whl", hash = "sha256:7cc117d5a034eca4390a3a052f8e24d7818c122ac68d476ffd964a384cdf22ff", size = 25422, upload-time = "2026-04-29T23:04:57.667Z" },
 ]
 
 [[package]]
