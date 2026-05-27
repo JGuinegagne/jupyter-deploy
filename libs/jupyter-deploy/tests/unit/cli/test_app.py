@@ -56,14 +56,21 @@ class TestJupyterDeployCliRunner(unittest.TestCase):
 
         # Check that sub-commands are added
 
-        # At least server, host, users, teams, organization
-        self.assertGreaterEqual(len(runner.app.registered_groups), 5)
         registered_group_names = [group.name for group in runner.app.registered_groups]
-        self.assertIn("server", registered_group_names)
-        self.assertIn("host", registered_group_names)
-        self.assertIn("users", registered_group_names)
-        self.assertIn("teams", registered_group_names)
-        self.assertIn("organization", registered_group_names)
+        expected_groups = [
+            "health",
+            "users",
+            "teams",
+            "organization",
+            "server",
+            "component",
+            "host",
+            "cluster",
+            "history",
+            "projects",
+        ]
+        for group in expected_groups:
+            self.assertIn(group, registered_group_names)
 
     @patch("jupyter_deploy.cli.app.typer.Typer")
     def test_run(self, mock_typer: MagicMock) -> None:
