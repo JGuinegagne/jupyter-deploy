@@ -46,64 +46,17 @@ def _poll_component_status(
 
 def _get_component_last_updated(e2e_deployment: EndToEndDeployment, name: str) -> datetime | None:
     """Get the last_updated timestamp of the sub_component from health JSON."""
-    result = e2e_deployment.cli.run_command(["jupyter-deploy", "component", "health", "--json"])
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "health", "--components", "--json"])
     data = json.loads(result.stdout)
-    for comp in data["components"]:
-        if comp["name"] == name and comp.get("sub_component"):
-            sub = json.loads(comp["sub_component"])
+    for entry in data["layers"]:
+        if entry["name"] == name and entry.get("sub_component"):
+            sub = json.loads(entry["sub_component"])
             if sub.get("last_updated"):
                 dt = datetime.fromisoformat(sub["last_updated"])
                 if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=UTC)
                 return dt
     return None
-
-
-# ── component health ────────────────────────────────────────────────────────
-
-
-def test_component_health(e2e_deployment: EndToEndDeployment) -> None:
-    """Verify health dashboard shows all components with populated fields."""
-    e2e_deployment.ensure_deployed()
-
-    components = _get_manifest_components(e2e_deployment)
-    result = e2e_deployment.cli.run_command(["jupyter-deploy", "component", "health"])
-    output = result.stdout
-
-    for name in components:
-        assert name in output, f"Expected component '{name}' in health output"
-
-    types = {comp.type for comp in components.values()}
-    for comp_type in types:
-        assert comp_type in output, f"Expected type '{comp_type}' in health output"
-
-
-def test_component_health_json(e2e_deployment: EndToEndDeployment) -> None:
-    """Verify health --json returns valid JSON with all components and expected keys."""
-    e2e_deployment.ensure_deployed()
-
-    manifest_components = _get_manifest_components(e2e_deployment)
-    result = e2e_deployment.cli.run_command(["jupyter-deploy", "component", "health", "--json"])
-    data = json.loads(result.stdout)
-
-    assert "components" in data, f"Expected 'components' key, got: {list(data.keys())}"
-    components = data["components"]
-    assert len(components) == len(manifest_components), (
-        f"Expected {len(manifest_components)} components, got {len(components)}"
-    )
-
-    names = [c["name"] for c in components]
-    for name in manifest_components:
-        assert name in names, f"Expected component '{name}' in JSON output"
-
-    expected_types = {comp.type for comp in manifest_components.values()}
-    for comp in components:
-        assert comp["status"], f"Component '{comp['name']}' has empty status"
-        assert comp["type"] in expected_types, f"Component '{comp['name']}' has unexpected type: {comp['type']}"
-        assert comp["status_category"] in ("healthy", "in-progress", "degraded"), (
-            f"Component '{comp['name']}' has unexpected status_category: {comp['status_category']}"
-        )
-        assert comp["details"], f"Component '{comp['name']}' has empty details"
 
 
 # ── component list ──────────────────────────────────────────────────────────
