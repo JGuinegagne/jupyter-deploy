@@ -46,8 +46,10 @@ def test_version_consistency() -> None:
     )
     semver_version = pep440_to_semver(pyproject_version)
     assert semver_version == manifest_version, (
-        f"Version mismatch: pyproject.toml ({pyproject_version} -> {semver_version}) != manifest.yaml ({manifest_version})"
+        f"Version mismatch: pyproject.toml ({pyproject_version} -> {semver_version})"
+        f" != manifest.yaml ({manifest_version})"
     )
     assert semver_version == main_tf_version, (
-        f"Version mismatch: pyproject.toml ({pyproject_version} -> {semver_version}) != main.tf ({main_tf_version})"
+        f"Version mismatch: pyproject.toml ({pyproject_version} -> {semver_version})"
+        f" != main.tf ({main_tf_version})"
     )
