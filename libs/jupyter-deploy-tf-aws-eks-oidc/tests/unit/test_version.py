@@ -7,6 +7,15 @@ from pathlib import Path
 import yaml
 
 
+def pep440_to_semver(version: str) -> str:
+    """Convert PEP 440 pre-release version to SemVer (e.g. '0.1.0rc1' -> '0.1.0-rc.1')."""
+    match = re.match(r"^(\d+\.\d+\.\d+)(rc|a|b)(\d+)$", version)
+    if match:
+        base, pre_type, pre_num = match.groups()
+        return f"{base}-{pre_type}.{pre_num}"
+    return version
+
+
 def test_version_consistency() -> None:
     """Test that version numbers are consistent across pyproject.toml, __init__.py, manifest.yaml, and main.tf."""
     project_path = Path(__file__).parent.parent.parent
@@ -35,9 +44,10 @@ def test_version_consistency() -> None:
     assert pyproject_version == init_version, (
         f"Version mismatch: pyproject.toml ({pyproject_version}) != __init__.py ({init_version})"
     )
-    assert pyproject_version == manifest_version, (
-        f"Version mismatch: pyproject.toml ({pyproject_version}) != manifest.yaml ({manifest_version})"
+    semver_version = pep440_to_semver(pyproject_version)
+    assert semver_version == manifest_version, (
+        f"Version mismatch: pyproject.toml ({pyproject_version} -> {semver_version}) != manifest.yaml ({manifest_version})"
     )
-    assert pyproject_version == main_tf_version, (
-        f"Version mismatch: pyproject.toml ({pyproject_version}) != main.tf template_version ({main_tf_version})"
+    assert semver_version == main_tf_version, (
+        f"Version mismatch: pyproject.toml ({pyproject_version} -> {semver_version}) != main.tf ({main_tf_version})"
     )
