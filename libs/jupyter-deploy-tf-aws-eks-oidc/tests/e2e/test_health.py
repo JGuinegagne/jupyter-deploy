@@ -121,7 +121,7 @@ def test_health_connection_flag(e2e_deployment: EndToEndDeployment) -> None:
     data = json.loads(result.stdout)
 
     assert "connection" in data, f"Expected 'connection' key, got: {list(data.keys())}"
-    assert "layers" not in data, "Expected no 'layers' key with --connection"
+    assert data["layers"] == [], "Expected empty 'layers' with --connection only"
     conn = data["connection"]
     assert conn["status_category"] == "healthy"
     assert "status=" in conn["detail"]
