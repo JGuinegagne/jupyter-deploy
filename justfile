@@ -972,7 +972,7 @@ test-smoke-cli variant image="" log_level="INFO":
     if [ "{{variant}}" = "bare" ]; then
         FILTER='-k "not aws_installation and not k8s_installation"'
     elif [ "{{variant}}" = "aws" ]; then
-        FILTER='-k "not bare_installation"'
+        FILTER='-k "not bare_installation and not k8s_installation"'
     else
         echo "Error: variant must be 'bare' or 'aws', got '{{variant}}'"
         exit 1
