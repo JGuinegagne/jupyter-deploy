@@ -50,6 +50,5 @@ def test_version_consistency() -> None:
         f" != manifest.yaml ({manifest_version})"
     )
     assert semver_version == main_tf_version, (
-        f"Version mismatch: pyproject.toml ({pyproject_version} -> {semver_version})"
-        f" != main.tf ({main_tf_version})"
+        f"Version mismatch: pyproject.toml ({pyproject_version} -> {semver_version}) != main.tf ({main_tf_version})"
     )
