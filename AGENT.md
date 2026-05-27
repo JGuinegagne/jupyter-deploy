@@ -139,6 +139,7 @@ Smoke tests live in `libs/jupyter-deploy/tests/e2e/`. No browser interaction, no
 They run inside a container built from `.github/e2e-cli/`.
 - **aws** (workspace code): `just ci-e2e-cli-build && just test-smoke-cli aws jupyter-deploy-e2e-cli:latest`
 - **bare** (published PyPI): `just test-smoke-cli bare` — auto-builds a pypi image; tests validate that `boto3` is NOT installed
+- **bare** (from Test PyPI): `just ci-e2e-cli-build "" "--build-arg INSTALL_MODE=pypi --build-arg INSTALL_VARIANT=bare --build-arg PKG_VERSION=<version> --build-arg EXTRA_INDEX_URL=https://test.pypi.org/simple/" && just test-smoke-cli bare jupyter-deploy-e2e-cli:latest`
 
 
 ## Writing E2E tests
