@@ -14,6 +14,10 @@ lint:
 docs-cli-ref:
     uv run python scripts/generate_cli_ref.py docs/source/reference
 
+# Verify the committed CLI reference docs are in sync with the CLI
+docs-verify:
+    uv run python scripts/verify_docs.py
+
 # Build documentation locally
 docs-build: docs-cli-ref
     cd docs && uv run sphinx-build -b html source build
