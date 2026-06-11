@@ -43,14 +43,14 @@ resource "null_resource" "destroy_workspaces" {
     helm_release.workspace_defaults,
     helm_release.github_rbac,
     module.node_group,
-    kubernetes_namespace.shared,
+    kubernetes_namespace_v1.shared,
     module.eks_cluster,
     aws_eks_access_policy_association.admin,
     aws_eks_access_policy_association.caller,
   ]
 }
 
-resource "kubernetes_namespace" "shared" {
+resource "kubernetes_namespace_v1" "shared" {
   metadata {
     name = var.workspace_shared_namespace
     labels = {
@@ -93,7 +93,7 @@ resource "helm_release" "github_rbac" {
     ]),
   )
 
-  depends_on = [kubernetes_namespace.shared, helm_release.workspace_router]
+  depends_on = [kubernetes_namespace_v1.shared, helm_release.workspace_router]
 }
 
 resource "helm_release" "workspace_defaults" {
@@ -161,5 +161,5 @@ resource "helm_release" "workspace_defaults" {
     },
   ]
 
-  depends_on = [kubernetes_namespace.shared, helm_release.workspace_router]
+  depends_on = [kubernetes_namespace_v1.shared, helm_release.workspace_router]
 }

@@ -141,4 +141,4 @@ jupyter-deploy down
 
 ## License
 
-The `jupyter-deploy` CLI is licensed under the [MIT License](LICENSE).
+The `jupyter-deploy` CLI is licensed under the [MIT License](https://github.com/jupyter-infra/jupyter-deploy/blob/main/libs/jupyter-deploy/LICENSE).
