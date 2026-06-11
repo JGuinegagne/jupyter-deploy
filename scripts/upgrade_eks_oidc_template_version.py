@@ -131,7 +131,7 @@ def main() -> None:
     update_manifest_yaml(template_path / "manifest.yaml", semver_version)
     update_main_tf(template_path / "engine" / "main.tf", semver_version)
 
-    chart_dirs = ["workspace-defaults", "console", "github-rbac"]
+    chart_dirs = ["workspace-defaults", "github-rbac"]
     for chart_dir in chart_dirs:
         update_chart_yaml(template_path / "charts" / chart_dir / "Chart.yaml", semver_version)
 
