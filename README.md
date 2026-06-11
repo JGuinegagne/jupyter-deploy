@@ -47,7 +47,8 @@ jd --help
 ## Packages
 
 - [jupyter-deploy](./libs/jupyter-deploy/README.md): Core package providing the command line interface tool (CLI).
-- [jupyter-deploy-tf-aws-ec2-base](./libs/jupyter-deploy-tf-aws-ec2-base/README.md): The AWS Base Template to deploy a JupyterLab to an EC2 instance, serve it on your own domain and control access with GitHub OIDC.
+- [jupyter-deploy-tf-aws-ec2-base](./libs/jupyter-deploy-tf-aws-ec2-base/README.md): A template to deploy a single JupyterLab app to an EC2 instance, serve it on your own domain and control access with GitHub identities.
+- [jupyter-deploy-tf-aws-eks-oidc](./libs/jupyter-deploy-tf-aws-eks-oidc/README.md): A template for multi-tenants JupyterLab or other interactive apps to an AWS EKS cluster, serve them on your own domain and control access with GitHub identities.
 - [jupyter-infra-tf-aws-iam-ci](./libs/jupyter-infra-tf-aws-iam-ci/README.md): The template to configure the AWS resources for the CI.
 - [pytest-jupyter-deploy](./libs/pytest-jupyter-deploy/README.md): The pytest plugin for E2E tests that integrates with Playwright.
 

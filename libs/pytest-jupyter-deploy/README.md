@@ -93,4 +93,4 @@ from pytest_jupyter_deploy.image import IMAGE_PATH
 
 ## License
 
-The Pytest plugin for Jupyter Deploy templates is licensed under the [MIT License](LICENSE).
+The Pytest plugin for Jupyter Deploy templates is licensed under the [MIT License](https://github.com/jupyter-infra/jupyter-deploy/blob/main/libs/pytest-jupyter-deploy/LICENSE).
