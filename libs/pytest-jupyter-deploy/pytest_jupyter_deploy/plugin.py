@@ -16,6 +16,7 @@ from pytest_jupyter_deploy.oauth2_proxy.ci_credentials import fetch_ci_credentia
 from pytest_jupyter_deploy.oauth2_proxy.dex import DexGitHubOAuth2ProxyApplication
 from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
 from pytest_jupyter_deploy.suite_config import SuiteConfig
+from pytest_jupyter_deploy.workspaces.web_app import WebAppNavigator
 
 # Type variable for function decorators
 F = TypeVar("F", bound=Callable[..., Any])
@@ -354,3 +355,18 @@ def dex_oauth_app(
         ci_password=ci_password,
         ci_totp_fn=ci_totp_fn,
     )
+
+
+@pytest.fixture(scope="function")
+def dex_oauth_web_app(
+    dex_oauth_app: DexGitHubOAuth2ProxyApplication, e2e_deployment: EndToEndDeployment
+) -> WebAppNavigator:
+    """Authenticated WebAppNavigator for templates using Dex OIDC.
+
+    Resolves the web app URL from the template's declared `open_url` value,
+    authenticates via the Dex OAuth flow, and returns a ready-to-use navigator.
+    The oauth_app is passed through so workspace opens can handle auth redirects.
+    """
+    dex_oauth_app.ensure_authenticated()
+    url = e2e_deployment.cli.get_jupyterlab_url()
+    return WebAppNavigator(page=dex_oauth_app.page, base_url=url, oauth_app=dex_oauth_app)
