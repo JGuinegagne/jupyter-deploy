@@ -139,3 +139,72 @@ class TestVariablesYaml(unittest.TestCase):
 
         overlap = required_vars.intersection(preset_vars)
         self.assertEqual(len(overlap), 0, f"Required variables should not have defaults in preset: {overlap}")
+
+    def test_commented_overrides_match_preset_keys(self) -> None:
+        """All commented-out overrides in variables.yaml should exist in the preset."""
+        commented_vars = self._parse_commented_overrides()
+        preset_vars = set(self.DEFAULTS_ALL_TFVARS.keys())
+
+        missing = set(commented_vars.keys()) - preset_vars
+        self.assertEqual(len(missing), 0, f"Commented overrides not found in preset: {missing}")
+
+    def test_commented_overrides_values_match_preset(self) -> None:
+        """Commented-out override values should match the preset defaults."""
+        commented_vars = self._parse_commented_overrides()
+
+        for var_name, var_value in commented_vars.items():
+            if var_name not in self.DEFAULTS_ALL_TFVARS:
+                continue
+            preset_value = self.DEFAULTS_ALL_TFVARS[var_name]
+            self.assertEqual(
+                var_value,
+                preset_value,
+                f"Commented override '{var_name}' has value {var_value!r} "
+                f"but preset has {preset_value!r}",
+            )
+
+    def test_all_preset_vars_appear_as_commented_overrides(self) -> None:
+        """Every variable in the preset should appear as a commented override in variables.yaml."""
+        commented_vars = self._parse_commented_overrides()
+        preset_vars = set(self.DEFAULTS_ALL_TFVARS.keys())
+
+        missing = preset_vars - set(commented_vars.keys())
+        self.assertEqual(
+            len(missing), 0, f"Preset variables missing from commented overrides: {missing}"
+        )
+
+    @classmethod
+    def _parse_commented_overrides(cls) -> dict:
+        """Parse commented-out key-value pairs from the overrides section of variables.yaml.
+
+        Handles multi-line values (lists, maps) by preserving indentation
+        relative to the `# ` prefix.
+        """
+        with open(cls.VARIABLES_CONFIG_PATH) as f:
+            lines = f.readlines()
+
+        # Find the overrides section and extract commented entries
+        in_overrides = False
+        commented_yaml_lines: list[str] = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("overrides:"):
+                in_overrides = True
+                continue
+            if in_overrides and not stripped.startswith("#") and stripped:
+                # Hit a non-comment, non-empty line — check if it's a new top-level section
+                if not line.startswith(" "):
+                    break
+            if in_overrides and stripped.startswith("# "):
+                # Skip header comments (no colon or starts with a known header phrase)
+                content_after_hash = stripped[2:]
+                if content_after_hash.startswith("uncomment"):
+                    continue
+                commented_yaml_lines.append(content_after_hash)
+
+        if not commented_yaml_lines:
+            return {}
+
+        combined = "\n".join(commented_yaml_lines)
+        result = yaml.safe_load(combined)
+        return result if isinstance(result, dict) else {}
