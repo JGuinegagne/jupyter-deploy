@@ -66,6 +66,9 @@ resource "helm_release" "github_rbac" {
   chart            = "${path.module}/../charts/github-rbac"
   namespace        = var.workspace_shared_namespace
   create_namespace = false
+  # Uninstall can wait on RoleBinding teardown during a slow destroy; give it the
+  # same 600s headroom as the other CR-bearing releases (default is 5 min).
+  timeout = 600
 
   set = concat(
     [
@@ -98,6 +101,11 @@ resource "helm_release" "workspace_defaults" {
   chart            = "${path.module}/../charts/workspace-defaults"
   namespace        = var.workspace_shared_namespace
   create_namespace = false
+  # Install AND uninstall wait on the operator reconciling/clearing the
+  # WorkspaceTemplate + access-strategy CR finalizers. The 5-min provider default
+  # can lag on a slow/contended cluster during destroy;
+  # 600s matches helm_release.workspace_router.
+  timeout = 600
 
   set = concat([
     {
