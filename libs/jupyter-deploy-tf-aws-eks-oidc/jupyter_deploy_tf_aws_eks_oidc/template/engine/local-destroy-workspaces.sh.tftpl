@@ -10,10 +10,11 @@
 #   groups (which host the controller-manager) and the Helm releases that ship
 #   these CRs are torn down concurrently — so Helm's uninstall blocks on a
 #   finalizer the now-dead operator can never clear, hits its timeout ("context
-#   deadline exceeded"), and aborts the whole destroy (see run 28182357633, where
-#   workspace-defaults' AccessStrategy wedged the uninstall at 5m). We delete the
-#   CRs innermost-first (Workspaces → Templates → AccessStrategies, every namespace)
-#   while the operator is still alive.
+#   deadline exceeded"), and aborts the whole destroy. We delete the CRs
+#   innermost-first (Workspaces → Templates → AccessStrategies, every namespace)
+#   while the operator is still alive, so each Helm uninstall is a no-op.
+#   (workspace-defaults ships the WorkspaceTemplate; the router chart ships the
+#   WorkspaceAccessStrategy — clearing all three covers every release.)
 #
 #   This null_resource depends_on the operator/CR Helm releases and node groups,
 #   so its destroy provisioner runs FIRST (destroy is reverse-dependency order) —
@@ -33,11 +34,11 @@ GRACEFUL_WAIT_SECONDS=120
 SLEEP_INTERVAL=10
 
 # Operator CRDs we tear down, in deletion order. Workspaces reference Templates,
-# and Templates reference an AccessStrategy — and the operator now pins a
-# deletion-blocking finalizer on the AccessStrategy too. So we clear them
-# innermost-first: Workspaces, then Templates, then AccessStrategies, all while the
-# operator is still alive to process finalizer removal — before any Helm release
-# (workspace-defaults ships the AccessStrategy) tries to uninstall them.
+# and Templates reference an AccessStrategy — and the operator pins a
+# deletion-blocking finalizer on each. Clear them innermost-first (Workspaces,
+# then Templates, then AccessStrategies) while the operator is still alive, before
+# any Helm release that ships them (workspace-defaults: Template; router chart:
+# AccessStrategy) tries to uninstall them.
 WORKSPACE_KIND="workspaces.workspace.jupyter.org"
 TEMPLATE_KIND="workspacetemplates.workspace.jupyter.org"
 ACCESS_STRATEGY_KIND="workspaceaccessstrategies.workspace.jupyter.org"
