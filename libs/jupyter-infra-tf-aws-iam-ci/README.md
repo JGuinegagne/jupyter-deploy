@@ -59,6 +59,11 @@ This operation removes all the resources associated with this project in your AW
 jd down
 ```
 
+> **Note:** This template enables Amazon Inspector enhanced ECR scanning, which is an
+> account-wide setting. Running `jd down` disables Inspector ECR scanning for the **entire
+> account**, not just this deployment's repositories. This is intended for the single-purpose
+> CI account — do not deploy this template into a shared account.
+
 ## Details
 This project:
 - creates an IAM OIDC provider for GitHub Actions (`token.actions.githubusercontent.com`)
@@ -78,6 +83,7 @@ This project:
 - applies resource-based deny policies on bot account secrets (deny all except maintainers)
 - creates 5 ECR repositories for pre-built E2E test container images (one per OAuth app, KMS-encrypted, lifecycle policy keeps last 5 images)
 - creates an S3 bucket for E2E test result uploads (KMS-encrypted, public access blocked, 90-day object expiration)
+- enables Amazon Inspector enhanced scanning for ECR account-wide (so `jd image vulnerabilities` reports OS + language-package CVEs and EPSS scores)
 - tags all resources with `Source`, `Template`, `Version`, and `DeploymentId`
 
 ## Requirements
@@ -113,6 +119,7 @@ This project:
 | [null_resource](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) | resource |
 | [aws_ecr_repository](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecr_repository) | resource |
 | [aws_ecr_lifecycle_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecr_lifecycle_policy) | resource |
+| [aws_inspector2_enabler](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/inspector2_enabler) | resource |
 | [aws_s3_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
 | [aws_s3_bucket_server_side_encryption_configuration](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_server_side_encryption_configuration) | resource |
 | [aws_s3_bucket_public_access_block](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_public_access_block) | resource |
@@ -132,6 +139,7 @@ This project:
 | iam_managed_policies_e2e | `list(string)` | `["AdministratorAccess"]` | AWS managed policy names to attach to the E2E role |
 | iam_managed_policies_release | `list(string)` | `["AdministratorAccess"]` | AWS managed policy names to attach to the release role |
 | maintainer_roles | `list(string)` | `["Admin"]` | IAM role names that may manage all secrets |
+| create_oidc_provider | `bool` | `true` | Whether to create the GitHub Actions OIDC provider (account-wide singleton) |
 | github_bot_account_email | `string` | Required | Email address of the GitHub bot account (stored in SSM Parameter Store) |
 | github_bot_account_password | `string` | Required (sensitive) | Password for the GitHub bot account |
 | github_bot_account_recovery_codes | `string` | Required (sensitive) | Recovery codes for the GitHub bot account |

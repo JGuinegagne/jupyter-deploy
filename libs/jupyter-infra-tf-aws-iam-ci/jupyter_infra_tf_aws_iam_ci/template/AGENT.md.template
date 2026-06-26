@@ -11,9 +11,14 @@ Only one can exist for `token.actions.githubusercontent.com`. If another deploym
 in this account already created it, set `create_oidc_provider` to `false` to
 reference the existing one via data source instead.
 
+**IMPORTANT:** This template enables Amazon Inspector enhanced scanning for ECR, which
+is an account-wide setting. The CI account is single-purpose, so this is always on; running
+`jd down` disables it for the whole account.
+
 ### Resources managed
 
 - **OIDC provider** — GitHub Actions federation (conditional)
+- **Inspector2 enabler** — account-wide enhanced ECR scanning (conditional)
 - **IAM roles** — E2E and release roles with OIDC trust policies
 - **Secrets Manager** — auth state, bot account credentials, OAuth client secrets
 - **SSM parameters** — OAuth app client IDs (non-sensitive)
