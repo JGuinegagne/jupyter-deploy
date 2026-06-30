@@ -15,18 +15,32 @@ CNI addon must set enableNetworkPolicy=true) — otherwise every probe is allowe
 import json
 import subprocess
 import time
+import uuid
 
 # Operator-generated Service name for a workspace: "workspace-<name>-service".
 _WORKSPACE_SERVICE_FMT = "workspace-{name}-service"
 _CURL_IMAGE = "curlimages/curl:latest"
 # curl exit 28 == operation timeout → the connection was blocked (denied).
 _CURL_TIMEOUT_EXIT = 28
+# Default prefix for probe-pod names; a unique suffix is always appended.
+_DEFAULT_POD_PREFIX = "netpol-probe"
 
 
 def workspace_service_host(workspace_name: str, namespace: str = "default") -> str:
     """Return the in-cluster DNS host for a workspace's Service."""
     service = _WORKSPACE_SERVICE_FMT.format(name=workspace_name)
     return f"{service}.{namespace}.svc.cluster.local"
+
+
+def _unique_pod_name(prefix: str) -> str:
+    """Build a collision-free probe-pod name from prefix plus a random suffix.
+
+    Probe pods are deleted with --wait=false, so a pod from an earlier test can
+    still be terminating when a later test runs. Reusing a fixed name then fails
+    the create with 'AlreadyExists: object is being deleted'. A random suffix per
+    probe guarantees a fresh name every time, so creates never collide.
+    """
+    return f"{prefix}-{uuid.uuid4().hex[:8]}"
 
 
 def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
@@ -53,7 +67,7 @@ def probe_service(
     from_namespace: str,
     pod_labels: dict[str, str] | None = None,
     connect_timeout_s: int = 8,
-    pod_name: str = "netpol-probe",
+    pod_name_prefix: str = _DEFAULT_POD_PREFIX,
 ) -> bool:
     """Attempt to reach an in-cluster host:port from a pod in from_namespace.
 
@@ -61,6 +75,10 @@ def probe_service(
     probe a policy's podSelector), connects to http://host:port/, then reads the
     container's terminated exit code (not kubectl's, which is unreliable for
     run --rm). The pod is always deleted on the way out.
+
+    Each probe runs under a freshly-generated unique pod name (pod_name_prefix
+    plus a random suffix), so a still-terminating pod from a prior probe never
+    collides with this create.
 
     Returns:
         True if the connection was allowed (curl reached the endpoint),
@@ -72,6 +90,7 @@ def probe_service(
             not be silently read as "denied".
     """
     url = f"http://{host}:{port}/"
+    pod_name = _unique_pod_name(pod_name_prefix)
 
     overrides: dict = {"spec": {"restartPolicy": "Never"}}
     if pod_labels:
@@ -129,7 +148,7 @@ def probe_service_allowed(
     pod_labels: dict[str, str] | None = None,
     attempts: int = 5,
     connect_timeout_s: int = 8,
-    pod_name: str = "netpol-probe",
+    pod_name_prefix: str = _DEFAULT_POD_PREFIX,
 ) -> bool:
     """Probe repeatedly, returning True as soon as one probe is allowed.
 
@@ -142,14 +161,14 @@ def probe_service_allowed(
     # spuriously time out before the allow rule is in place (it fails closed). This
     # retry converges on the steady-state answer for ALLOW assertions; default-deny
     # is immediate and stable, so deny assertions should use probe_service directly.
-    for attempt in range(attempts):
+    for _ in range(attempts):
         if probe_service(
             host,
             port,
             from_namespace=from_namespace,
             pod_labels=pod_labels,
             connect_timeout_s=connect_timeout_s,
-            pod_name=f"{pod_name}-{attempt}",
+            pod_name_prefix=pod_name_prefix,
         ):
             return True
     return False
@@ -163,7 +182,7 @@ def probe_workspace(
     port: int = 8888,
     pod_labels: dict[str, str] | None = None,
     connect_timeout_s: int = 8,
-    pod_name: str = "netpol-probe",
+    pod_name_prefix: str = _DEFAULT_POD_PREFIX,
 ) -> bool:
     """Attempt to reach a workspace Service from a pod in from_namespace.
 
@@ -176,7 +195,7 @@ def probe_workspace(
         from_namespace=from_namespace,
         pod_labels=pod_labels,
         connect_timeout_s=connect_timeout_s,
-        pod_name=pod_name,
+        pod_name_prefix=pod_name_prefix,
     )
 
 
