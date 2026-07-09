@@ -112,6 +112,10 @@ Always run from the root of the repository:
 2. Run unit tests: `just unit-test`
    - Runs `uv run pytest`
 
+## Automated code review
+
+Open PRs are reviewed automatically in CI by [roborev](https://roborev.io) (policy in [`.roborev.toml`](.roborev.toml)). Run the same review locally with `just review`; see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## General coding rules
 1. you MUST NOT silence linters without the user's permission
 2. you MUST NOT write docstrings that merely repeat a method name
