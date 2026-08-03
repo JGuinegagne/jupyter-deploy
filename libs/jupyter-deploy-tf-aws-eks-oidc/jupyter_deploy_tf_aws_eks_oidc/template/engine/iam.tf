@@ -359,6 +359,16 @@ data "aws_iam_policy_document" "karpenter_controller" {
     resources = [aws_iam_instance_profile.karpenter_node.arn]
   }
 
+  # Karpenter >=1.7 runs an instance-profile garbage-collection reconciler that calls
+  # iam:ListInstanceProfiles (a list action — no resource-level scoping) on every loop,
+  # even though this template pre-creates the single profile it uses. Without this the
+  # controller floods AccessDenied and never GCs orphaned profiles.
+  statement {
+    sid       = "AllowInstanceProfileList"
+    actions   = ["iam:ListInstanceProfiles"]
+    resources = ["*"]
+  }
+
   statement {
     sid = "AllowInterruptionQueueActions"
     actions = [
