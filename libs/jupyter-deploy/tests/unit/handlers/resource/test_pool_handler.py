@@ -1,4 +1,3 @@
-import json
 import unittest
 from pathlib import Path
 from unittest.mock import ANY, Mock, patch
@@ -18,7 +17,7 @@ from jupyter_deploy.manifest import (
 
 
 def _ready_rules() -> list[JupyterDeployStatusRuleV1]:
-    """Mirror the pool-status-rules declared in the template manifest."""
+    """Mirror the pool-status-rules declared in the eks-oidc template manifest."""
     return [
         JupyterDeployStatusRuleV1(
             display="Ready",
@@ -31,6 +30,16 @@ def _ready_rules() -> list[JupyterDeployStatusRuleV1]:
         JupyterDeployStatusRuleV1(
             display="Degraded",
             all=[JupyterDeployStatusRuleMatchV1(path=".status.conditions[type=Ready].status", equals="False")],
+        ),
+        # MNG bare-string .status rules (a subset — full set pinned in the template test).
+        JupyterDeployStatusRuleV1(
+            display="Ready", all=[JupyterDeployStatusRuleMatchV1(path=".status", equals="ACTIVE")]
+        ),
+        JupyterDeployStatusRuleV1(
+            display="Creating", all=[JupyterDeployStatusRuleMatchV1(path=".status", equals="UPDATING")]
+        ),
+        JupyterDeployStatusRuleV1(
+            display="Degraded", all=[JupyterDeployStatusRuleMatchV1(path=".status", equals="DELETING")]
         ),
     ]
 
@@ -149,7 +158,7 @@ class TestPoolHandler(unittest.TestCase):
     @patch("jupyter_deploy.engine.terraform.tf_outputs.TerraformOutputsHandler")
     @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
     @patch("jupyter_deploy.provider.manifest_command_runner.ManifestCommandRunner")
-    def test_list_pools_extracts_names(
+    def test_list_pools_returns_flat_name_list(
         self,
         mock_cmd_runner_class: Mock,
         mock_tf_variables_handler: Mock,
@@ -163,17 +172,15 @@ class TestPoolHandler(unittest.TestCase):
         mock_tf_outputs_handler.return_value = self.get_mock_outputs_handler_and_fns()[0]
         mock_tf_variables_handler.return_value = Mock()
 
-        pool_items = [
-            {"metadata": {"name": "routing"}},
-            {"metadata": {"name": "workspace-cpu"}},
-        ]
-        mock_cmd_runner_fns["get_result_value"].return_value = json.dumps(pool_items)
+        mock_cmd_runner_fns["get_result_value"].return_value = ["routing", "workspace-cpu", "cluster-platform"]
 
         handler = PoolHandler(display_manager=NullDisplay())
         names = handler.list_pools()
 
-        self.assertEqual(names, ["routing", "workspace-cpu"])
+        self.assertEqual(names, ["routing", "workspace-cpu", "cluster-platform"])
         mock_cmd_runner_fns["run_command_sequence"].assert_called_once()
+        # requests the result typed as a list
+        mock_cmd_runner_fns["get_result_value"].assert_called_once_with(ANY, "pool.list", list)
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("jupyter_deploy.engine.terraform.tf_outputs.TerraformOutputsHandler")
@@ -193,7 +200,7 @@ class TestPoolHandler(unittest.TestCase):
         mock_tf_outputs_handler.return_value = self.get_mock_outputs_handler_and_fns()[0]
         mock_tf_variables_handler.return_value = Mock()
 
-        mock_cmd_runner_fns["get_result_value"].return_value = "[]"
+        mock_cmd_runner_fns["get_result_value"].return_value = []
 
         handler = PoolHandler(display_manager=NullDisplay())
         names = handler.list_pools()
@@ -303,6 +310,40 @@ class TestPoolHandler(unittest.TestCase):
         status = handler.get_status(name="workspace-cpu")
 
         self.assertEqual(status, "Ready")
+
+    @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
+    @patch("jupyter_deploy.engine.terraform.tf_outputs.TerraformOutputsHandler")
+    @patch("jupyter_deploy.engine.terraform.tf_variables.TerraformVariablesHandler")
+    @patch("jupyter_deploy.provider.manifest_command_runner.ManifestCommandRunner")
+    @patch("jupyter_deploy.handlers.resource.pool_handler.collect_results")
+    def test_show_pool_normalizes_mng_bare_string_status(
+        self,
+        mock_collect_results: Mock,
+        mock_cmd_runner_class: Mock,
+        mock_tf_variables_handler: Mock,
+        mock_tf_outputs_handler: Mock,
+        mock_retrieve_manifest: Mock,
+    ) -> None:
+        # An MNG resource has a bare-string `.status` (e.g. "ACTIVE"), unlike Karpenter's
+        # object `.status`. The string-leaf rule maps it to the shared vocabulary.
+        mock_manifest, _ = self.get_mock_manifest_and_fns()
+        mock_manifest.pool_status_rules = _ready_rules()
+        mock_retrieve_manifest.return_value = mock_manifest
+        mock_cmd_runner, _ = self.get_mock_manifest_cmd_runner_and_fns()
+        mock_cmd_runner_class.return_value = mock_cmd_runner
+        mock_tf_outputs_handler.return_value = self.get_mock_outputs_handler_and_fns()[0]
+        mock_tf_variables_handler.return_value = Mock()
+
+        mock_collect_results.return_value = {
+            "name": "cluster-platform",
+            "resource": {"nodegroupName": "cluster-platform", "status": "ACTIVE"},
+        }
+
+        handler = PoolHandler(display_manager=NullDisplay())
+        result = handler.show_pool(name="cluster-platform")
+
+        self.assertEqual(result.name, "cluster-platform")
+        self.assertEqual(result.status, "Ready")
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("jupyter_deploy.engine.terraform.tf_outputs.TerraformOutputsHandler")

@@ -1,9 +1,10 @@
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.enum import (
+    ConditionOperator,
     InstructionArgumentSource,
     ResultSource,
     SecretSource,
@@ -103,16 +104,68 @@ class JupyterDeployCommandUpdateV1(BaseModel):
         return TransformType.from_string(self.transform)
 
 
+class JupyterDeployConditionOperandV1(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    source: str  # "cli" | "output" | "result" | "literal"
+    source_key: str = Field(default="", alias="source-key")
+    value: str | None = None  # for source: literal
+
+    def get_source_type(self) -> InstructionArgumentSource:
+        """Return the operand source type (reuses the instruction-argument sources)."""
+        return InstructionArgumentSource.from_string(self.source)
+
+
+class JupyterDeployConditionV1(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    left: JupyterDeployConditionOperandV1
+    operator: str
+    right: JupyterDeployConditionOperandV1
+
+    def get_operator(self) -> ConditionOperator:
+        """Return the condition operator type."""
+        return ConditionOperator.from_string(self.operator)
+
+
+class JupyterDeployFlagV1(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    name: str
+    conditions: list[JupyterDeployConditionV1]  # ANDed together
+
+    @field_validator("name")
+    @classmethod
+    def _name_excludes_bang(cls, value: str) -> str:
+        # `!` is the negation sigil in step-level `when:`; a flag name containing it would
+        # make the negation parse ambiguous.
+        if "!" in value:
+            raise ValueError(f"Flag name must not contain '!': {value!r}")
+        return value
+
+
 class JupyterDeployInstructionV1(BaseModel):
     model_config = ConfigDict(extra="allow")
     api_name: str = Field(alias="api-name")
-    arguments: list[JupyterDeployInstructionArgumentV1]
+    arguments: list[JupyterDeployInstructionArgumentV1] = []
+    when: str | None = None  # bare flag-ref, leading "!" negates, e.g. "is-mng" / "!is-mng"
+
+    @field_validator("when")
+    @classmethod
+    def _when_well_formed(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        # at most one leading "!", no interior "!", non-empty flag name after stripping it
+        stripped = value[1:] if value.startswith("!") else value
+        if not stripped:
+            raise ValueError(f"when: must reference a non-empty flag name: {value!r}")
+        if "!" in stripped:
+            raise ValueError(f"when: allows at most one leading '!' and no interior '!': {value!r}")
+        return value
 
 
 class JupyterDeployCommandV1(BaseModel):
     model_config = ConfigDict(extra="allow")
     cmd: str
     sequence: list[JupyterDeployInstructionV1]
+    flags: list[JupyterDeployFlagV1] | None = None
     results: list[JupyterDeployInstructionResultV1] | None = None
     updates: list[JupyterDeployCommandUpdateV1] | None = None
 

@@ -1,9 +1,10 @@
+import json
 from enum import Enum
 
 import boto3
 from mypy_boto3_eks.client import EKSClient
 
-from jupyter_deploy.api.aws.eks import eks_cluster
+from jupyter_deploy.api.aws.eks import eks_cluster, eks_nodegroup
 from jupyter_deploy.cmd_utils import run_cmd_and_capture_output
 from jupyter_deploy.engine.supervised_execution import DisplayManager
 from jupyter_deploy.exceptions import ConfigurationError, InstructionNotFoundError
@@ -15,6 +16,7 @@ from jupyter_deploy.provider.resolved_argdefs import (
     retrieve_optional_arg,
 )
 from jupyter_deploy.provider.resolved_resultdefs import (
+    ListStrResolvedInstructionResult,
     ResolvedInstructionResult,
     StrResolvedInstructionResult,
 )
@@ -77,13 +79,14 @@ class AwsEksRunner(InstructionRunner):
         )
 
         self.display_manager.info(f"Listing node groups for cluster: {cluster_name_arg.value}")
-        nodegroups, next_token = eks_cluster.list_nodegroups(
+        nodegroups, next_token = eks_nodegroup.list_nodegroups(
             self.client,
             cluster_name=cluster_name_arg.value,
             starting_token=pagination_token_arg.value or None,  # coerce "" to None for the API
         )
 
         return {
+            "Names": ListStrResolvedInstructionResult(result_name="Names", value=list(nodegroups)),
             "Nodegroups": StrResolvedInstructionResult(result_name="Nodegroups", value=",".join(nodegroups)),
             "NextToken": StrResolvedInstructionResult(result_name="NextToken", value=next_token or ""),
         }
@@ -95,7 +98,7 @@ class AwsEksRunner(InstructionRunner):
         nodegroup_name_arg = require_arg(resolved_arguments, "nodegroup_name", StrResolvedInstructionArgument)
 
         self.display_manager.info(f"Describing node group: {nodegroup_name_arg.value}")
-        nodegroup = eks_cluster.describe_nodegroup(
+        nodegroup = eks_nodegroup.describe_nodegroup(
             self.client, cluster_name=cluster_name_arg.value, nodegroup_name=nodegroup_name_arg.value
         )
 
@@ -104,6 +107,9 @@ class AwsEksRunner(InstructionRunner):
                 result_name="NodegroupName", value=nodegroup.get("nodegroupName", "")
             ),
             "Status": StrResolvedInstructionResult(result_name="Status", value=nodegroup.get("status", "")),
+            # Full describe-nodegroup blob for `pool show` parity with Karpenter's Resource.
+            # default=str stringifies datetime fields (createdAt/modifiedAt) so it round-trips as JSON.
+            "Resource": StrResolvedInstructionResult(result_name="Resource", value=json.dumps(nodegroup, default=str)),
         }
 
     def _update_kubeconfig(

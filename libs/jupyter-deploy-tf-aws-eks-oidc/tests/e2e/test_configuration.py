@@ -191,3 +191,29 @@ def test_config_error_recovery_invalid_admin_role(e2e_deployment: EndToEndDeploy
         # --- Second run: should succeed ---
         result = cli.run_command(["jupyter-deploy", "config"])
         assert "Your project is ready" in result.stdout
+
+
+@pytest.mark.cli
+@skip_if_testvars_not_set(
+    [
+        "JD_E2E_VAR_DOMAIN",
+        "JD_E2E_VAR_EMAIL",
+        "JD_E2E_VAR_OAUTH_APP_CLIENT_ID",
+        "JD_E2E_VAR_OAUTH_ALLOWED_TEAMS",
+        "JD_E2E_VAR_SUBDOMAIN",
+        "JD_E2E_VAR_OAUTH_APP_CLIENT_SECRET",
+    ]
+)
+def test_pool_list_fails_gracefully_when_not_deployed(e2e_deployment: EndToEndDeployment) -> None:
+    """`jd pool list` on an initialized-but-undeployed project fails gracefully.
+
+    pool.list reads terraform outputs (cluster_name) and the pool.status is-mng flag reads
+    platform_mng_names — none of which exist before `jd up`. The CLI must surface a clean
+    JDCliError (a JupyterDeployError rendered by the error handler), not a raw traceback.
+    """
+    # No `jd up` — outputs don't exist yet. The command must exit non-zero cleanly.
+    with (
+        undeployed_project(e2e_deployment.suite_config) as (_project_path, cli),
+        pytest.raises(JDCliError),
+    ):
+        cli.run_command(["jupyter-deploy", "pool", "list"])

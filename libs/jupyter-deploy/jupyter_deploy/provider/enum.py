@@ -18,6 +18,7 @@ class ApiGroup(str, Enum):
     AWS = "aws"
     K8S = "k8s"
     HELM = "helm"
+    CORE = "core"  # built-in combinators (concat/coalesce); no external SDK
 
     @classmethod
     def from_api_name(cls, api_name: str) -> "ApiGroup":

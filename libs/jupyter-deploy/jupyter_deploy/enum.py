@@ -45,6 +45,25 @@ class InstructionArgumentSource(str, Enum):
         raise ValueError(f"No InstructionArgumentSource found for '{source_str}'")
 
 
+class ConditionOperator(str, Enum):
+    """Operators for command-level flag conditions."""
+
+    IN = "in"
+
+    @classmethod
+    def from_string(cls, source_str: str) -> "ConditionOperator":
+        """Return the enum value, ignoring case.
+
+        Raises:
+            ValueError: If no matching enum value is found.
+        """
+        source_lower = source_str.lower()
+        for operator in cls:
+            if operator.value.lower() == source_lower:
+                return operator
+        raise ValueError(f"No ConditionOperator found for '{source_str}'")
+
+
 class ResultSource(str, Enum):
     """Enum to list the possible sources for an result."""
 

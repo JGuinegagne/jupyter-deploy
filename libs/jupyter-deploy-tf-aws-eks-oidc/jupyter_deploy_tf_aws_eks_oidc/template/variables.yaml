@@ -28,11 +28,11 @@ overrides:
   # workspace_router_namespace: jupyter-k8s-router
   # workspace_shared_namespace: jupyter-k8s-shared
   # workspace_operator_chart_oci: oci://ghcr.io/jupyter-infra/charts/jupyter-k8s
-  # workspace_operator_chart_version: "0.2.0"
+  # workspace_operator_chart_version: "0.2.1"
   # workspace_router_chart_oci: oci://ghcr.io/jupyter-infra/charts/jupyter-k8s-aws-oidc
-  # workspace_router_chart_version: "0.1.1"
+  # workspace_router_chart_version: "0.2.0"
   # traefik_crd_chart_version: "1.15.0"
-  # cluster_autoscaler_chart_version: "9.58.0"
+  # cluster_autoscaler_chart_version: "9.59.0"
   # enable_component_logging: true
   # component_log_retention_days: 7
   # fluentbit_chart_version: "0.2.0"
@@ -51,9 +51,9 @@ overrides:
   # platform_disk_size_gb: 50
   # platform_min_size: 2
   # platform_max_size: 3
-  # karpenter_version: "1.3.8"
-  # keda_version: "2.16.1"
-  # prometheus_version: "27.0.0"
+  # karpenter_version: "1.13.1"
+  # keda_version: "2.20.2"
+  # prometheus_version: "29.21.0"
   # node_expire_after: "504h"
   # routing_max_cpu: "32"
   # routing_max_memory: 128Gi

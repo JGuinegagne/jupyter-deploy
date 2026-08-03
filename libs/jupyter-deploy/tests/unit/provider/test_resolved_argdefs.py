@@ -1,7 +1,11 @@
 import unittest
 from typing import Any
 
-from jupyter_deploy.engine.outdefs import StrTemplateOutputDefinition, TemplateOutputDefinition
+from jupyter_deploy.engine.outdefs import (
+    ListStrTemplateOutputDefinition,
+    StrTemplateOutputDefinition,
+    TemplateOutputDefinition,
+)
 from jupyter_deploy.provider.resolved_argdefs import (
     IntResolvedInstructionArgument,
     ListStrResolvedInstructionArgument,
@@ -74,6 +78,32 @@ class TestResolveOutputArgDef(unittest.TestCase):
             resolve_output_argdef(outdefs, "test_arg", "non_existing_output")
 
         self.assertIn("non_existing_output", str(context.exception))
+
+    def test_resolves_existing_liststr_output(self) -> None:
+        # Arrange
+        outdefs: dict[str, TemplateOutputDefinition] = {
+            "mng_names": ListStrTemplateOutputDefinition(output_name="mng_names", value=["ng-a", "ng-b"])
+        }
+
+        # Act
+        result = resolve_output_argdef(outdefs=outdefs, arg_name="test_arg", source_key="mng_names")
+
+        # Assert
+        self.assertIsInstance(result, ListStrResolvedInstructionArgument)
+        self.assertEqual(result.argument_name, "test_arg")
+        self.assertEqual(result.value, ["ng-a", "ng-b"])
+
+    def test_raises_value_error_if_liststr_output_was_not_resolved(self) -> None:
+        # Arrange
+        outdefs: dict[str, TemplateOutputDefinition] = {
+            "mng_names": ListStrTemplateOutputDefinition(output_name="mng_names", value=None)
+        }
+
+        # Act & Assert
+        with self.assertRaises(ValueError) as context:
+            resolve_output_argdef(outdefs, "test_arg", "mng_names")
+
+        self.assertIn("mng_names", str(context.exception))
 
     def test_raises_not_implemented_error_if_type_does_not_match(self) -> None:
         # Arrange

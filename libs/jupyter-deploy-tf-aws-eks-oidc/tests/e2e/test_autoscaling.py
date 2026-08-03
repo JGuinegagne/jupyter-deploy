@@ -7,7 +7,11 @@ from collections.abc import Callable
 import pytest
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
 from pytest_jupyter_deploy.kubernetes.ballast import ballast_deployment
-from pytest_jupyter_deploy.kubernetes.nodes import get_node_allocatable_cpu_millicores, get_node_names
+from pytest_jupyter_deploy.kubernetes.nodes import (
+    get_node_allocatable_cpu_millicores,
+    get_node_names,
+    get_tainted_node_names,
+)
 from pytest_jupyter_deploy.workspaces.kubectl import (
     kubectl_apply_workspace,
     kubectl_delete_workspace,
@@ -195,12 +199,14 @@ def test_karpenter_workspace_provisioning_and_scale_to_zero(e2e_deployment: EndT
 @pytest.mark.mutating
 @pytest.mark.usefixtures("kubernetes_cluster_login")
 def test_karpenter_routing_nodepool_scales_up_and_down(e2e_deployment: EndToEndDeployment) -> None:
-    """Routing NodePool scales up when pods can't fit, and consolidates after ballast removal.
+    """Routing NodePool scales up when pods can't fit, and starts consolidating after removal.
 
     A ballast Deployment of sleep pods (one per node, each ~60% of a node's allocatable
     CPU) is sized to one more than the current routing node count. The surplus pod goes
-    Pending — Karpenter must provision a new routing node. On ballast deletion, Karpenter's
-    consolidation loop terminates the now-empty node.
+    Pending — Karpenter must provision a new routing node. On ballast deletion, Karpenter
+    must consolidate back to at most start_count routing nodes — asserted by the surplus
+    node being marked for disruption (karpenter.sh/disrupted taint) or terminated, not by
+    waiting for the EC2 instance to fully terminate, which is slow and flaky.
 
     Marked `mutating` — provisions a real EC2 instance; self-reverts via the ballast
     context manager's finally block.
@@ -251,10 +257,38 @@ def test_karpenter_routing_nodepool_scales_up_and_down(e2e_deployment: EndToEndD
                 f"--- Karpenter logs ---\n{karpenter_logs}"
             )
 
-    # After ballast deletion Karpenter consolidation should remove the extra node.
-    # Allow up to 10 minutes: consolidateAfter=120s + node drain + termination.
-    _poll(
-        lambda: len(get_node_names(ROUTING_LABEL_SELECTOR)) <= start_count,
-        timeout_s=600,
-        msg=f"Routing node count did not return to {start_count} after ballast deletion",
-    )
+    # After ballast deletion Karpenter should consolidate back to at most start_count
+    # routing nodes. Assert on Karpenter's disruption DECISION rather than waiting for
+    # the EC2 instance to fully terminate: node-drain + instance-termination latency is
+    # slow and variable (and pod anti-affinity across the routing replicas can defer
+    # full re-packing), which made a raw "node count back to baseline" assertion flaky.
+    #
+    # Karpenter marks a node for disruption with the karpenter.sh/disrupted taint at
+    # decision time, before draining it. So the surplus node counts as gone as soon as
+    # it is tainted: assert that the number of routing nodes NOT marked for disruption
+    # is back to at most start_count. This flips true when Karpenter decides (taint
+    # applied) OR once the node has fully terminated — without waiting on termination.
+    # consolidateAfter=120s gates the decision, so allow 120s + the disruption loop + margin.
+    def non_disrupting_routing_at_baseline() -> bool:
+        all_nodes = set(get_node_names(ROUTING_LABEL_SELECTOR))
+        disrupting = set(get_tainted_node_names(ROUTING_LABEL_SELECTOR, "karpenter.sh/disrupted"))
+        return len(all_nodes - disrupting) <= start_count
+
+    try:
+        _poll(non_disrupting_routing_at_baseline, timeout_s=240, msg="")
+    except TimeoutError:
+        karpenter_logs = _kubectl(
+            "logs",
+            "-n",
+            KARPENTER_NAMESPACE,
+            "-l",
+            "app.kubernetes.io/name=karpenter",
+            "--tail=40",
+            "--prefix",
+        )
+        raise AssertionError(
+            f"Routing nodes did not consolidate back to {start_count} within ~4m after "
+            "ballast deletion: the surplus node was neither marked for disruption "
+            "(karpenter.sh/disrupted taint) nor terminated.\n"
+            f"--- Karpenter logs ---\n{karpenter_logs}"
+        ) from None

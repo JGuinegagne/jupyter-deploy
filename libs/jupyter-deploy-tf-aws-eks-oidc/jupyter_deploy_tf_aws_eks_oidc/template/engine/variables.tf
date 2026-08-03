@@ -195,7 +195,7 @@ variable "karpenter_version" {
 
     Refer to: https://github.com/aws/karpenter-provider-aws/releases
 
-    Recommended: 1.3.3
+    Recommended: 1.13.1
   EOT
   type        = string
 }
@@ -206,7 +206,7 @@ variable "keda_version" {
 
     Refer to: https://github.com/kedacore/charts/releases
 
-    Recommended: 2.16.1
+    Recommended: 2.20.2
   EOT
   type        = string
 }
@@ -220,7 +220,7 @@ variable "prometheus_version" {
 
     Refer to: https://github.com/prometheus-community/helm-charts/releases
 
-    Recommended: 27.0.0
+    Recommended: 29.21.0
   EOT
   type        = string
 }
@@ -556,7 +556,7 @@ variable "cluster_autoscaler_chart_version" {
     the cluster's Kubernetes minor version.
     Refer to: https://github.com/kubernetes/autoscaler/releases
 
-    Recommended: 9.58.0
+    Recommended: 9.59.0
   EOT
   type        = string
 }
