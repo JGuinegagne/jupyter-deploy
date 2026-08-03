@@ -242,8 +242,15 @@ check "platform_node_group_size" {
 # min=2 ensures one node per AZ for HA.
 
 resource "aws_eks_node_group" "platform" {
-  cluster_name    = module.eks_cluster.cluster_name
-  node_group_name = "${local.cluster_name}-platform"
+  cluster_name = module.eks_cluster.cluster_name
+  # Static "platform" (not "${cluster_name}-platform") for a friendly `jd pool list` name.
+  # Node group names are unique per-CLUSTER, not per-account (ARN: .../<cluster>/<name>/<uuid>),
+  # so multiple stacks each having a "platform" node group is safe.
+  # Do NOT add create_before_destroy here: with a static name, a forced replacement (e.g. a
+  # change to platform_instance_types / platform_disk_size_gb / ami_type — all ForceNew) would
+  # try to create a second node group also named "platform" in the same cluster before
+  # destroying the old one → ResourceInUseException. Plain destroy-then-create avoids that.
+  node_group_name = "platform"
   node_role_arn   = module.node_role.role_arn
   subnet_ids      = module.vpc.private_subnet_ids
   ami_type        = local.platform_ami_type

@@ -8,6 +8,13 @@ output "cluster_endpoint" {
   value       = module.eks_cluster.cluster_endpoint
 }
 
+output "platform_mng_names" {
+  description = "Names of the EKS managed node groups."
+  # tolist() coerces the bracket literal from tuple(string) to list(string); a bare
+  # [ ... ] literal is typed as a tuple, which the jd output parser doesn't recognize.
+  value = tolist([aws_eks_node_group.platform.node_group_name])
+}
+
 output "cluster_arn" {
   description = "ARN of the EKS cluster."
   value       = module.eks_cluster.cluster_arn

@@ -4,7 +4,9 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from jupyter_deploy import manifest_validation
 from jupyter_deploy.handlers import base_project_handler
+from jupyter_deploy.manifest import JupyterDeployManifestV1
 
 from jupyter_deploy_tf_aws_eks_oidc.template import TEMPLATE_PATH
 
@@ -85,6 +87,40 @@ class TestManifest(unittest.TestCase):
                 tf_output_names,
                 f"Manifest value '{value['name']}' references output '{source_key}' not found in outputs.tf",
             )
+
+    def test_command_output_references_have_matching_terraform_outputs(self) -> None:
+        """Every `source: output` reference inside a command must resolve to a terraform output.
+
+        Broader than test_output_sourced_values_have_matching_terraform_outputs (which only
+        checks top-level `values`): commands read outputs directly — a command arg, or a flag
+        condition operand like pool.status's `platform_mng_names` — with no `values` entry.
+        """
+        if self.MANIFEST is None:
+            self.fail("MANIFEST is None")
+
+        outputs_tf = (TEMPLATE_PATH / "engine" / "outputs.tf").read_text()
+        tf_output_names = set(re.findall(r'^output "(\w+)"', outputs_tf, re.MULTILINE))
+
+        def _iter_output_refs(node: Any) -> list[str]:
+            """Collect the source-key of every {source: output, ...} mapping, recursively."""
+            refs: list[str] = []
+            if isinstance(node, dict):
+                if node.get("source") == "output" and "source-key" in node:
+                    refs.append(node["source-key"])
+                for value in node.values():
+                    refs.extend(_iter_output_refs(value))
+            elif isinstance(node, list):
+                for item in node:
+                    refs.extend(_iter_output_refs(item))
+            return refs
+
+        for command in self.MANIFEST.get("commands", []):
+            for source_key in _iter_output_refs(command):
+                self.assertIn(
+                    source_key,
+                    tf_output_names,
+                    f"Command '{command['cmd']}' references output '{source_key}' not found in outputs.tf",
+                )
 
     def test_project_store_type_is_defined(self) -> None:
         if self.MANIFEST is None:
@@ -305,6 +341,23 @@ class TestManifest(unittest.TestCase):
             result_names = {r["result-name"] for r in commands_by_name[cmd_name].get("results", [])}
             for result in required_results:
                 self.assertIn(result, result_names, f"Command '{cmd_name}' missing result '{result}'")
+
+    def test_pool_commands_pass_grammar_validation(self) -> None:
+        """pool.* flags/conditions/when composition must be well-formed (CI/test-time gate)."""
+        manifest = JupyterDeployManifestV1.model_validate(self.MANIFEST)
+        manifest_validation.validate_manifest(manifest)  # no raise
+
+    def test_pool_status_rules_cover_all_mng_states(self) -> None:
+        """MNG bare-string .status rules cover all seven boto3 states, mapped to Ready/Creating/Degraded."""
+        if self.MANIFEST is None:
+            self.fail("MANIFEST is None")
+
+        rules = self.MANIFEST.get("pool-status-rules", [])
+        mng_states = {match["equals"] for rule in rules for match in rule["all"] if match["path"] == ".status"}
+        self.assertEqual(
+            mng_states,
+            {"ACTIVE", "CREATING", "UPDATING", "DEGRADED", "DELETING", "CREATE_FAILED", "DELETE_FAILED"},
+        )
 
     def test_host_list_command_supports_query_param(self) -> None:
         """host.list command must wire a 'query' source-key for the --query filter."""
