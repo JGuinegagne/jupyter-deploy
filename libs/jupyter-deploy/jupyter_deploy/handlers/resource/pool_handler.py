@@ -45,9 +45,7 @@ class PoolHandler(BaseProjectHandler):
         command = self.project_manifest.get_command("pool.list")
         runner = self._runner()
         runner.run_command_sequence(command, cli_paramdefs={})
-        raw = runner.get_result_value(command, "pool.list", str)
-        items: list[Any] = json.loads(raw) if isinstance(raw, str) else raw
-        return [item.get("metadata", {}).get("name", "") for item in items if isinstance(item, dict)]
+        return runner.get_result_value(command, "pool.list", list)
 
     def show_pool(self, name: str) -> PoolDetail:
         """Returns detailed info for a named node pool."""
