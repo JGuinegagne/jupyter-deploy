@@ -1,56 +1,32 @@
-"""Platform pod node placement on the components MNG.
+"""Platform pod node placement on the platform MNG.
 
-The eks-oidc template runs two Managed Node Groups distinguished by the node label
-`jupyter-deploy/role` (values `components` | `workspaces`); there are no taints, so
-placement is enforced purely by `nodeSelector: jupyter-deploy/role=components` on the
-pinned platform workloads (helm.tf: `manager.nodeSelector` for the operator; eks_addons.tf
-for the add-on controllers). A platform pod drifting onto a workspaces node is a silent
-regression the deployment succeeding would not catch — it strands control-loop pods on
-nodes meant for user workspaces.
+The eks-oidc template runs a single EKS managed node group labelled
+`jupyter-deploy/role=platform` (plus Karpenter NodePools for routing and workspaces); there
+are no taints on the MNG, so placement is enforced purely by
+`nodeSelector: jupyter-deploy/role=platform` on the pinned platform workloads (helm.tf:
+`manager.nodeSelector` for the operator; eks_addons.tf for the add-on controllers). A
+platform pod drifting onto a routing/workspace Karpenter node is a silent regression the
+deployment succeeding would not catch — it strands control-loop pods on nodes meant for
+routing or user workspaces.
 
 Scope: the operator (controller-manager) and the EKS managed add-on CONTROLLER Deployments
 (coredns, ebs-csi controller, cert-manager + webhook + cainjector, external-dns,
-cluster-autoscaler) — all pinned to the components node group.
+cluster-autoscaler) — all pinned to the platform node group.
 
 NOT in scope:
 - The DaemonSet parts of add-ons (vpc-cni, kube-proxy, the ebs-csi node plugin) run on
   every node by design, so they are excluded from the placement check.
-- Router pod placement (traefik/dex/oauth2-proxy/authmiddleware/web-app): being migrated
-  to a dedicated Karpenter-managed node group, so it is covered there, not here.
+- Router pod placement (traefik/dex/oauth2-proxy/authmiddleware/web-app) is pinned to the
+  routing Karpenter NodePool — covered in test_placement_routing.py, not here.
 
 Marked `full_deployment` — reads a live cluster (no mutation), requires it to exist.
 """
 
-import subprocess
-
 import pytest
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
+from pytest_jupyter_deploy.kubernetes.nodes import assert_pods_on_node_pool
 
-COMPONENTS_ROLE_LABEL = '"jupyter-deploy/role":"components"'
-
-
-def _kubectl(*args: str) -> str:
-    result = subprocess.run(["kubectl", *args], capture_output=True, text=True, check=True)
-    return result.stdout.strip()
-
-
-def _output(e2e_deployment: EndToEndDeployment, name: str) -> str:
-    result = e2e_deployment.cli.run_command(["jupyter-deploy", "show", "--output", name, "--text"])
-    return result.stdout.strip()
-
-
-def _pod_node_names(namespace: str, *selector: str) -> list[str]:
-    return _kubectl("get", "pods", "-n", namespace, *selector, "-o", "jsonpath={.items[*].spec.nodeName}").split()
-
-
-def _assert_nodes_are_components(namespace: str, description: str, node_names: list[str]) -> None:
-    assert node_names, f"no pods found for {description} in namespace '{namespace}'"
-    for node in set(node_names):
-        labels = _kubectl("get", "node", node, "-o", "jsonpath={.metadata.labels}")
-        assert COMPONENTS_ROLE_LABEL in labels, (
-            f"{description} is on node '{node}', which is NOT a components MNG node (labels: {labels[:200]})"
-        )
-
+PLATFORM_ROLE_LABEL = '"jupyter-deploy/role":"platform"'
 
 # (namespace, label selector, description) for the managed add-on CONTROLLER Deployments
 # pinned via nodeSelector in eks_addons.tf. DaemonSets (vpc-cni, kube-proxy, ebs-csi node)
@@ -67,23 +43,23 @@ ADDON_CONTROLLERS = [
 @pytest.mark.full_deployment
 @pytest.mark.usefixtures("kubernetes_cluster_login")
 @pytest.mark.parametrize("namespace,selector,description", ADDON_CONTROLLERS)
-def test_addon_controllers_run_on_components_mng(
+def test_addon_controllers_run_on_platform_mng(
     e2e_deployment: EndToEndDeployment, namespace: str, selector: str, description: str
 ) -> None:
-    """Each managed add-on controller Deployment is pinned to the components MNG."""
+    """Each managed add-on controller Deployment is pinned to the platform MNG."""
     e2e_deployment.ensure_deployed()
 
-    nodes = _pod_node_names(namespace, "-l", selector)
-    _assert_nodes_are_components(namespace, f"{description} controller", nodes)
+    assert_pods_on_node_pool(namespace, selector, PLATFORM_ROLE_LABEL, f"{description} controller")
 
 
 @pytest.mark.full_deployment
 @pytest.mark.usefixtures("kubernetes_cluster_login")
-def test_operator_runs_on_components_mng(e2e_deployment: EndToEndDeployment) -> None:
-    """The workspace operator (controller-manager) is pinned to the components MNG."""
+def test_operator_runs_on_platform_mng(e2e_deployment: EndToEndDeployment) -> None:
+    """The workspace operator (controller-manager) is pinned to the platform MNG."""
     e2e_deployment.ensure_deployed()
 
-    operator_namespace = _output(e2e_deployment, "workspace_operator_namespace")
+    operator_namespace = e2e_deployment.cli.get_str_output("workspace_operator_namespace")
     # The manager pod carries control-plane=controller-manager (see jk8s manager.yaml).
-    nodes = _pod_node_names(operator_namespace, "-l", "control-plane=controller-manager")
-    _assert_nodes_are_components(operator_namespace, "operator (controller-manager)", nodes)
+    assert_pods_on_node_pool(
+        operator_namespace, "control-plane=controller-manager", PLATFORM_ROLE_LABEL, "operator (controller-manager)"
+    )

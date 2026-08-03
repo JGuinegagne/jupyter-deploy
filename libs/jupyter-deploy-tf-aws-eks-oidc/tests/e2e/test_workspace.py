@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
+from pytest_jupyter_deploy.kubernetes.nodes import assert_pods_on_node_pool
 from pytest_jupyter_deploy.oauth2_proxy.dex import DexGitHubOAuth2ProxyApplication
 from pytest_jupyter_deploy.plugin import skip_if_testvars_not_set
 from pytest_jupyter_deploy.workspaces.kubectl import (
@@ -33,6 +34,11 @@ NAMESPACE = "default"
 WORKSPACES_DIR = Path(__file__).parent / "workspaces"
 
 USER_B = "github:e2e-other-user"
+
+# The workspace-cpu Karpenter NodePool stamps its nodes with jupyter-deploy/role=workspaces;
+# the WorkspaceTemplate's defaultNodeSelector pins workspace pods to that role. A workspace
+# pod carries the operator's workspace.jupyter.org/workspace-name=<name> label.
+WORKSPACES_ROLE_LABEL = '"jupyter-deploy/role":"workspaces"'
 
 
 def _get_user_a() -> str:
@@ -76,6 +82,13 @@ def test_user_creates_public_workspace_and_access(
             as_groups=groups,
         )
 
+        # The pod must land on the workspace-cpu Karpenter NodePool (role=workspaces),
+        # isolated from the platform MNG and routing tier. Free to check here — reaching
+        # Running already provisioned the node (see test_placement_*.py for the sibling checks).
+        assert_pods_on_node_pool(
+            NAMESPACE, f"workspace.jupyter.org/workspace-name={name}", WORKSPACES_ROLE_LABEL, f"workspace '{name}' pod"
+        )
+
         # Wait for ingress to propagate, then verify JupyterLab loads
         access_url = kubectl_get_workspace_access_url(name, namespace=NAMESPACE)
         dex_oauth_app.verify_workspace_accessible(access_url)
@@ -104,6 +117,12 @@ def test_user_creates_private_workspace_and_access(
             timeout_s=300,
             as_user=user_a,
             as_groups=groups,
+        )
+
+        # Placement is independent of access type — a private workspace pod must still land
+        # on the workspace-cpu NodePool (role=workspaces), same as the public case above.
+        assert_pods_on_node_pool(
+            NAMESPACE, f"workspace.jupyter.org/workspace-name={name}", WORKSPACES_ROLE_LABEL, f"workspace '{name}' pod"
         )
 
         access_url = kubectl_get_workspace_access_url(name, namespace=NAMESPACE)

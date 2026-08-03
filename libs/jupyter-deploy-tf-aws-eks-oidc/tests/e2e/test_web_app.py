@@ -9,6 +9,7 @@ Auth model:
 """
 
 import pytest
+from pytest_jupyter_deploy.kubernetes.nodes import assert_pods_on_node_pool
 from pytest_jupyter_deploy.plugin import skip_if_testvars_not_set
 from pytest_jupyter_deploy.workspaces.kubectl import (
     ensure_workspace_no_longer_exists,
@@ -17,6 +18,11 @@ from pytest_jupyter_deploy.workspaces.kubectl import (
 from pytest_jupyter_deploy.workspaces.web_app import WebAppNavigator
 
 pytestmark = pytest.mark.usefixtures("kubernetes_cluster_login")
+
+# workspace-cpu Karpenter NodePool nodes carry jupyter-deploy/role=workspaces (see
+# test_placement_platform.py / test_placement_routing.py for the sibling platform/routing checks).
+WORKSPACES_ROLE_LABEL = '"jupyter-deploy/role":"workspaces"'
+WORKSPACE_NAMESPACE = "default"
 
 
 # ── Page load tests ──────────────────────────────────────────────────────────
@@ -69,6 +75,16 @@ def test_create_default_workspace(dex_oauth_web_app: WebAppNavigator) -> None:
         card = dex_oauth_web_app.get_workspace_card(workspace_name)
         assert card.is_visible(timeout=30000), f"Workspace '{workspace_name}' not found in list"
 
+        # A UI-created workspace pod must also land on the workspace-cpu NodePool
+        # (role=workspaces), isolated from the platform MNG and routing tier. Free to check
+        # here — the workspace is already Running (see test_placement_*.py for siblings).
+        assert_pods_on_node_pool(
+            WORKSPACE_NAMESPACE,
+            f"workspace.jupyter.org/workspace-name={workspace_name}",
+            WORKSPACES_ROLE_LABEL,
+            f"UI-created workspace '{workspace_name}' pod",
+        )
+
         # Click Open on the card → new tab → JupyterLab should load
         dex_oauth_web_app.open_workspace_from_card(workspace_name)
         dex_oauth_web_app.verify_jupyterlab_loaded()
@@ -90,6 +106,15 @@ def test_create_private_workspace(dex_oauth_web_app: WebAppNavigator) -> None:
 
         access_type = kubectl_get_workspace_jsonpath(workspace_name, "{.spec.accessType}")
         assert access_type == "OwnerOnly", f"Expected accessType=OwnerOnly, got '{access_type}'"
+
+        # Placement is independent of access type — a private workspace pod must still land
+        # on the workspace-cpu NodePool (role=workspaces).
+        assert_pods_on_node_pool(
+            WORKSPACE_NAMESPACE,
+            f"workspace.jupyter.org/workspace-name={workspace_name}",
+            WORKSPACES_ROLE_LABEL,
+            f"private workspace '{workspace_name}' pod",
+        )
 
         # The owner can open their own private workspace → JupyterLab loads.
         open_button = dex_oauth_web_app.get_open_button()
