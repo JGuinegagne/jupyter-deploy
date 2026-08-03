@@ -238,7 +238,15 @@ The template creates several IAM roles:
 |-------|-----------|---------|
 | traefik-crds | Router namespace | Traefik CRDs (IngressRoute, Middleware, etc.) |
 | jupyter-k8s | Operator namespace | Workspace operator, extension API server, CRDs |
-| jupyter-k8s-aws-oidc | Router namespace | Traefik, Dex, OAuth2 Proxy, Authmiddleware |
+| jupyter-k8s-aws-oidc | Router namespace | Traefik, Dex, OAuth2 Proxy, Authmiddleware, web UI |
+| karpenter | `karpenter` | Karpenter node-autoscaler controller |
+| karpenter-nodepools (local) | `karpenter` | Karpenter NodePool + EC2NodeClass definitions (routing, workspaces) |
+| keda | `keda` | Event-driven autoscaling for the routing tier |
+| cluster-autoscaler | `kube-system` | Autoscaler for the platform managed node group |
+| prometheus | `monitoring` | Metrics server (scaling source for KEDA) |
+| aws-for-fluent-bit | `kube-system` | Pod log shipping to CloudWatch (optional, `enable_component_logging`) |
+| github-rbac (local) | Shared namespace | Namespace-scoped RBAC for the `oauth_allowed_teams` GitHub teams |
+| workspace-defaults (local) | Shared namespace | Default `WorkspaceTemplate` and workspace-ingress NetworkPolicies |
 
 ### RBAC
 
@@ -294,6 +302,7 @@ The template provides two variable presets:
 |---|---|
 | `cluster_name` | Name of the EKS cluster |
 | `cluster_endpoint` | API server endpoint URL for the EKS cluster |
+| `platform_mng_names` | Names of the EKS managed node groups |
 | `cluster_arn` | ARN of the EKS cluster |
 | `cluster_ca_certificate` | Base64-encoded CA certificate for the EKS cluster |
 | `region` | AWS region where the cluster is deployed |
