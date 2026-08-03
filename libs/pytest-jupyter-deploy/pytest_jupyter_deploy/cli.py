@@ -328,6 +328,15 @@ class JDCli:
         self._jupyterlab_url = result.stdout.strip()
         return self._jupyterlab_url
 
+    def get_str_output(self, output_name: str) -> str:
+        """Return a template output value as text via `jd show --output <name> --text`.
+
+        Raises:
+            JDCliError: If the command fails.
+        """
+        result = self.run_command(["jupyter-deploy", "show", "--output", output_name, "--text"])
+        return result.stdout.strip()
+
     def get_allowlisted_users(self) -> list[str]:
         """Return the list of allowlisted users, or empty list if none.
 
