@@ -7,11 +7,14 @@ a 60-minute-timeout one is NOT — so a regression that stops everything (or not
 fails the test.
 
 Feasibility note: the default WorkspaceTemplate floors idle timeout at 15 minutes
-and the operator polls every 5 minutes. The test makes idle shutdown fast via:
-- `workspaces_idle_shutdown_timeout_min = 1` in the test deployment config
-  (tests/e2e/configurations/base.yaml), enabling a 1-minute workspace timeout, and
-- the `fast_idle_operator` fixture, which patches the controller-manager
-  Deployment to poll every 10s and restores it on teardown.
+and the operator polls every 5 minutes. The test makes idle shutdown fast via two
+fixtures that mutate the live cluster for the test and revert on teardown, so the
+test is self-contained against any existing deployment:
+- `relaxed_idle_floor`, which lowers the template's idle-timeout floor to 1 minute
+  (spec.idleShutdownOverrides.minIdleTimeoutInMinutes), enabling a 1-minute
+  workspace timeout, and
+- `fast_idle_operator`, which patches the controller-manager Deployment to poll
+  every 10s.
 so the workspace stops within a couple of minutes.
 """
 
@@ -62,7 +65,7 @@ POLL_INTERVAL_S = 10
 @pytest.mark.mutating
 @skip_if_testvars_not_set(["JD_E2E_USER", "JD_E2E_ORG", "JD_E2E_RBAC_TEAM"])
 def test_idle_shutdown_stops_short_timeout_but_not_long(
-    e2e_deployment: EndToEndDeployment, fast_idle_operator: None
+    e2e_deployment: EndToEndDeployment, relaxed_idle_floor: None, fast_idle_operator: None
 ) -> None:
     """Idle detection stops a short-timeout workspace but spares a long-timeout one.
 

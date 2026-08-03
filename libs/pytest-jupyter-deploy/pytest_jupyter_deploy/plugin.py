@@ -388,7 +388,7 @@ def kubernetes_cluster_login(e2e_deployment: EndToEndDeployment) -> None:
     e2e_deployment.cli.run_command(["jupyter-deploy", "cluster", "login"])
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="module")
 def fast_idle_operator(kubernetes_cluster_login: None) -> Generator[None, None, None]:
     """Speed up the jupyter-k8s operator's idle-check interval for a test.
 

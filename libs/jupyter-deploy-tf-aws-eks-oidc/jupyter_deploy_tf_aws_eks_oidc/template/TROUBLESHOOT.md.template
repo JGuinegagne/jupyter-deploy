@@ -146,6 +146,30 @@ Workspace-level access is granted by the `github-rbac` chart to the GitHub teams
 user gets `Forbidden` creating a workspace, confirm their team is in `oauth_allowed_teams`
 (in `org:team` format) and that the target namespace is in `workspace_rbac_namespaces`.
 
+## Karpenter fails to provision nodes after a version bump
+
+If you raise `karpenter_version` on an **existing** deployment and `jd up` then fails to
+scale (surplus pods stay `Pending`, no new nodes appear), the cause is usually a stale
+Karpenter CRD. Helm installs a chart's bundled `crds/` on first install but **never
+upgrades them on subsequent `helm upgrade`s** — so an in-place bump upgrades the
+Karpenter controller while leaving the older `NodePool` / `NodeClaim` / `EC2NodeClass`
+CRDs in place. The newer controller then emits fields the old schema rejects.
+
+The signature is in the Karpenter controller logs (after `jd cluster login`):
+
+```bash
+kubectl logs -n karpenter -l app.kubernetes.io/name=karpenter --tail=100
+```
+
+Look for repeated `Reconciler error ... is invalid: spec.requirements[N].operator:
+Unsupported value` (an operator the new CRD dropped, e.g. `Gte`) or
+`unknown field "status.nodes"` — both mean controller-newer-than-CRD.
+
+A **fresh deploy is not affected** (it installs matching CRDs from scratch). To fix an
+existing cluster, apply the CRDs that match the installed controller version, then
+restart the controller so it reloads the schema.
+
+
 ## A workspace does not start
 
 ```bash

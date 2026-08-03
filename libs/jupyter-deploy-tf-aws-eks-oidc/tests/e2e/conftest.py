@@ -13,9 +13,14 @@ from pytest_jupyter_deploy.workspaces.kubectl import (
     kubectl_apply_workspace,
     kubectl_delete_workspace,
 )
+from pytest_jupyter_deploy.workspaces.template import get_min_idle_timeout, set_min_idle_timeout
 
 WORKSPACE_NAMESPACE = "default"
 WORKSPACES_DIR = Path(__file__).parent / "workspaces"
+
+# Default WorkspaceTemplate this template ships (the fallback for workspaces that
+# do not name a template). Its idle-timeout floor gates test_workspace_idleshutdown.
+DEFAULT_WORKSPACE_TEMPLATE = "jupyterlab"
 
 # Synthetic user for impersonated workspaces (uses github: prefix to match Dex OIDC claims)
 IMPERSONATED_USER = "github:e2e-other-user"
@@ -135,3 +140,23 @@ def shared_namespace(e2e_deployment: EndToEndDeployment) -> str:
         ["jupyter-deploy", "show", "--output", "workspace_shared_namespace", "--text"]
     )
     return result.stdout.strip()
+
+
+@pytest.fixture(scope="module")
+def relaxed_idle_floor(kubernetes_cluster_login: None, shared_namespace: str) -> Generator[None, None, None]:
+    """Lower the default template's idle-timeout floor to 1 minute for a test.
+
+    The floor (spec.idleShutdownOverrides.minIdleTimeoutInMinutes) is an
+    IaC-managed value that the operator's validating webhook enforces: a Workspace
+    with a sub-floor idle timeout is rejected at admission. Idle-shutdown tests need
+    a 1-minute timeout, so this patches the live template down to 1 and restores the
+    original floor on teardown — making the test self-contained rather than
+    dependent on the deployment having been created with a low floor. Pairs with the
+    fast_idle_operator fixture, which speeds up the operator poll interval the same way.
+    """
+    original = get_min_idle_timeout(DEFAULT_WORKSPACE_TEMPLATE, shared_namespace)
+    set_min_idle_timeout(DEFAULT_WORKSPACE_TEMPLATE, shared_namespace, 1)
+    try:
+        yield
+    finally:
+        set_min_idle_timeout(DEFAULT_WORKSPACE_TEMPLATE, shared_namespace, original)
