@@ -27,6 +27,14 @@ def _validate_operand(operand: JupyterDeployConditionOperandV1, ctx: str, violat
         violations.append(f"{ctx}: unknown operand source '{operand.source}'")
         return
 
+    # Flags are computed once, before the instruction sequence runs (see
+    # manifest_command_runner.run_command_sequence), so no instruction result exists yet.
+    # A `source: result` flag operand would always resolve against an empty result set and
+    # fail. Reject it statically until a use case actually needs sequence-dependent flags.
+    if source_type == InstructionArgumentSource.INSTRUCTION_RESULT:
+        violations.append(f"{ctx}: flag conditions must not depend on instruction results (source 'result')")
+        return
+
     if source_type == InstructionArgumentSource.LITERAL:
         if operand.value is None:
             violations.append(f"{ctx}: source 'literal' requires 'value'")

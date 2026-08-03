@@ -153,6 +153,29 @@ class TestRejections(unittest.TestCase):
             "must be list-typed",
         )
 
+    def test_flag_condition_referencing_instruction_result(self) -> None:
+        # Flags are computed before the sequence runs, so a `source: result` operand would
+        # always resolve against an empty result set. Reject it statically.
+        self._assert_violation(
+            {
+                "cmd": "c",
+                "flags": [
+                    {
+                        "name": "f",
+                        "conditions": [
+                            {
+                                "left": {"source": "result", "source-key": "[0].Name"},
+                                "operator": "in",
+                                "right": {"source": "output", "source-key": "mng"},
+                            }
+                        ],
+                    }
+                ],
+                "sequence": [],
+            },
+            "must not depend on instruction results",
+        )
+
     def test_validate_manifest_aggregates_across_commands(self) -> None:
         manifest = JupyterDeployManifestV1.model_validate(
             {
