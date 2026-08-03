@@ -9,6 +9,7 @@ from jupyter_deploy.engine.engine_outputs import EngineOutputsHandler
 from jupyter_deploy.engine.outdefs import StrTemplateOutputDefinition
 from jupyter_deploy.engine.supervised_execution import NullDisplay
 from jupyter_deploy.provider import instruction_runner_factory
+from jupyter_deploy.provider.core.core_runner import CoreInstructionRunner
 from jupyter_deploy.provider.enum import ApiGroup
 from jupyter_deploy.provider.instruction_runner import InstructionRunner
 
@@ -100,6 +101,26 @@ class TestInstructionRunnerFactory(unittest.TestCase):
 
             # Verify that the provider runner map is empty
             self.assertEqual({}, InstructionRunnerFactory._api_group_runner_map)
+
+    def test_routes_core_to_core_instruction_runner_and_caches(self) -> None:
+        InstructionRunnerFactory = instruction_runner_factory.InstructionRunnerFactory
+        InstructionRunnerFactory._api_group_runner_map = {}
+
+        runner = InstructionRunnerFactory.get_provider_instruction_runner(
+            "core.coalesce-str", self.mock_outputs_handler, NullDisplay()
+        )
+
+        self.assertIsInstance(runner, CoreInstructionRunner)
+        # cached under ApiGroup.CORE, and no credential/output resolution was needed
+        self.assertIs(InstructionRunnerFactory._api_group_runner_map[ApiGroup.CORE], runner)
+        self.mock_get_declared_output_def.assert_not_called()
+
+        # second call returns the cached instance
+        runner2 = InstructionRunnerFactory.get_provider_instruction_runner(
+            "core.concat-lists-of-str", self.mock_outputs_handler, NullDisplay()
+        )
+        self.assertIs(runner, runner2)
+        InstructionRunnerFactory._api_group_runner_map = {}
 
     def test_imports_aws_provider_at_runtime_only_and_return_it(self) -> None:
         # Execute

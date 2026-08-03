@@ -1,3 +1,5 @@
+import datetime
+import json
 import subprocess
 import unittest
 from unittest.mock import Mock, patch
@@ -65,10 +67,12 @@ class TestAwsEksRunner(unittest.TestCase):
 
         self.assertEqual(result["CertificateAuthority"].value, "")
 
-    @patch("jupyter_deploy.provider.aws.aws_eks_runner.eks_cluster")
+    @patch("jupyter_deploy.provider.aws.aws_eks_runner.eks_nodegroup")
     @patch("jupyter_deploy.provider.aws.aws_eks_runner.boto3")
-    def test_list_nodegroups_returns_comma_separated(self, mock_boto3: Mock, mock_eks_cluster: Mock) -> None:
-        mock_eks_cluster.list_nodegroups.return_value = (["ng-1", "ng-2"], None)
+    def test_list_nodegroups_returns_names_and_comma_separated(
+        self, mock_boto3: Mock, mock_eks_nodegroup: Mock
+    ) -> None:
+        mock_eks_nodegroup.list_nodegroups.return_value = (["ng-1", "ng-2"], None)
 
         runner = AwsEksRunner(NullDisplay(), region_name="us-west-2")
         result = runner.execute_instruction(
@@ -78,13 +82,14 @@ class TestAwsEksRunner(unittest.TestCase):
             },
         )
 
+        self.assertEqual(result["Names"].value, ["ng-1", "ng-2"])
         self.assertEqual(result["Nodegroups"].value, "ng-1,ng-2")
         self.assertEqual(result["NextToken"].value, "")
 
-    @patch("jupyter_deploy.provider.aws.aws_eks_runner.eks_cluster")
+    @patch("jupyter_deploy.provider.aws.aws_eks_runner.eks_nodegroup")
     @patch("jupyter_deploy.provider.aws.aws_eks_runner.boto3")
-    def test_list_nodegroups_returns_next_token(self, mock_boto3: Mock, mock_eks_cluster: Mock) -> None:
-        mock_eks_cluster.list_nodegroups.return_value = (["ng-1"], "token-abc")
+    def test_list_nodegroups_returns_next_token(self, mock_boto3: Mock, mock_eks_nodegroup: Mock) -> None:
+        mock_eks_nodegroup.list_nodegroups.return_value = (["ng-1"], "token-abc")
 
         runner = AwsEksRunner(NullDisplay(), region_name="us-west-2")
         result = runner.execute_instruction(
@@ -94,6 +99,7 @@ class TestAwsEksRunner(unittest.TestCase):
             },
         )
 
+        self.assertEqual(result["Names"].value, ["ng-1"])
         self.assertEqual(result["Nodegroups"].value, "ng-1")
         self.assertEqual(result["NextToken"].value, "token-abc")
 
@@ -120,6 +126,32 @@ class TestAwsEksRunner(unittest.TestCase):
         self.assertEqual(result["NodegroupName"].value, "ng-1")
         self.assertEqual(result["Status"].value, "ACTIVE")
         mock_client.describe_nodegroup.assert_called_once_with(clusterName="my-cluster", nodegroupName="ng-1")
+
+    @patch("jupyter_deploy.provider.aws.aws_eks_runner.boto3")
+    def test_describe_nodegroup_emits_datetime_safe_resource(self, mock_boto3: Mock) -> None:
+        mock_client: Mock = Mock()
+        mock_boto3.client.return_value = mock_client
+        mock_client.describe_nodegroup.return_value = {
+            "nodegroup": {
+                "nodegroupName": "ng-1",
+                "status": "ACTIVE",
+                "createdAt": datetime.datetime(2026, 1, 1, 12, 0, 0),
+            }
+        }
+
+        runner = AwsEksRunner(NullDisplay(), region_name="us-west-2")
+        result = runner.execute_instruction(
+            instruction_name="describe-nodegroup",
+            resolved_arguments={
+                "cluster_name": StrResolvedInstructionArgument(argument_name="cluster_name", value="my-cluster"),
+                "nodegroup_name": StrResolvedInstructionArgument(argument_name="nodegroup_name", value="ng-1"),
+            },
+        )
+
+        parsed = json.loads(result["Resource"].value)
+        self.assertEqual(parsed["nodegroupName"], "ng-1")
+        self.assertEqual(parsed["status"], "ACTIVE")
+        self.assertIsInstance(parsed["createdAt"], str)
 
     @patch("jupyter_deploy.provider.aws.aws_eks_runner.run_cmd_and_capture_output")
     @patch("jupyter_deploy.provider.aws.aws_eks_runner.boto3")

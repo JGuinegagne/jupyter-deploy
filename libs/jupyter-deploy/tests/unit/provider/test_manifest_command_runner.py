@@ -212,8 +212,9 @@ class TestManifestCommandRunner(unittest.TestCase):
         self.assertTrue(success)
 
         # Assert
-        output_handler_mock.get_full_project_outputs.assert_called()
-        self.assertEqual(output_handler_mock.get_full_project_outputs.call_count, 2)
+        # Fetches project outputs once per command (cached), not once per instruction:
+        # flag computation and every step share the same resolved outputs dict.
+        output_handler_mock.get_full_project_outputs.assert_called_once()
 
         # Check that the resolved arguments were passed correctly to the execute_instruction method
         calls = mock_runner.execute_instruction.call_args_list

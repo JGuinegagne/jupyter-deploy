@@ -3,7 +3,12 @@ from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
-from jupyter_deploy.engine.outdefs import StrTemplateOutputDefinition, TemplateOutputDefinition
+from jupyter_deploy.engine.outdefs import (
+    ListStrTemplateOutputDefinition,
+    StrTemplateOutputDefinition,
+    TemplateOutputDefinition,
+)
+from jupyter_deploy.exceptions import InstructionResultNotFoundError
 from jupyter_deploy.provider.resolved_clidefs import (
     IntResolvedCliParameter,
     ListStrResolvedCliParameter,
@@ -72,6 +77,11 @@ def resolve_output_argdef(
         if val is None:
             raise ValueError(f"Output name is not resolved: {source_key}")
         return StrResolvedInstructionArgument(argument_name=arg_name, value=val)
+    elif isinstance(outdef, ListStrTemplateOutputDefinition):
+        list_val = outdef.value
+        if list_val is None:
+            raise ValueError(f"Output name is not resolved: {source_key}")
+        return ListStrResolvedInstructionArgument(argument_name=arg_name, value=list_val)
 
     raise NotImplementedError(f"No resolved argument class for type: {type(outdef).__name__}")
 
@@ -101,12 +111,12 @@ def resolve_result_argdef(
     """Instantiates the resolved argdef of the corresponding type.
 
     Raises:
-        KeyError if the argument cannot be matched by source_key
+        InstructionResultNotFoundError if the argument cannot be matched by source_key
         NotImplementedError if there is no matching argtype class
     """
 
     if source_key not in resultdefs:
-        raise KeyError(f"Output name '{source_key}' not found in previous results: {list(resultdefs.keys())}")
+        raise InstructionResultNotFoundError(source_key, available_keys=list(resultdefs.keys()))
     resultdef = resultdefs[source_key]
     if isinstance(resultdef, StrResolvedInstructionResult):
         value = resultdef.value

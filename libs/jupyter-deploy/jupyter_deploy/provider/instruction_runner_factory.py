@@ -27,6 +27,15 @@ class InstructionRunnerFactory:
         if runner := InstructionRunnerFactory._api_group_runner_map.get(api_group):
             return runner
 
+        if api_group == ApiGroup.CORE:
+            # Built-in combinators (concat-lists-of-str/coalesce-str). No credentials or SDK;
+            # kept lazy for symmetry with the other branches.
+            from jupyter_deploy.provider.core import core_runner
+
+            runner = core_runner.CoreInstructionRunner(display_manager=display_manager)
+            InstructionRunnerFactory._api_group_runner_map[api_group] = runner
+            return runner
+
         if api_group == ApiGroup.AWS:
             aws_region_def = outputs_handler.get_declared_output_def("aws_region", StrTemplateOutputDefinition)
 

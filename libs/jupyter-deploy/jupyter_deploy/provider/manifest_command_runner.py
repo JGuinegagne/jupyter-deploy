@@ -5,8 +5,14 @@ from jupyter_deploy.engine.engine_outputs import EngineOutputsHandler
 from jupyter_deploy.engine.engine_variables import EngineVariablesHandler
 from jupyter_deploy.engine.supervised_execution import DisplayManager
 from jupyter_deploy.enum import InstructionArgumentSource, ResultSource, UpdateSource
-from jupyter_deploy.exceptions import InvalidInstructionArgumentError, InvalidInstructionResultError
+from jupyter_deploy.exceptions import (
+    InstructionResultNotFoundError,
+    InvalidInstructionArgumentError,
+    InvalidInstructionResultError,
+)
 from jupyter_deploy.manifest import JupyterDeployCommandV1
+from jupyter_deploy.provider import condition_utils
+from jupyter_deploy.provider.enum import ApiGroup
 from jupyter_deploy.provider.instruction_runner_factory import InstructionRunnerFactory
 from jupyter_deploy.provider.resolved_argdefs import (
     ResolvedInstructionArgument,
@@ -50,14 +56,30 @@ class ManifestCommandRunner:
 
         # run all the instructions and collect results
         resolved_resultdefs: dict[str, ResolvedInstructionResult] = {}
+        output_defs = self._output_handler.get_full_project_outputs()  # cached - okay to reuse
 
-        # run instructions
+        # 1. Compute command-local flags up front (kept local, NOT instance state, so a
+        #    reused runner cannot leak stale flags across commands). Each flag is the AND of
+        #    its conditions. A missing output operand raises OutputNotFoundError here.
+        flags: dict[str, bool] = {}
+        for flag in cmd_def.flags or []:
+            flags[flag.name] = condition_utils.evaluate_flag(
+                flag, output_defs=output_defs, cli_paramdefs=cli_paramdefs, resolved_resultdefs=resolved_resultdefs
+            )
+
+        # 2. Run instructions, honoring `when:` skips. A skipped step registers no [idx].*
+        #    results (index slot stays empty) but idx stays monotonic so later refs are stable.
         for instruction_idx, instruction in enumerate(cmd_def.sequence):
+            if instruction.when is not None and not condition_utils.evaluate_when(instruction.when, flags):
+                continue
+
             api_name = instruction.api_name
+            # Prefix check only — do NOT go through ApiGroup.from_api_name here, which raises
+            # on api-names whose group isn't registered (the factory does that resolution).
+            is_core = api_name.split(".", 1)[0].lower() == ApiGroup.CORE.value
             runner = InstructionRunnerFactory.get_provider_instruction_runner(
                 api_name, self._output_handler, self._display_manager
             )
-            output_defs = self._output_handler.get_full_project_outputs()  # cached - okay to call in loop
             resolved_argdefs: dict[str, ResolvedInstructionArgument] = {}
 
             for arg_def in instruction.arguments:
@@ -70,12 +92,20 @@ class ManifestCommandRunner:
                         outdefs=output_defs, arg_name=arg_name, source_key=source_key
                     )
                 elif arg_source_type == InstructionArgumentSource.INSTRUCTION_RESULT:
-                    resolved_argdefs[arg_name] = resolve_result_argdef(
-                        resultdefs=resolved_resultdefs,
-                        arg_name=arg_name,
-                        source_key=source_key,
-                        extract=arg_def.extract,
-                    )
+                    try:
+                        resolved_argdefs[arg_name] = resolve_result_argdef(
+                            resultdefs=resolved_resultdefs,
+                            arg_name=arg_name,
+                            source_key=source_key,
+                            extract=arg_def.extract,
+                        )
+                    except InstructionResultNotFoundError:
+                        # Combinator-only tolerance: a core.* arg referencing a skipped
+                        # step's result resolves to "absent" — omit it so the CoreRunner
+                        # coerces it to empty. A missing result ref remains a hard error for
+                        # every other (non-core) instruction, preserving typo detection.
+                        if not is_core:
+                            raise
                 elif arg_source_type == InstructionArgumentSource.CLI_ARGUMENT:
                     resolved_argdefs[arg_name] = resolve_cliparam_argdef(
                         paramdefs=cli_paramdefs, arg_name=arg_name, source_key=source_key
