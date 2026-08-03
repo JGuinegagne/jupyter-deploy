@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from pydantic import ValidationError
 
 from jupyter_deploy.engine.enum import EngineType
 from jupyter_deploy.enum import StoreType
@@ -16,7 +17,9 @@ from jupyter_deploy.exceptions import (
 from jupyter_deploy.manifest import (
     InvalidServiceError,
     JupyterDeployComponentDefinitionV1,
+    JupyterDeployFlagV1,
     JupyterDeployImageDefinitionV1,
+    JupyterDeployInstructionV1,
     JupyterDeployManifestV1,
     JupyterDeployProjectStoreV1,
 )
@@ -427,3 +430,39 @@ class TestJupyterDeployManifestV1Images(unittest.TestCase):
 
         with self.assertRaises(CommandNotImplementedError):
             manifest.get_image("jupyterlab")
+
+
+class TestCommandFlagsAndWhenSchema(unittest.TestCase):
+    """Pydantic-level (trivially-local) validation of flags/when — the first line of defense."""
+
+    def test_when_accepts_plain_and_negated_flag(self) -> None:
+        self.assertEqual(
+            JupyterDeployInstructionV1.model_validate({"api-name": "a.b.c", "when": "is-mng"}).when, "is-mng"
+        )
+        self.assertEqual(
+            JupyterDeployInstructionV1.model_validate({"api-name": "a.b.c", "when": "!is-mng"}).when, "!is-mng"
+        )
+
+    def test_when_rejects_empty_and_multiple_bangs(self) -> None:
+        for bad in ("", "!", "!!is-mng", "is!mng"):
+            with self.assertRaises(ValidationError):
+                JupyterDeployInstructionV1.model_validate({"api-name": "a.b.c", "when": bad})
+
+    def test_arguments_default_to_empty_list(self) -> None:
+        instruction = JupyterDeployInstructionV1.model_validate({"api-name": "core.coalesce-str"})
+        self.assertEqual(instruction.arguments, [])
+
+    def test_flag_name_rejects_bang(self) -> None:
+        with self.assertRaises(ValidationError):
+            JupyterDeployFlagV1.model_validate(
+                {
+                    "name": "is!mng",
+                    "conditions": [
+                        {
+                            "left": {"source": "cli", "source-key": "name"},
+                            "operator": "in",
+                            "right": {"source": "output", "source-key": "mng"},
+                        }
+                    ],
+                }
+            )

@@ -55,6 +55,19 @@ class ManifestNotADictError(InvalidManifestError, ValueError):
     pass
 
 
+class InvalidCommandGrammarError(InvalidManifestError, ValueError):
+    """Raised when a command's flags/conditions/when composition is malformed.
+
+    Attributes:
+        violations: The list of grammar violations found.
+    """
+
+    def __init__(self, violations: list[str]) -> None:
+        self.violations = violations
+        joined = "; ".join(violations)
+        super().__init__(f"Invalid command grammar: {joined}")
+
+
 class InvalidVariablesDotYamlError(JupyterDeployError, ValueError):
     """Raised when variables.yaml file is invalid or malformed."""
 
@@ -88,6 +101,24 @@ class OutputNotFoundError(JupyterDeployError, KeyError):
     def __init__(self, output_name: str) -> None:
         self.output_name = output_name
         super().__init__(f"Output '{output_name}' not found.")
+
+
+class InstructionResultNotFoundError(JupyterDeployError, KeyError):
+    """Raised when an instruction-result source-key is not found in prior results.
+
+    Subclasses KeyError for backward-compat with callers that catch KeyError. The runner
+    catches this specific type to allow combinator (core.*) instructions to tolerate a
+    reference to a `when:`-skipped step's result (which registers no result); every other
+    instruction lets it propagate as a hard error, preserving manifest typo detection.
+
+    Attributes:
+        source_key: The result source-key that was not found
+    """
+
+    def __init__(self, source_key: str, available_keys: list[str] | None = None) -> None:
+        self.source_key = source_key
+        available = f" Available: {available_keys}" if available_keys is not None else ""
+        super().__init__(f"Instruction result '{source_key}' not found in previous results.{available}")
 
 
 class SecretNotFoundError(JupyterDeployError, RuntimeError):
