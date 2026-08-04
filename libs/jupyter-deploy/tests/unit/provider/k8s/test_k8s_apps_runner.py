@@ -80,7 +80,8 @@ class TestK8sAppsRunnerGetDaemonsetStatus(unittest.TestCase):
         self.assertIn("SubComponent", result)
 
     @patch("jupyter_deploy.provider.k8s.k8s_apps_runner.k8s_apps.get_daemonset_status")
-    def test_returns_updating_status(self, mock_get_status: Mock) -> None:
+    def test_returns_updating_status_rolling_update(self, mock_get_status: Mock) -> None:
+        # Rolling update in flight: not all pods carry the new spec yet.
         mock_get_status.return_value = DaemonSetStatus(
             name="aws-node", ready=False, ready_pods=2, desired_pods=3, updated_pods=2
         )
@@ -92,9 +93,25 @@ class TestK8sAppsRunnerGetDaemonsetStatus(unittest.TestCase):
         self.assertEqual(result["Details"].value, "2/3 nodes")
 
     @patch("jupyter_deploy.provider.k8s.k8s_apps_runner.k8s_apps.get_daemonset_status")
-    def test_returns_degraded_status(self, mock_get_status: Mock) -> None:
+    def test_returns_updating_status_scale_up(self, mock_get_status: Mock) -> None:
+        # Node just scaled up: the new node's pod is scheduled with the current spec
+        # (updated == desired) but still starting (ready < desired). This must read as
+        # Updating, not Degraded — the DaemonSet is converging on a fresh node.
         mock_get_status.return_value = DaemonSetStatus(
             name="aws-node", ready=False, ready_pods=2, desired_pods=3, updated_pods=3
+        )
+        runner = K8sAppsRunner(display_manager=Mock(), api_client=Mock())
+
+        result = runner.execute_instruction("get-daemonset-status", _build_args(name="aws-node"))
+
+        self.assertEqual(result["Status"].value, "Updating")
+
+    @patch("jupyter_deploy.provider.k8s.k8s_apps_runner.k8s_apps.get_daemonset_status")
+    def test_returns_degraded_status(self, mock_get_status: Mock) -> None:
+        # All scheduled pods are ready in count but the DaemonSet is not ready overall
+        # (e.g. availability lagging / pods flapping) — a genuinely degraded state.
+        mock_get_status.return_value = DaemonSetStatus(
+            name="aws-node", ready=False, ready_pods=3, desired_pods=3, updated_pods=3
         )
         runner = K8sAppsRunner(display_manager=Mock(), api_client=Mock())
 

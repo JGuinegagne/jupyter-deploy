@@ -10,11 +10,6 @@ from pytest_jupyter_deploy.deployment import EndToEndDeployment
 # A CR sub-component renders as a non-empty "label: value" pair (e.g. "access-resources: 2").
 _LABELED_VALUE_RE = re.compile(r"^\S.*: \S.*$")
 
-EXPECTED_CRONJOBS = [
-    "jwt-rotator",
-    "web-app-session-rotator",
-]
-
 
 @pytest.mark.usefixtures("kubernetes_cluster_login")
 def test_health_all_layers(e2e_deployment: EndToEndDeployment) -> None:
@@ -100,6 +95,7 @@ def test_health_components_layer(e2e_deployment: EndToEndDeployment) -> None:
     cr_names = {n for n, c in manifest_components.items() if c.type == "CustomResourceWithoutStatus"}
     helm_names = {n for n, c in manifest_components.items() if c.type == "HelmRelease"}
     daemonset_names = {n for n, c in manifest_components.items() if c.type == "DaemonSet"}
+    cronjob_names = {n for n, c in manifest_components.items() if c.type == "CronJob"}
     # The eks-oidc template declares the 3 Workspace CRDs + the access-strategy and template CRs.
     assert len(crd_names) >= 3, f"Expected >= 3 CustomResourceDefinition components, got {sorted(crd_names)}"
     assert len(cr_names) >= 2, f"Expected >= 2 CustomResourceWithoutStatus components, got {sorted(cr_names)}"
@@ -117,7 +113,7 @@ def test_health_components_layer(e2e_deployment: EndToEndDeployment) -> None:
         for entry in entries:
             assert entry["layer"] == "components"
             name = entry["name"]
-            if name in EXPECTED_CRONJOBS:
+            if name in cronjob_names:
                 assert entry["status_category"] in ("healthy", "in-progress"), (
                     f"CronJob '{name}' unexpected status_category: {entry['status_category']}"
                 )

@@ -96,10 +96,17 @@ class K8sAppsRunner(InstructionRunner):
         if status.ready:
             status_display = "Ready"
             status_category = StatusCategory.HEALTHY
-        elif status.updated_pods < status.desired_pods:
+        elif status.ready_pods < status.desired_pods:
+            # Some scheduled pods are not ready yet: either a node just scaled up
+            # (Karpenter) and its pod is still starting, or a rolling update is in
+            # flight. Both are the DaemonSet converging, not a failure. The earlier
+            # `updated_pods < desired_pods` check only caught rolling updates and
+            # mislabeled fresh-node scale-ups as Degraded (source of E2E health flakes).
             status_display = "Updating"
             status_category = StatusCategory.IN_PROGRESS
         else:
+            # ready_pods == desired_pods but not all available (e.g. minReadySeconds
+            # not yet elapsed, or pods flapping) — surface a genuinely stuck DaemonSet.
             status_display = "Degraded"
             status_category = StatusCategory.DEGRADED
         details = f"{status.ready_pods}/{status.desired_pods} nodes"
