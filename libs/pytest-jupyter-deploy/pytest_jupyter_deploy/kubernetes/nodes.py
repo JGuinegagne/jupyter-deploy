@@ -5,7 +5,6 @@ care about (e.g. jupyter-deploy/role=platform, inference/role=system), so these 
 for any template's node grouping.
 """
 
-import json
 import subprocess
 
 from pytest_jupyter_deploy.kubernetes.kubectl import run_kubectl
@@ -21,21 +20,6 @@ def get_node_names(label_selector: str) -> list[str]:
     )
     out = result.stdout.strip()
     return out.split() if out else []
-
-
-def get_tainted_node_names(label_selector: str, taint_key: str) -> list[str]:
-    """Names of nodes matching label_selector that carry a taint with the given key.
-
-    Reads taints as JSON and filters in Python — kubectl jsonpath cannot express a
-    filter over an array field (`[?(@.spec.taints[*].key==...)]` is unsupported).
-    """
-    result = run_kubectl("get", "nodes", "-l", label_selector, "-o", "json", check=True)
-    items = json.loads(result.stdout).get("items", [])
-    return [
-        item["metadata"]["name"]
-        for item in items
-        if any(taint.get("key") == taint_key for taint in item.get("spec", {}).get("taints", []))
-    ]
 
 
 def get_pod_node_names(namespace: str, label_selector: str) -> list[str]:
