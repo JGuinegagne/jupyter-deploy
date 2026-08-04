@@ -14,10 +14,6 @@ from pytest_jupyter_deploy.plugin import skip_if_testvars_not_set
 
 ORDER_DEPLOYMENT = 1
 
-EXPECTED_CRONJOBS = [
-    "jwt-rotator",
-]
-
 
 @pytest.mark.order(ORDER_DEPLOYMENT)
 @pytest.mark.full_deployment
@@ -30,6 +26,7 @@ def test_cluster_active_after_deployment(e2e_deployment: EndToEndDeployment) -> 
 
 @pytest.mark.order(ORDER_DEPLOYMENT + 2)
 @pytest.mark.full_deployment
+@pytest.mark.usefixtures("kubernetes_cluster_login")
 def test_health_all_pass_after_deployment(e2e_deployment: EndToEndDeployment) -> None:
     """All health layers pass after a fresh deploy."""
     e2e_deployment.ensure_deployed()
@@ -57,8 +54,20 @@ def test_health_all_pass_after_deployment(e2e_deployment: EndToEndDeployment) ->
     for name in manifest_components:
         assert name in component_names, f"Expected component '{name}' in health output"
 
+    # Skip DaemonSet status here (aws-node, kube-proxy, fluent-bit): they can sit in a
+    # transient 'in-progress' state while Karpenter scales a node and its pod starts on the
+    # newly-joined node, which a single-shot assertion can't distinguish from a stuck pod.
+    # This is a smoke gate, not the exhaustive check — DaemonSet health is fully validated
+    # by test_health.py::test_health_components_layer, which retries until they converge to
+    # healthy (same workflow, same cluster). CronJobs may legitimately report 'in-progress'
+    # (not yet fired) rather than 'healthy'. Both sets are derived from the manifest types.
+    daemonset_names = {n for n, c in manifest_components.items() if c.type == "DaemonSet"}
+    cronjob_names = {n for n, c in manifest_components.items() if c.type == "CronJob"}
+
     for entry in layers:
-        if entry["name"] in EXPECTED_CRONJOBS:
+        if entry["name"] in daemonset_names:
+            continue
+        if entry["name"] in cronjob_names:
             assert entry["status_category"] in ("healthy", "in-progress"), (
                 f"CronJob '{entry['name']}' unexpected status: "
                 f"status_category={entry['status_category']}, detail={entry['detail']}"
