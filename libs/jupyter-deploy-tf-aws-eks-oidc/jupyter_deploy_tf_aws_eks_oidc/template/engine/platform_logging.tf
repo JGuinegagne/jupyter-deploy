@@ -30,7 +30,15 @@ resource "kubernetes_service_account_v1" "fluent_bit" {
     }
   }
 
-  depends_on = [null_resource.cluster_addons, aws_eks_node_group.platform]
+  # Access-policy associations must outlive this SA — without them the K8s provider
+  # loses authorization and destroy fails with "Unauthorized" (mirrors the guard on
+  # kubernetes_namespace_v1.shared in helm.tf).
+  depends_on = [
+    null_resource.cluster_addons,
+    aws_eks_node_group.platform,
+    aws_eks_access_policy_association.admin_role,
+    aws_eks_access_policy_association.admin_user,
+  ]
 }
 
 # Pod Identity: bind the fluent-bit SA to the CloudWatch-logs role.

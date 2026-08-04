@@ -171,11 +171,15 @@ resource "helm_release" "cluster_autoscaler" {
     },
   ]
 
+  # Access-policy associations must outlive this release — without them the Helm/K8s
+  # provider loses authorization and destroy fails with "Unauthorized".
   depends_on = [
     null_resource.cluster_addons,
     aws_eks_node_group.platform,
     aws_eks_pod_identity_association.cluster_autoscaler,
     aws_autoscaling_group_tag.ca_enabled,
     aws_autoscaling_group_tag.ca_owned,
+    aws_eks_access_policy_association.admin_role,
+    aws_eks_access_policy_association.admin_user,
   ]
 }
