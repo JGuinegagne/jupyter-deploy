@@ -137,7 +137,7 @@ aws: "AWS Account" {
         font-size: 20
       }
 
-      components_ng: "Components\nNode Group" {
+      platform_ng: "Platform Node Group\n(managed)" {
         style: {
           fill: "#bbdefb"
           stroke: "#1565c0"
@@ -146,7 +146,7 @@ aws: "AWS Account" {
           font-size: 18
         }
 
-        node1: "t3.medium" {
+        node1: "m5.large" {
           icon: ../shared/icons/ec2.svg
           style: {
             fill: "#bbdefb"
@@ -156,7 +156,7 @@ aws: "AWS Account" {
           }
         }
 
-        node2: "t3.medium" {
+        node2: "m5.large" {
           icon: ../shared/icons/ec2.svg
           style: {
             fill: "#bbdefb"
@@ -167,7 +167,37 @@ aws: "AWS Account" {
         }
       }
 
-      workspaces_ng: "Workspaces\nNode Group" {
+      routing_np: "Routing NodePool\n(Karpenter)" {
+        style: {
+          fill: "#c8e6c9"
+          stroke: "#388e3c"
+          stroke-width: 3
+          bold: true
+          font-size: 18
+        }
+
+        node1: "c6.large" {
+          icon: ../shared/icons/ec2.svg
+          style: {
+            fill: "#c8e6c9"
+            stroke-width: 0
+            bold: true
+            font-size: 16
+          }
+        }
+
+        node2: "m6.large" {
+          icon: ../shared/icons/ec2.svg
+          style: {
+            fill: "#c8e6c9"
+            stroke-width: 0
+            bold: true
+            font-size: 16
+          }
+        }
+      }
+
+      workspaces_np: "Workspace NodePool(s)\n(Karpenter, scale-to-zero)" {
         style: {
           fill: "#e1bee7"
           stroke: "#8e24aa"
@@ -176,7 +206,7 @@ aws: "AWS Account" {
           font-size: 18
         }
 
-        node1: "c5.2xlarge" {
+        node1: "c6i.2xlarge" {
           icon: ../shared/icons/ec2.svg
           style: {
             fill: "#e1bee7"
@@ -186,7 +216,7 @@ aws: "AWS Account" {
           }
         }
 
-        node2: "c5.2xlarge" {
+        node2: "r7i.xlarge" {
           icon: ../shared/icons/ec2.svg
           style: {
             fill: "#e1bee7"
@@ -242,7 +272,7 @@ aws.global.route53.hosted_zone.dns_record -> aws.region.vpc.nlb: "resolves to" {
   }
 }
 
-aws.region.vpc.nlb -> aws.region.vpc.eks.components_ng: "routes to" {
+aws.region.vpc.nlb -> aws.region.vpc.eks.routing_np: "routes to" {
   style: {
     stroke: "#1565c0"
     stroke-width: 3

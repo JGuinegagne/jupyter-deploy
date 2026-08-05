@@ -10,8 +10,8 @@ Together they keep enough capacity for active work without paying for idle nodes
 ## Workspace idle shutdown
 
 To avoid paying for workspaces nobody is using, the **Jupyter K8s** operator stops workspaces
-after a period of no activity. Stopped workspaces free their pods (and thus let the
-Cluster Autoscaler remove now-empty nodes) while retaining their persistent storage, so
+after a period of no activity. Stopped workspaces free their pods (and thus let Karpenter
+reclaim now-empty nodes) while retaining their persistent storage, so
 a user can start again where they left off. Refer to
 [Idle Shutdown documentation](https://jupyter-k8s.readthedocs.io/en/latest/dive-deeper/workspace-lifecycle/idle-shutdown.html)
 for more details.
@@ -35,23 +35,48 @@ Restart a stopped workspace at any time:
 - with `jd`: `jd server start --name my-workspace`
 - with `kubectl`: `kubectl patch workspace <name> --type=merge -p '{"spec":{"desiredStatus":"Running"}}'`
 
+## Component autoscaling
+
+The routing tier (Traefik, Authmiddleware, and the Web UI) scales its pod count with
+[KEDA](https://keda.sh/), driven by the number of open connections Traefik reports to
+Prometheus. As traffic rises, KEDA adds replicas; as it falls, it removes them (the Web
+UI and Authmiddleware never scale below one replica). You do not configure this directly —
+the thresholds ship with the template.
+
 ## Node autoscaling
 
-Each EKS managed node group has a size range — `min_size`, `desired_size`, and
-`max_size` — set per node group in the `node_groups` variable. The default preset ships:
+The cluster runs three kinds of node pool, each tuned for a different job:
 
-| Node group | Role | Instance type | min | desired | max |
-|---|---|---|---|---|---|
-| components | components | `t3.medium` | 1 | 2 | 3 |
-| workspaces | workspaces | `c5.2xlarge` | 2 | 2 | 5 |
+| Pool | Role | Provisioner | Scaling |
+|---|---|---|---|
+| `platform` | Platform services (JupyterK8s operator, Karpenter, Keda, etc.) | EKS managed node group | Cluster Autoscaler, `platform_min_size`–`platform_max_size` |
+| `routing` | Routing tier (Traefik, Dex, OAuth2 Proxy, Authmiddleware, Web UI) | Karpenter NodePool | Always-on; grows with the KEDA-scaled routing pods |
+| `workspace-cpu` (or any pools you configure) | User workspace pods | Karpenter NodePool | Scale-to-zero |
 
-The [Cluster Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler)
-runs on the cluster and adjusts each node group **within its min/max** in response to
-demand:
+The `platform` pool holds a small, stable set of control-plane services and stays within
+its fixed size range, managed by the
+[Cluster Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler).
 
-- When pods can't be scheduled for lack of capacity (Pending pods), it adds nodes, up to `max_size`.
-- When nodes sit underused, it removes them, down to `min_size`.
+[Karpenter](https://karpenter.sh/) provisions nodes for the `routing` and workspace pools
+just-in-time: when a pod can't be scheduled, Karpenter launches a right-sized EC2 instance
+for it, and consolidates or removes nodes once they're empty. This lets workspace pools
+**scale to zero**: when the last workspace on a node stops (see idle shutdown above),
+Karpenter reclaims the node, so idle capacity costs nothing.
 
+You control node pools through admin variables:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `platform_instance_types` | `["m5.large"]` | Instance types for the platform managed node group. |
+| `platform_min_size` / `platform_max_size` | `2` / `3` | Size range for the platform node group. |
+| `routing_instance_categories` | `["c", "m"]` | Instance categories Karpenter may pick for routing nodes. |
+| `routing_max_cpu` / `routing_max_memory` | `32` / `128Gi` | Ceiling on total routing-pool capacity. |
+| `workspace_nodepools` | one `workspace-cpu` pool | List of workspace pools, each with its own instance families and CPU/memory ceilings. |
+| `node_expire_after` | `504h` | Maximum node lifetime before Karpenter recycles it. |
+
+Add a workspace pool (for example, a GPU pool) by appending an entry to
+`workspace_nodepools`: no new variables required. Inspect pools at runtime with
+`jd pool list`, `jd pool show --name <pool>`, and `jd pool status --name <pool>`.
 
 ```{note}
 The Cluster Autoscaler's image version tracks the cluster's Kubernetes minor version.
