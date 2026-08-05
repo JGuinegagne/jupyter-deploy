@@ -80,7 +80,7 @@ for a personal app an organization owner must approve it first.
 
 The template requires the following tools installed locally:
 
-- [Terraform](https://developer.hashicorp.com/terraform/install) (>= 1.6)
+- [Terraform](https://developer.hashicorp.com/terraform/install) (>= 1.5.7)
 - [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) (for `jd cluster login` and direct cluster access)
 - [Helm](https://helm.sh/docs/intro/install/) (for `jd component reconcile`)

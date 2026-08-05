@@ -5,6 +5,11 @@ Source files live in `docs/source/`.
 
 ## Formatting rules
 
+### Style
+
+- You MUST NOT use em dashes (`—`) in bullet section; use a colon (`**Bullet-name**: `).
+- Generally avoid em dashes in text; prefer short, separate sentences.
+
 ### Product names in body text
 
 Use bold for product names in running text:
