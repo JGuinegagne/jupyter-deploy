@@ -83,7 +83,10 @@ class WebAppNavigator:
         """
         self.goto_create_page()
 
-        name_field = self.page.get_by_label("Name").first
+        # Match the Name input by its accessible role + exact name: the form also
+        # has a "Display Name" field, so a substring get_by_label("Name") matches
+        # both and can resolve to a non-input node (MUI's fieldset legend).
+        name_field = self.page.get_by_role("textbox", name="Name", exact=True)
         name_field.wait_for(state="visible", timeout=30000)
         workspace_name = name_field.input_value()
         assert workspace_name != "", "Expected auto-generated workspace name"

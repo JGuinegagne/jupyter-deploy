@@ -121,7 +121,8 @@ def test_routing_deployments_have_no_hardcoded_replicas(e2e_deployment: EndToEnd
 # ── Karpenter workspace node provisioning ────────────────────────────────────
 
 
-def _workspaces_node_count() -> int:
+def _workspaces_nodes() -> set[str]:
+    """Return the set of node names currently labeled as workspaces-role nodes."""
     output = _kubectl(
         "get",
         "nodes",
@@ -129,8 +130,26 @@ def _workspaces_node_count() -> int:
         "jupyter-deploy/role=workspaces",
         "--no-headers",
         "--ignore-not-found",
+        "-o",
+        "custom-columns=NAME:.metadata.name",
     )
-    return len([line for line in output.splitlines() if line.strip()])
+    return {line.strip() for line in output.splitlines() if line.strip()}
+
+
+def _workspace_pod_node() -> str:
+    """Return the node hosting the _SCALE_WORKSPACE pod, or '' if none is scheduled yet."""
+    return _kubectl(
+        "get",
+        "pods",
+        "-n",
+        WORKSPACE_NAMESPACE,
+        "-l",
+        f"workspace.jupyter.org/workspace-name={_SCALE_WORKSPACE}",
+        "-o",
+        # Wildcard index (not [0]) so an empty item list yields '' instead of a
+        # jsonpath "array index out of bounds" error (exit 1) when no pod matches.
+        "jsonpath={.items[*].spec.nodeName}",
+    )
 
 
 @pytest.mark.mutating
@@ -138,41 +157,39 @@ def _workspaces_node_count() -> int:
 def test_karpenter_workspace_provisioning_and_scale_to_zero(e2e_deployment: EndToEndDeployment) -> None:
     """Full Karpenter workspace lifecycle: provision on create, scale-to-zero on delete.
 
-    1. Create workspace → Karpenter provisions a workspaces-role node
-    2. Verify pod lands on that node
-    3. Delete workspace → Karpenter scales node count back to zero
+    1. Create workspace → Karpenter provisions a new workspaces-role node
+    2. Verify the pod lands on a workspaces / workspace-cpu node
+    3. Delete workspace → Karpenter terminates the node(s) it added for it
+
+    Scoped to the nodes THIS test causes Karpenter to add (the post-create set
+    minus a pre-create baseline), never the global workspaces-node count: the
+    cluster may host other long-lived workspaces pinning unrelated workspaces
+    nodes, so a count-to-zero assertion is unsound. If the pod co-locates onto a
+    pre-existing workspaces node and Karpenter adds nothing, scale-to-zero is not
+    observable and the test skips (on a fresh CI cluster a new node always appears).
     """
     e2e_deployment.ensure_deployed()
 
-    # Clean up any leftover workspace from a previous test run.
+    # Clean up any leftover workspace from a previous test run, and wait for its
+    # pod to be gone so its node isn't misattributed to this run.
     try:
         kubectl_delete_workspace(_SCALE_WORKSPACE)
         _poll(
-            lambda: _workspaces_node_count() == 0,
+            lambda: _workspace_pod_node() == "",
             timeout_s=300,
-            msg="pre-test cleanup: workspaces node did not terminate",
+            msg="pre-test cleanup: leftover workspace pod did not terminate",
         )
     except Exception:
         pass
+
+    baseline_nodes = _workspaces_nodes()
 
     kubectl_apply_workspace(_SCALE_WORKSPACE, WORKSPACES_DIR)
     try:
         e2e_deployment.cli.poll_scoped_server_status(_SCALE_WORKSPACE, "Running", timeout_s=300)
 
-        # Verify a workspaces node was provisioned.
-        assert _workspaces_node_count() > 0, "Expected at least one workspaces node after workspace creation"
-
-        # Verify the workspace pod landed on a Karpenter workspaces node.
-        pod_node = _kubectl(
-            "get",
-            "pods",
-            "-n",
-            WORKSPACE_NAMESPACE,
-            "-l",
-            f"workspace.jupyter.org/workspace-name={_SCALE_WORKSPACE}",
-            "-o",
-            "jsonpath={.items[0].spec.nodeName}",
-        )
+        # Verify the workspace pod landed on a workspaces / workspace-cpu node.
+        pod_node = _workspace_pod_node()
         assert pod_node, f"Could not find pod node for workspace {_SCALE_WORKSPACE}"
 
         node_role = _kubectl("get", "node", pod_node, "-o", "jsonpath={.metadata.labels.jupyter-deploy/role}")
@@ -180,15 +197,25 @@ def test_karpenter_workspace_provisioning_and_scale_to_zero(e2e_deployment: EndT
 
         nodepool = _kubectl("get", "node", pod_node, "-o", r"jsonpath={.metadata.labels.karpenter\.sh/nodepool}")
         assert nodepool == "workspace-cpu", f"Workspace pod node has nodepool '{nodepool}', expected 'workspace-cpu'"
+
+        # Nodes Karpenter provisioned for this workspace (excludes any pre-existing
+        # workspaces node the pod may have co-located onto).
+        new_nodes = _workspaces_nodes() - baseline_nodes
     finally:
         kubectl_delete_workspace(_SCALE_WORKSPACE)
 
-    # After deletion Karpenter should terminate the node (scale-to-zero).
-    # Karpenter's default consolidation window is ~30s; allow up to 10 minutes.
+    if not new_nodes:
+        pytest.skip(
+            "Workspace pod co-located onto a pre-existing workspaces node; "
+            "Karpenter added no node, so scale-to-zero is not observable here."
+        )
+
+    # After deletion Karpenter should terminate the node(s) it added for this
+    # workspace (consolidateAfter is 60s; allow up to 10 minutes for drain + delete).
     _poll(
-        lambda: _workspaces_node_count() == 0,
+        lambda: _workspaces_nodes().isdisjoint(new_nodes),
         timeout_s=600,
-        msg="workspaces NodePool did not scale to zero after workspace deletion",
+        msg=f"nodes {new_nodes} were not terminated after workspace deletion",
     )
 
 
