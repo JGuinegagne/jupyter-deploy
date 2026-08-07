@@ -146,7 +146,9 @@ def _workspace_pod_node() -> str:
         "-l",
         f"workspace.jupyter.org/workspace-name={_SCALE_WORKSPACE}",
         "-o",
-        "jsonpath={.items[0].spec.nodeName}",
+        # Wildcard index (not [0]) so an empty item list yields '' instead of a
+        # jsonpath "array index out of bounds" error (exit 1) when no pod matches.
+        "jsonpath={.items[*].spec.nodeName}",
     )
 
 
