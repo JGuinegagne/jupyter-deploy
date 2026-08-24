@@ -11,7 +11,7 @@ from pytest_jupyter_deploy.kubernetes.kubectl import run_kubectl
 
 
 def get_node_names(label_selector: str) -> list[str]:
-    """Names of Ready nodes matching a label selector (e.g. 'jupyter-deploy/role=platform')."""
+    """Names of nodes matching a label selector (e.g. 'jupyter-deploy/role=platform'), regardless of readiness."""
     result = subprocess.run(
         ["kubectl", "get", "nodes", "-l", label_selector, "-o", "jsonpath={.items[*].metadata.name}"],
         capture_output=True,
@@ -68,3 +68,19 @@ def get_node_allocatable_cpu_millicores(node_name: str) -> int:
         check=True,
     )
     return parse_cpu_to_millicores(result.stdout.strip())
+
+
+def get_node_allocatable_gpu_count(node_name: str) -> int:
+    """Allocatable nvidia.com/gpu count of a node.
+
+    Empty output means the key is absent — a GPU node before the device plugin
+    registers, or a non-GPU node — and reads as 0, never an error.
+    """
+    result = subprocess.run(
+        ["kubectl", "get", "node", node_name, "-o", r"jsonpath={.status.allocatable.nvidia\.com/gpu}"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    out = result.stdout.strip()
+    return int(out) if out else 0

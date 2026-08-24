@@ -216,6 +216,66 @@ resource "null_resource" "karpenter_nodepools_finalizer_cleanup" {
   ]
 }
 
+# ── GPU pool synthesis ────────────────────────────────────────────────────────
+# enable_default_gpu_pool alone yields working GPU capacity: the built-in pool
+# entry and its template config below are appended. Admins with their own
+# accelerator entries configure GPU support through workspace_nodepools plus
+# workspace_templates instead; combining that with the flag is a plan-time
+# error (precondition on helm_release.karpenter_nodepools), per issue #336.
+locals {
+  gpu_pool_name = "workspace-gpu"
+  gpu_pool_builtin = {
+    name              = local.gpu_pool_name
+    instance_families = "g4dn,g5,g6,g6e,g7,g7e"
+    disk_size_gb      = "100"
+    max_cpu           = "64"
+    max_memory        = "256Gi"
+    max_gpus          = "4"
+    # Explicit: the accelerator role default would yield "workspace-gpu" (the
+    # pool name), and tests, fixtures, and docs pin "workspaces-gpu".
+    role        = "workspaces-gpu"
+    accelerator = "nvidia"
+    templates   = "jupyterlab-gpu"
+  }
+  # cpu/memory sit under the g4dn.xlarge allocatable with headroom, so kubelet
+  # reservation or DaemonSet growth cannot leave the pod permanently
+  # unschedulable on the smallest family. Idle follows the
+  # deployment default: a literal here could fall outside the admin's idle
+  # window and fail every plan mentioning a config the admin never wrote.
+  gpu_template_builtin = {
+    name         = "jupyterlab-gpu"
+    display_name = "JupyterLab GPU"
+    description  = "JupyterLab workspace with one NVIDIA GPU and persistent EBS storage"
+    gpus         = "1"
+    cpu          = "3"
+    memory       = "12Gi"
+    idle_minutes = tostring(var.workspaces_idle_shutdown_timeout_default)
+  }
+
+  workspace_nodepools_accelerated = [
+    for p in var.workspace_nodepools : p if lookup(p, "accelerator", "") != ""
+  ]
+
+  # Injection is unconditional on the flag; the precondition on
+  # helm_release.karpenter_nodepools hard-errors the flag + hand-written
+  # accelerator overlap at plan time.
+  workspace_nodepools_effective = concat(
+    var.workspace_nodepools,
+    var.enable_default_gpu_pool ? [local.gpu_pool_builtin] : [],
+  )
+  workspace_templates_effective = concat(
+    var.workspace_templates,
+    var.enable_default_gpu_pool ? [local.gpu_template_builtin] : [],
+  )
+  # Accelerator entries default role to the pool name, fencing each accelerator
+  # pool by construction. Non-accelerator entries keep the key absent so the
+  # chart's `default "workspaces"` path renders the exact pre-GPU bytes.
+  workspace_nodepools_normalized = [
+    for p in local.workspace_nodepools_effective :
+    (lookup(p, "accelerator", "") != "" && !contains(keys(p), "role")) ? merge(p, { role = p["name"] }) : p
+  ]
+}
+
 resource "helm_release" "karpenter_nodepools" {
   name             = "karpenter-nodepools"
   chart            = "${path.module}/../charts/karpenter-nodepools"
@@ -257,17 +317,49 @@ resource "helm_release" "karpenter_nodepools" {
         instanceCategories    = var.routing_instance_categories
         instanceGenerationMin = var.routing_instance_generation_min
       }
+      # Optional keys are emitted only when present: an absent key makes the
+      # chart render the pre-GPU bytes for that pool, keeping existing
+      # NodePools byte-identical (a changed rendered pool drift-replaces its
+      # nodes and restarts the workspaces on them).
       workspaceNodepools = [
-        for p in var.workspace_nodepools : {
-          name             = p["name"]
-          instanceFamilies = split(",", p["instance_families"])
-          diskSizeGi       = tonumber(p["disk_size_gb"])
-          maxCpu           = p["max_cpu"]
-          maxMemory        = p["max_memory"]
-        }
+        for p in local.workspace_nodepools_normalized : merge(
+          {
+            name             = p["name"]
+            instanceFamilies = [for f in split(",", p["instance_families"]) : trimspace(f)]
+            diskSizeGi       = tonumber(p["disk_size_gb"])
+            maxCpu           = p["max_cpu"]
+            maxMemory        = p["max_memory"]
+          },
+          contains(keys(p), "role") ? { role = p["role"] } : {},
+          contains(keys(p), "max_gpus") ? { maxGpus = p["max_gpus"] } : {},
+          # The chart's gpu value adds the nvidia.com/gpu.present node label;
+          # the key stays at the chart boundary so rendered pool bytes are
+          # untouched by the accelerator rename.
+          lookup(p, "accelerator", "") == "nvidia" ? { gpu = "true" } : {},
+        )
       ]
     })
   ]
+
+  lifecycle {
+    precondition {
+      condition     = !(var.enable_default_gpu_pool && length(local.workspace_nodepools_accelerated) > 0)
+      error_message = "enable_default_gpu_pool conflicts with accelerator entries in workspace_nodepools (${join(", ", [for p in local.workspace_nodepools_accelerated : p["name"]])}): the entries already provision GPU capacity, disable the flag."
+    }
+    precondition {
+      condition     = length(distinct([for p in local.workspace_nodepools_effective : p["name"]])) == length(local.workspace_nodepools_effective)
+      error_message = "workspace_nodepools names must be unique, including the built-in \"workspace-gpu\" entry injected by enable_default_gpu_pool."
+    }
+    precondition {
+      # Re-checks the variable-level role-collision rule over the effective
+      # list: the validation cannot see the entry enable_default_gpu_pool injects.
+      condition = length(setintersection(
+        toset([for p in local.workspace_nodepools_normalized : p["role"] if lookup(p, "accelerator", "") != ""]),
+        toset(concat([for p in local.workspace_nodepools_normalized : lookup(p, "role", "workspaces") if lookup(p, "accelerator", "") == ""], ["workspaces"])),
+      )) == 0
+      error_message = "An accelerator pool must not share a role with a non-accelerator pool or use \"workspaces\" (the base jupyterlab template's role), including the built-in \"workspaces-gpu\" role injected by enable_default_gpu_pool: a shared role would let CPU workspaces onto GPU nodes."
+    }
+  }
 
   depends_on = [
     helm_release.karpenter,

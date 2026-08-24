@@ -251,8 +251,9 @@ class TestManifest(unittest.TestCase):
         components = self.MANIFEST.get("components", {})
         helm_components = {name: c for name, c in components.items() if c["type"] == "HelmRelease"}
 
-        # All seven chart releases are surfaced as components (five platform charts plus
-        # the cluster-autoscaler and fluent-bit charts added for autoscaling / logging).
+        # Every helm_release in the template is surfaced as a component, except
+        # deliberately optional ones (see test_no_gpu_components_declared), so
+        # adding a release means adding a component entry (and bumping this).
         self.assertEqual(
             len(helm_components),
             10,
@@ -379,3 +380,15 @@ class TestManifest(unittest.TestCase):
         daemonset_names = {name for name, comp in components.items() if comp["type"] == "DaemonSet"}
         self.assertIn("aws-node", daemonset_names)
         self.assertIn("kube-proxy", daemonset_names)
+
+    def test_no_gpu_components_declared(self) -> None:
+        # Manifest components have no conditional mechanism and jd health reads a
+        # missing resource as degraded, so the GPU pieces (present only when a
+        # pool entry sets accelerator) must stay out until optional components exist.
+        if self.MANIFEST is None:
+            self.fail("MANIFEST is None")
+
+        components = self.MANIFEST.get("components", {})
+        self.assertNotIn("nvidia-device-plugin", components)
+        self.assertNotIn("nvidia-device-plugin-chart", components)
+        self.assertNotIn("jupyterlab-gpu-template", components)

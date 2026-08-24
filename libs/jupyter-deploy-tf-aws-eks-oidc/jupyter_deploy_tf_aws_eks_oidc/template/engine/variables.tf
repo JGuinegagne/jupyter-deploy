@@ -257,10 +257,31 @@ variable "workspace_nodepools" {
       max_cpu           - fleet CPU ceiling (e.g. "512")
       max_memory        - fleet memory ceiling (e.g. "2048Gi")
 
-    Example (add a GPU pool by appending an entry):
+    Optional keys per entry (all strings):
+      accelerator - device stack the pool provides; "nvidia" is the only supported
+                    value. Installs the NVIDIA device plugin, adds the
+                    nvidia.com/gpu.present node label, and defaults role to the
+                    pool name so accelerator pools are fenced by construction
+      role        - node label/taint value; only workspace templates tolerating this
+                    role schedule onto the pool (defaults to "workspaces", or to the
+                    pool name when accelerator is set; an accelerator entry must not
+                    use "workspaces", the base jupyterlab template's role, and no
+                    entry may use "routing", the routing pool's role)
+      max_gpus    - fleet GPU ceiling, the NodePool limit for nvidia.com/gpu
+                    (e.g. "4"); optional, absent means unbounded (the account's
+                    G/VT service quota is the backstop); requires accelerator
+
+      templates   - comma-separated workspace_templates config names this pool
+                    offers as cards; each referenced config renders one
+                    WorkspaceTemplate pinned to this pool's role (see the
+                    workspace_templates variable)
+
+    Example (a customized GPU pool; enable_default_gpu_pool = true provides the
+    equivalent built in):
       workspace_nodepools = [
         { name = "workspace-cpu", instance_families = "c6i,m6i,r6i", disk_size_gb = "50", max_cpu = "512", max_memory = "2048Gi" },
-        { name = "workspace-gpu", instance_families = "g4dn,g5", disk_size_gb = "100", max_cpu = "64", max_memory = "256Gi" },
+        { name = "workspace-gpu", instance_families = "g4dn,g5,g6,g6e,g7,g7e", disk_size_gb = "100", max_cpu = "64", max_memory = "256Gi",
+          max_gpus = "4", accelerator = "nvidia", templates = "jupyterlab-gpu" },
       ]
   EOT
   type        = list(map(string))
@@ -268,6 +289,11 @@ variable "workspace_nodepools" {
   validation {
     condition     = length(var.workspace_nodepools) >= 1
     error_message = "workspace_nodepools must contain at least one NodePool definition."
+  }
+
+  validation {
+    condition     = alltrue([for p in var.workspace_nodepools : trimspace(lookup(p, "name", "")) != ""])
+    error_message = "Each workspace NodePool entry must set name."
   }
 
   validation {
@@ -279,6 +305,202 @@ variable "workspace_nodepools" {
     ])
     error_message = "Each workspace NodePool disk_size_gb must be a numeric string between 20 and 16384."
   }
+
+  validation {
+    condition = alltrue([
+      for p in var.workspace_nodepools :
+      !contains(keys(p), "max_gpus") || can(regex("^[1-9][0-9]*$", p["max_gpus"]))
+    ])
+    error_message = "Each workspace NodePool max_gpus, when set, must be a positive integer string."
+  }
+
+  validation {
+    condition = alltrue([
+      for p in var.workspace_nodepools :
+      # lookup, not p["accelerator"]: || is eager pre-TF-1.10 and the index
+      # would error on entries without the key.
+      !contains(keys(p), "accelerator") || lookup(p, "accelerator", "") == "nvidia"
+    ])
+    error_message = "Each workspace NodePool accelerator, when set, must be \"nvidia\" (the only supported device stack)."
+  }
+
+  validation {
+    # A GPU cap on a pool that provisions no GPUs would never bind.
+    condition = alltrue([
+      for p in var.workspace_nodepools :
+      !contains(keys(p), "max_gpus") || contains(keys(p), "accelerator")
+    ])
+    error_message = "max_gpus is only valid on an entry that also sets accelerator."
+  }
+
+  validation {
+    # Rendered as a node label value and taint value, which Kubernetes bounds.
+    condition = alltrue([
+      for p in var.workspace_nodepools :
+      !contains(keys(p), "role") || can(regex("^[a-zA-Z0-9]([-a-zA-Z0-9_.]{0,61}[a-zA-Z0-9])?$", p["role"]))
+    ])
+    error_message = "Each workspace NodePool role, when set, must be a valid Kubernetes label value (alphanumeric plus -_., max 63 chars)."
+  }
+
+  validation {
+    condition = alltrue([
+      for p in var.workspace_nodepools :
+      !contains(keys(p), "templates") || alltrue([for raw in split(",", lookup(p, "templates", "")) : trimspace(raw) != ""])
+    ])
+    error_message = "Each workspace NodePool templates key, when set, must be a comma-separated list of non-empty workspace_templates config names."
+  }
+
+  validation {
+    # The routing pool's nodes carry this label/taint value; a workspace pool
+    # sharing it would let workspace pods onto the always-on routing nodes.
+    # Resolved role, not the raw key: an accelerator entry without an explicit
+    # role takes its pool name as the role.
+    condition = alltrue([
+      for p in var.workspace_nodepools :
+      (contains(keys(p), "role") ? p["role"] : (lookup(p, "accelerator", "") != "" ? lookup(p, "name", "") : "workspaces")) != "routing"
+    ])
+    error_message = "\"routing\" is reserved for the routing pool: no workspace pool may use it as its role, and an accelerator entry named \"routing\" must set an explicit role."
+  }
+
+  validation {
+    # A shared role would let plain CPU workspaces schedule onto GPU nodes;
+    # "workspaces" is always taken, the base jupyterlab template pins it.
+    condition = length(setintersection(
+      toset([for p in var.workspace_nodepools : lookup(p, "role", lookup(p, "name", "")) if lookup(p, "accelerator", "") != ""]),
+      toset(concat([for p in var.workspace_nodepools : lookup(p, "role", "workspaces") if lookup(p, "accelerator", "") == ""], ["workspaces"])),
+    )) == 0
+    error_message = "An accelerator entry must not share a role with a non-accelerator entry or use \"workspaces\" (the non-accelerator default and the base jupyterlab template's role)."
+  }
+}
+
+variable "workspace_templates" {
+  description = <<-EOT
+    Named workspace template configurations. A workspace_nodepools entry adopts
+    a config by listing its name in the entry's templates key; each (entry,
+    config) pairing renders one WorkspaceTemplate card, where the config
+    supplies the shape and card copy and the entry supplies placement (its
+    role). A config referenced by no entry renders nothing. Entries sharing a
+    role may share a config; entries with different roles need distinct
+    configs, since a WorkspaceTemplate pins one node selector.
+
+    Required keys per entry (all strings):
+      name         - WorkspaceTemplate name (e.g. "jupyterlab-gpu-p"); unique,
+                     "jupyterlab" is reserved for the built-in default template
+    Optional keys per entry (all strings):
+      gpus         - nvidia.com/gpu count the template pins (e.g. "1");
+                     requires cpu and memory, and only accelerator pools may
+                     offer the config
+      cpu          - pinned cpu request/limit/bounds (e.g. "22"); set with memory
+      memory       - pinned memory request/limit/bounds (e.g. "200Gi"); set with cpu
+      idle_minutes - idle-shutdown default in minutes (defaults to
+                     workspaces_idle_shutdown_timeout_default)
+      display_name - UI card title (defaults to the config name)
+      description  - UI card description (defaults to a generic line)
+
+    A config without cpu/memory (legal only without gpus) inherits the base
+    jupyterlab shape: the card is the standard adjustable workspace, pinned to
+    the pool that lists it, with its own idle policy.
+
+    Example (a P-family pool with its own template; enable_default_gpu_pool
+    provides the equivalent G-family stack built in):
+      workspace_templates = [
+        { name = "jupyterlab-gpu-p", gpus = "1", cpu = "22", memory = "200Gi", idle_minutes = "30" },
+      ]
+      workspace_nodepools = [
+        { name = "workspace-cpu", instance_families = "c6i,m6i,r6i", disk_size_gb = "50", max_cpu = "512", max_memory = "2048Gi" },
+        { name = "workspace-gpu-p", instance_families = "p4d,p5,p5en", disk_size_gb = "200",
+          max_cpu = "384", max_memory = "3000Gi", accelerator = "nvidia", templates = "jupyterlab-gpu-p" },
+      ]
+  EOT
+  type        = list(map(string))
+
+  validation {
+    # Rendered as the WorkspaceTemplate metadata.name.
+    condition = alltrue([
+      for t in var.workspace_templates :
+      can(regex("^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$", lookup(t, "name", "")))
+    ])
+    error_message = "Each workspace_templates entry must set name to a valid Kubernetes resource name (lowercase alphanumeric and dashes, max 63 chars)."
+  }
+
+  validation {
+    condition     = length(distinct([for t in var.workspace_templates : lookup(t, "name", "")])) == length(var.workspace_templates)
+    error_message = "workspace_templates names must be unique."
+  }
+
+  validation {
+    condition     = !contains([for t in var.workspace_templates : lookup(t, "name", "")], "jupyterlab")
+    error_message = "\"jupyterlab\" is reserved for the built-in default template."
+  }
+
+  validation {
+    condition = alltrue([
+      for t in var.workspace_templates :
+      !contains(keys(t), "gpus") || can(regex("^[1-9][0-9]*$", t["gpus"]))
+    ])
+    error_message = "Each workspace_templates gpus, when set, must be a positive integer string."
+  }
+
+  validation {
+    condition = alltrue([
+      for t in var.workspace_templates :
+      !contains(keys(t), "idle_minutes") || can(regex("^[1-9][0-9]*$", t["idle_minutes"]))
+    ])
+    error_message = "Each workspace_templates idle_minutes, when set, must be a positive integer string."
+  }
+
+  validation {
+    # No hardware-agnostic default exists for a GPU card's pinned shape: the
+    # right values depend on the pool's instance families (allocatable of the
+    # smallest size).
+    condition = alltrue([
+      for t in var.workspace_templates :
+      !contains(keys(t), "gpus") || (contains(keys(t), "cpu") && contains(keys(t), "memory"))
+    ])
+    error_message = "A workspace_templates entry with gpus must also set cpu and memory."
+  }
+
+  validation {
+    condition = alltrue([
+      for t in var.workspace_templates :
+      contains(keys(t), "cpu") == contains(keys(t), "memory")
+    ])
+    error_message = "workspace_templates cpu and memory must be set together."
+  }
+}
+
+variable "enable_default_gpu_pool" {
+  description = <<-EOT
+    Whether to provision the built-in default GPU workspace stack.
+
+    When true, the template appends the built-in workspace-gpu entry to
+    workspace_nodepools and its jupyterlab-gpu config to workspace_templates:
+    one GPU pool, the NVIDIA device plugin, and one GPU workspace card.
+    Combining the flag with your own accelerator entries is a plan-time
+    error: configure GPU support either through this flag or through
+    workspace_nodepools + workspace_templates, not both. Delete GPU
+    workspaces before turning this off: disabling removes the pool and the
+    template they depend on.
+
+    First GPU use on an AWS account without prior GPU usage requires raising
+    the "Running On-Demand G and VT instances" service quota (defaults to 0).
+
+    Recommended: false
+  EOT
+  type        = bool
+}
+
+variable "nvidia_device_plugin_version" {
+  description = <<-EOT
+    Helm chart version of the NVIDIA device plugin, installed when any
+    workspace_nodepools entry sets accelerator = "nvidia" (the built-in GPU
+    pool does).
+
+    Refer to: https://github.com/NVIDIA/k8s-device-plugin/releases
+
+    Recommended: 0.19.3
+  EOT
+  type        = string
 }
 
 variable "routing_instance_categories" {

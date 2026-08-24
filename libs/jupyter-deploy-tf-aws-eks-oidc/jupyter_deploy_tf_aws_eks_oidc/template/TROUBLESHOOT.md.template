@@ -19,8 +19,9 @@ this template:
 
 - **EC2 vCPUs** — node group scaling fails with `VcpuLimitExceeded`. New accounts
   start with a low On-Demand vCPU limit per region, and `0` for accelerated
-  families (GPU/Neuron), which blocks `workspaces` node groups that use GPU
-  instance types. Quotas are measured in vCPUs, not instance counts.
+  families (GPU/Neuron), which blocks the workspace pools' GPU nodes
+  (Karpenter provisions one per GPU workspace). Quotas are measured in vCPUs,
+  not instance counts.
 - **Elastic IPs** — `AllocateAddress` fails with `AddressLimitExceeded`. The VPC
   provisions one NAT gateway (and therefore one EIP) per availability zone — two by
   default. The per-region limit defaults to 5.
@@ -40,9 +41,9 @@ Relevant quota codes:
 
 To resolve:
 
-- Pick smaller `instance_type` values in `node_groups`, reduce `desired_size`, or
-  free resources by destroying stale deployments (`jd down --path <project-dir>`),
-  then re-run `jd config` and `jd up`.
+- Pick smaller instance families or lower `max_cpu`/`max_gpus` in
+  `workspace_nodepools`, or free resources by destroying stale deployments
+  (`jd down --path <project-dir>`), then re-run `jd config` and `jd up`.
 - Or request a higher limit.
 
 {{ request-quota-increase-instructions }}
@@ -183,8 +184,13 @@ jd server show --name <workspace-name> --scope <namespace>
 jd server logs --name <workspace-name> --scope <namespace>
 ```
 
-A workspace stuck in `Starting` is often waiting on a node. GPU workspaces require a
-`workspaces` node group with GPU capacity and sufficient vCPU quota (see above). If the
-node group `desired_size` is `0`, scale it up in `node_groups` and run `jd up`.
+A workspace stuck in `Starting` is often waiting on a node. GPU workspaces require
+an accelerator pool entry in `workspace_nodepools` with a template config offered
+through its `templates` key (`enable_default_gpu_pool: true` provides the built-in
+pair: the `workspace-gpu` Karpenter pool, the NVIDIA device plugin, and the
+`jupyterlab-gpu` card) and sufficient G/VT vCPU quota (see above). Inspect the
+device plugin with `kubectl get daemonset nvidia-device-plugin -n kube-system`;
+it reports desired count 0 while the GPU pool is scaled to zero, which is idle,
+not failing.
 
 {{ generated-by-footer }}

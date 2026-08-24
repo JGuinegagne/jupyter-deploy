@@ -59,3 +59,7 @@ workspace_nodepools = [
     max_memory        = "2048Gi"
   }
 ]
+
+workspace_templates          = []
+enable_default_gpu_pool      = false
+nvidia_device_plugin_version = "0.19.3"

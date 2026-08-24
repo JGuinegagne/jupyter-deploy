@@ -72,11 +72,50 @@ You control node pools through admin variables:
 | `routing_instance_categories` | `["c", "m"]` | Instance categories Karpenter may pick for routing nodes. |
 | `routing_max_cpu` / `routing_max_memory` | `32` / `128Gi` | Ceiling on total routing-pool capacity. |
 | `workspace_nodepools` | one `workspace-cpu` pool | List of workspace pools, each with its own instance families and CPU/memory ceilings. |
+| `workspace_templates` | `[]` | Named workspace template configs; a pool entry offers them as cards through its `templates` key. |
+| `enable_default_gpu_pool` | `false` | Appends the built-in `workspace-gpu` entry and its `jupyterlab-gpu` template config; the pool, the NVIDIA device plugin, and the GPU card all derive from them. |
 | `node_expire_after` | `504h` | Maximum node lifetime before Karpenter recycles it. |
 
-Add a workspace pool (for example, a GPU pool) by appending an entry to
-`workspace_nodepools`: no new variables required. Inspect pools at runtime with
-`jd pool list`, `jd pool show --name <pool>`, and `jd pool status --name <pool>`.
+Add a CPU workspace pool by appending an entry to `workspace_nodepools`: no new
+variables required. For GPU capacity, `enable_default_gpu_pool: true` is the
+one-line path: it appends a built-in `workspace-gpu` entry (`g4dn,g5,g6,g6e,g7,g7e`
+on-demand instances, fleet ceiling `max_gpus: "4"`) plus its `jupyterlab-gpu`
+template config. To configure GPU support yourself, leave the flag off and
+write the entries directly (combining both is a plan-time error): an entry with
+`accelerator: nvidia` installs the NVIDIA device plugin, gets the
+`nvidia.com/gpu.present` label the plugin selects on, and is fenced by its
+`role` (defaulting to the pool name); the optional `max_gpus` caps the fleet
+(absent means unbounded, up to the account's service quota); and the entry's
+`templates` key lists `workspace_templates` configs to offer as cards, each
+rendered as a workspace template pinned to the pool's role. A config with
+pinned `cpu`/`memory`/`gpus` renders one fixed shape; a config with only
+`idle_minutes` inherits the standard adjustable shape. A second GPU pool with
+its own card and idle rule is one more entry plus one more config, for example:
+
+```yaml
+workspace_templates:
+  - name: jupyterlab-gpu-p
+    gpus: "1"
+    cpu: "22"
+    memory: "200Gi"
+    idle_minutes: "30"
+workspace_nodepools:
+  # ... the CPU pool ...
+  - name: workspace-gpu-p
+    instance_families: p4d,p5,p5en
+    disk_size_gb: "200"
+    max_cpu: "384"
+    max_memory: "3000Gi"
+    accelerator: nvidia
+    templates: jupyterlab-gpu-p
+```
+
+Delete GPU workspaces before removing their entry or turning the flag off:
+doing so removes the pool and the template they depend on. First GPU use on an
+account without prior GPU usage requires raising the
+`Running On-Demand G and VT instances` service quota (see the troubleshooting
+guide). Inspect pools at runtime with `jd pool list`,
+`jd pool show --name <pool>`, and `jd pool status --name <pool>`.
 
 ```{note}
 The Cluster Autoscaler's image version tracks the cluster's Kubernetes minor version.

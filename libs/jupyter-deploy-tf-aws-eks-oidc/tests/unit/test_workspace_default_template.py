@@ -36,3 +36,15 @@ def test_parameters_sanity() -> None:
     assert timeout_min <= timeout_default <= timeout_max, (
         f"default ({timeout_default}) must be within [min, max] = [{timeout_min}, {timeout_max}]"
     )
+
+
+def test_gpu_template_idle_follows_deployment_default() -> None:
+    """The built-in GPU config must not hardcode an idle literal.
+
+    A literal can fall outside the deployment's idle-shutdown window, failing
+    every plan with an error naming a config the admin never wrote.
+    """
+    karpenter_tf = (TEMPLATE_PATH / "engine" / "platform_karpenter.tf").read_text()
+    assert re.search(r"idle_minutes\s*=\s*tostring\(var\.workspaces_idle_shutdown_timeout_default\)", karpenter_tf), (
+        "the built-in gpu template must inherit workspaces_idle_shutdown_timeout_default"
+    )
