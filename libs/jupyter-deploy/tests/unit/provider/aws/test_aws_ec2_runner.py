@@ -549,6 +549,7 @@ class TestExecuteInstructions(unittest.TestCase):
             patch.object(runner, "_stop_instance", return_value={}),
             patch.object(runner, "_reboot_instance", return_value={}),
             patch.object(runner, "_wait_for_state", return_value={}),
+            patch.object(runner, "_resolve_endpoint", return_value={}),
         ]
 
         instruction_method_map = {
@@ -558,7 +559,11 @@ class TestExecuteInstructions(unittest.TestCase):
             AwsEc2Instruction.REBOOT_INSTANCE: "_reboot_instance",
             AwsEc2Instruction.WAIT_FOR_RUNNING: "_wait_for_state",
             AwsEc2Instruction.WAIT_FOR_STOPPED: "_wait_for_state",
+            AwsEc2Instruction.RESOLVE_ENDPOINT: "_resolve_endpoint",
         }
+
+        # Guard: the map must cover every enum member so new instructions are exercised here.
+        self.assertEqual(set(instruction_method_map), set(AwsEc2Instruction))
 
         # Test each instruction
         for instruction, method_name in instruction_method_map.items():
@@ -659,3 +664,50 @@ class TestExecuteInstructions(unittest.TestCase):
         self.assertEqual(
             mock_poll_for_instance_status.call_args[1]["desired_state"], ec2_instance.Ec2InstanceState.STOPPED
         )
+
+
+class TestResolveEndpoint(unittest.TestCase):
+    @patch("jupyter_deploy.api.aws.ec2.ec2_instance.describe_instance_public_ip")
+    def test_returns_live_ip_and_echoed_port(self, mock_describe_public_ip: Mock) -> None:
+        runner = AwsEc2Runner(NullDisplay(), region_name="us-west-2")
+        mock_describe_public_ip.return_value = "203.0.113.7"
+
+        resolved_args: dict[str, ResolvedInstructionArgument] = {
+            "instance_id": StrResolvedInstructionArgument(argument_name="instance_id", value="i-abc"),
+            "port": StrResolvedInstructionArgument(argument_name="port", value="443"),
+        }
+
+        result = runner._resolve_endpoint(resolved_arguments=resolved_args)
+
+        mock_describe_public_ip.assert_called_once_with(runner.client, instance_id="i-abc")
+        self.assertEqual(result["PublicIpAddress"].value, "203.0.113.7")
+        self.assertEqual(result["Port"].value, "443")
+
+    @patch("jupyter_deploy.api.aws.ec2.ec2_instance.describe_instance_public_ip")
+    def test_routes_via_execute_instruction(self, mock_describe_public_ip: Mock) -> None:
+        runner = AwsEc2Runner(NullDisplay(), region_name="us-west-2")
+        mock_describe_public_ip.return_value = "203.0.113.7"
+
+        resolved_args: dict[str, ResolvedInstructionArgument] = {
+            "instance_id": StrResolvedInstructionArgument(argument_name="instance_id", value="i-abc"),
+            "port": StrResolvedInstructionArgument(argument_name="port", value="8443"),
+        }
+        result = runner.execute_instruction(
+            instruction_name=AwsEc2Instruction.RESOLVE_ENDPOINT,
+            resolved_arguments=resolved_args,
+        )
+        self.assertEqual(result["PublicIpAddress"].value, "203.0.113.7")
+        self.assertEqual(result["Port"].value, "8443")
+
+    @patch("jupyter_deploy.api.aws.ec2.ec2_instance.describe_instance_public_ip")
+    def test_raises_when_describe_public_ip_raises(self, mock_describe_public_ip: Mock) -> None:
+        runner = AwsEc2Runner(NullDisplay(), region_name="us-west-2")
+        mock_describe_public_ip.side_effect = ValueError("instance has no public IP")
+
+        resolved_args: dict[str, ResolvedInstructionArgument] = {
+            "instance_id": StrResolvedInstructionArgument(argument_name="instance_id", value="i-abc"),
+            "port": StrResolvedInstructionArgument(argument_name="port", value="443"),
+        }
+
+        with self.assertRaises(ValueError):
+            runner._resolve_endpoint(resolved_arguments=resolved_args)

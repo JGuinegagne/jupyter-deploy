@@ -12,7 +12,10 @@ from jupyter_deploy.provider.resolved_argdefs import (
     StrResolvedInstructionArgument,
     require_arg,
 )
-from jupyter_deploy.provider.resolved_resultdefs import ResolvedInstructionResult, StrResolvedInstructionResult
+from jupyter_deploy.provider.resolved_resultdefs import (
+    ResolvedInstructionResult,
+    StrResolvedInstructionResult,
+)
 
 
 class AwsEc2Instruction(str, Enum):
@@ -24,6 +27,7 @@ class AwsEc2Instruction(str, Enum):
     REBOOT_INSTANCE = "reboot-instance"
     WAIT_FOR_RUNNING = "wait-for-running"
     WAIT_FOR_STOPPED = "wait-for-stopped"
+    RESOLVE_ENDPOINT = "resolve-endpoint"
 
 
 class AwsEc2Runner(InstructionRunner):
@@ -224,6 +228,27 @@ class AwsEc2Runner(InstructionRunner):
             )
         }
 
+    def _resolve_endpoint(
+        self,
+        resolved_arguments: dict[str, ResolvedInstructionArgument],
+    ) -> dict[str, ResolvedInstructionResult]:
+        instance_id_arg = require_arg(resolved_arguments, "instance_id", StrResolvedInstructionArgument)
+        # `port` arrives as a manifest literal (the command runner resolves literals to
+        # strings); echo it alongside the live IP so the endpoint is one result.
+        port_arg = require_arg(resolved_arguments, "port", StrResolvedInstructionArgument)
+        instance_id = instance_id_arg.value
+        port = int(port_arg.value)
+
+        self.display_manager.info(f"Resolving public IP of instance: {instance_id}")
+        public_ip = ec2_instance.describe_instance_public_ip(self.client, instance_id=instance_id)
+
+        return {
+            "PublicIpAddress": StrResolvedInstructionResult(result_name="PublicIpAddress", value=public_ip),
+            # String-valued like every other bundle result; collect_results json-parses it back
+            # to an int and get_connect_bundle coerces it.
+            "Port": StrResolvedInstructionResult(result_name="Port", value=str(port)),
+        }
+
     def execute_instruction(
         self,
         instruction_name: str,
@@ -257,5 +282,7 @@ class AwsEc2Runner(InstructionRunner):
                 desired_state=ec2_instance.Ec2InstanceState.STOPPED,
                 timeout_seconds=600,  # GPU instances take a while to stop
             )
+        elif instruction_name == AwsEc2Instruction.RESOLVE_ENDPOINT:
+            return self._resolve_endpoint(resolved_arguments=resolved_arguments)
 
         raise InstructionNotFoundError(f"No execution implementation for command: 'aws.ec2.{instruction_name}'")
