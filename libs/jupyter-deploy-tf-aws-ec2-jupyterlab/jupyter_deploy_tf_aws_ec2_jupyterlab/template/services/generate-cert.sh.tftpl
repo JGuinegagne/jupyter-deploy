@@ -1,0 +1,61 @@
+#!/bin/bash
+# Generate (once) a long-lived self-signed TLS cert + private key, persisted on the EBS
+# data volume so a stop/start never rotates it, then publish ONLY the public PEM to the
+# cert-pin SSM parameter that `jd proxy connect-info` reads. The private key never leaves
+# the instance. The pin is on the cert, not the address (the client disables hostname
+# verification), so the SAN is irrelevant.
+set -e
+
+mkdir -p /var/log/jupyter-deploy
+exec > >(tee /var/log/jupyter-deploy/generate-cert.log) 2>&1
+
+CERT_DIR="/mnt/jupyter-data/.jupyter-deploy-tls"
+KEY_FILE="$${CERT_DIR}/key.pem"
+CERT_FILE="$${CERT_DIR}/cert.pem"
+DOCKER_CERT_DIR="/opt/docker/certs"
+CERT_PIN_PARAM="${cert_pin_ssm_parameter_name}"
+AWS_REGION="${aws_region}"
+
+mkdir -p "$${CERT_DIR}"
+
+if [ ! -f "$${KEY_FILE}" ] || [ ! -f "$${CERT_FILE}" ]; then
+    echo "Generating self-signed certificate (10 year validity)..."
+    openssl req -x509 -newkey rsa:2048 -nodes \
+        -keyout "$${KEY_FILE}" \
+        -out "$${CERT_FILE}" \
+        -days 3650 \
+        -subj "/CN=jupyter-deploy" \
+        -addext "subjectAltName=DNS:jupyter-deploy,IP:127.0.0.1"
+    echo "Certificate generated at $${CERT_FILE}"
+else
+    echo "Certificate already present at $${CERT_FILE}, reusing it"
+fi
+
+# Re-assert restrictive ownership/permissions on EVERY run, not just first generation. This dir
+# lives on the data volume that is bind-mounted into the notebook container as /home/jovyan, and a
+# redeploy re-runs cloudinit's `chown -R service-user /mnt/jupyter-data` BEFORE this script — which
+# would otherwise hand the private key to the notebook user. root:root + 600 keeps the key out of
+# every notebook cell; the traefik copy below gets its own perms.
+chown root:root "$${CERT_DIR}" "$${KEY_FILE}" "$${CERT_FILE}"
+chmod 700 "$${CERT_DIR}"
+chmod 600 "$${KEY_FILE}"
+chmod 644 "$${CERT_FILE}"
+
+# Publish the public PEM to the cert-pin SSM parameter (idempotent — --overwrite).
+echo "Publishing public certificate to SSM parameter $${CERT_PIN_PARAM}..."
+aws ssm put-parameter \
+    --name "$${CERT_PIN_PARAM}" \
+    --type String \
+    --tier Standard \
+    --overwrite \
+    --value "$(cat "$${CERT_FILE}")" \
+    --region "$${AWS_REGION}"
+echo "Published cert pin"
+
+# Make the cert/key available to the traefik container.
+mkdir -p "$${DOCKER_CERT_DIR}"
+cp "$${CERT_FILE}" "$${DOCKER_CERT_DIR}/cert.pem"
+cp "$${KEY_FILE}" "$${DOCKER_CERT_DIR}/key.pem"
+chmod 644 "$${DOCKER_CERT_DIR}/cert.pem"
+chmod 600 "$${DOCKER_CERT_DIR}/key.pem"
+echo "Copied cert/key to $${DOCKER_CERT_DIR}"

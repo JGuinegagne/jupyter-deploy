@@ -7,10 +7,14 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from urllib.parse import urlsplit, urlunsplit
 
+from multidict import CIMultiDict
+
 from jupyter_deploy_client_proxy.constants import (
     DEFAULT_REFRESH_MARGIN_SECONDS,
     DROP_FROM_REQUEST_HEADERS,
     DROP_FROM_RESPONSE_HEADERS,
+    MIN_REFRESH_SLEEP_SECONDS,
+    REFRESH_LIFETIME_FRACTION,
 )
 from jupyter_deploy_client_proxy.credentials.bundle import ConnectBundle
 
@@ -28,6 +32,31 @@ def _merge_bundle_headers_into_incoming(
     return merged
 
 
+def is_loopback_request_allowed(incoming: Mapping[str, str], port: int) -> bool:
+    """Gate a browser->proxy request before the proxy injects the credential and rewrites Origin.
+
+    The proxy is the component that must enforce same-origin: it forwards a valid Bearer credential
+    and rewrites ``Origin``/``Referer`` so the upstream's own same-origin check always passes,
+    so without this gate a malicious web page could ``fetch``/WebSocket the loopback listener
+    while ``jd open`` is running and have its hostile ``Origin`` laundered into an authorized
+    same-origin request (kernel WebSocket -> code execution on the notebook host).
+
+    Accept only requests that name the proxy's own loopback listener:
+      - if ``Origin`` is present, its netloc must be ``127.0.0.1:PORT`` or ``localhost:PORT``;
+      - if ``Host`` is present, it must equal one of those too (closes DNS-rebinding, where a name
+        resolving to 127.0.0.1 would otherwise carry the attacker's domain as ``Host``).
+
+    A missing ``Origin`` (non-browser client, top-level navigation) or missing ``Host`` is allowed:
+    the loopback listener is not otherwise authenticated, and this gate only closes the browser leg.
+    """
+    allowed = {f"127.0.0.1:{port}", f"localhost:{port}"}
+    host = incoming.get("Host")
+    if host is not None and host not in allowed:
+        return False
+    origin = incoming.get("Origin")
+    return origin is None or urlsplit(origin).netloc in allowed
+
+
 def _rewrite_origin_headers(headers: dict[str, str], origin_host: str, origin_port: int) -> None:
     """Rewrite ``Origin``/``Referer`` in place to the upstream origin.
 
@@ -36,9 +65,14 @@ def _rewrite_origin_headers(headers: dict[str, str], origin_host: str, origin_po
     the server run its native same-origin/XSRF check instead of the template loosening ``allow_origin``.
     Only rewrites headers already present (a missing ``Origin`` is same-origin by default upstream);
     matches case-insensitively and preserves the original key casing.
+
+    The netloc MUST match the ``Host`` header the upstream receives, and HTTP omits the default port
+    (443 for https) — which is exactly what aiohttp puts on the forwarded request. Keeping an explicit
+    ``:443`` here would make ``Origin`` (``host:443``) differ from ``Host`` (``host``), and the server's
+    same-origin check would block every API/websocket call.
     """
-    origin = f"https://{origin_host}:{origin_port}"
-    netloc = f"{origin_host}:{origin_port}"
+    netloc = origin_host if origin_port == 443 else f"{origin_host}:{origin_port}"
+    origin = f"https://{netloc}"
     for key in list(headers):
         lower = key.lower()
         if lower == "origin":
@@ -59,9 +93,19 @@ def get_forwarded_request_headers(
     return merged
 
 
-def get_forwarded_response_headers(upstream: Mapping[str, str]) -> dict[str, str]:
-    """Filter hop-by-hop headers off an upstream response before relaying it downstream."""
-    return {k: v for k, v in upstream.items() if k.lower() not in DROP_FROM_RESPONSE_HEADERS}
+def get_forwarded_response_headers(upstream: Mapping[str, str]) -> CIMultiDict[str]:
+    """Filter hop-by-hop headers off an upstream response before relaying it downstream.
+
+    Returns a multidict, not a plain dict: a response can carry the same header name more than once
+    (``Set-Cookie`` is the load-bearing case — Jupyter sets ``_xsrf`` and ``username-*`` as separate
+    lines, and per RFC 6265 they must never be folded into one). A dict would keep only the last,
+    silently dropping the others; aiohttp writes each multidict entry back as its own header line.
+    """
+    forwarded: CIMultiDict[str] = CIMultiDict()
+    for name, value in upstream.items():
+        if name.lower() not in DROP_FROM_RESPONSE_HEADERS:
+            forwarded.add(name, value)
+    return forwarded
 
 
 def get_bundle_summary(bundle: ConnectBundle) -> str:
@@ -72,10 +116,16 @@ def get_bundle_summary(bundle: ConnectBundle) -> str:
 def get_seconds_until_refresh(expires_at: datetime, margin_seconds: float = DEFAULT_REFRESH_MARGIN_SECONDS) -> float:
     """Return how long to sleep before re-execing the token command.
 
-    Refreshes ``margin_seconds`` before ``expires_at``; never negative.
+    Normally refreshes ``margin_seconds`` before ``expires_at``. But if the margin swallows the whole
+    remaining lifetime (clock skew, or a token TTL shorter than the margin), a plain
+    lifetime-minus-margin sleep goes <= 0 and the refresh loop would re-exec continuously; instead we
+    floor the sleep and fall back to a fraction of the remaining lifetime. Always ``>= MIN_REFRESH_SLEEP_SECONDS``.
     """
-    delta = (expires_at - datetime.now(UTC)).total_seconds() - margin_seconds
-    return max(0.0, delta)
+    remaining = (expires_at - datetime.now(UTC)).total_seconds()
+    delay = remaining - margin_seconds
+    if delay < MIN_REFRESH_SLEEP_SECONDS:
+        delay = max(MIN_REFRESH_SLEEP_SECONDS, remaining * REFRESH_LIFETIME_FRACTION)
+    return delay
 
 
 def get_shutdown_signals() -> list[signal.Signals]:

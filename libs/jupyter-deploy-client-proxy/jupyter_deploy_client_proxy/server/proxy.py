@@ -21,7 +21,7 @@ from jupyter_deploy_client_proxy.constants import (
 from jupyter_deploy_client_proxy.credentials.bundle import ConnectBundle
 from jupyter_deploy_client_proxy.credentials.credential import fetch_bundle_with_retries
 from jupyter_deploy_client_proxy.enums import ProxyState
-from jupyter_deploy_client_proxy.exceptions import ProxyError, TokenCommandError
+from jupyter_deploy_client_proxy.exceptions import NotRetryableTokenCommandError, ProxyError, TokenCommandError
 from jupyter_deploy_client_proxy.logger.factory import create_logger
 from jupyter_deploy_client_proxy.server.config import JupyterDeployClientProxyConfig
 from jupyter_deploy_client_proxy.server.state import delete_proxy_status, write_proxy_status
@@ -31,6 +31,7 @@ from jupyter_deploy_client_proxy.utils import (
     get_forwarded_request_headers,
     get_forwarded_response_headers,
     get_seconds_until_refresh,
+    is_loopback_request_allowed,
 )
 
 # WebSocket message types that end a relay leg. `async for` already stops the iterator on
@@ -194,30 +195,45 @@ class JupyterDeployClientProxy:
     async def _refresh_loop(self) -> None:
         while True:
             assert self._bundle is not None
-            try:
-                # Everything the cycle can throw is inside the try: the sleep math
-                # (get_seconds_until_refresh), the token command (_fetch_bundle), AND applying
-                # the bundle (_apply_bundle → build_pinned_ssl_context can raise on a bad PEM).
-                # A burst of attempts with backoff (the refresh budget, larger than startup's);
-                # this loop keeps retrying cycles forever.
-                delay = get_seconds_until_refresh(
-                    self._bundle.expires_at, margin_seconds=self._config.refresh_margin_seconds
+            delay = get_seconds_until_refresh(
+                self._bundle.expires_at, margin_seconds=self._config.refresh_margin_seconds
+            )
+            if delay < self._config.refresh_margin_seconds:
+                # Remaining lifetime is within (or below) the refresh margin — we're refreshing far
+                # more often than intended (get_seconds_until_refresh floored the sleep to avoid a
+                # continuous re-exec). Usually clock skew or --refresh-margin-seconds > token TTL.
+                self._logger.warning(
+                    f"credential lifetime is short relative to the {self._config.refresh_margin_seconds:.0f}s "
+                    f"refresh margin; refreshing in {delay:.1f}s (check clock skew / --refresh-margin-seconds)"
                 )
+            else:
                 self._logger.debug(f"next credential refresh in {delay:.0f}s")
-                await asyncio.sleep(delay)
+            await asyncio.sleep(delay)
+            try:
+                # Both the token command (_fetch_bundle bursts attempts with backoff) AND applying
+                # the bundle (_apply_bundle → build_pinned_ssl_context can raise on a bad PEM) are
+                # inside the try, so the loop reports the right terminal state rather than a stale
+                # RUNNING or an uncaught crash. This loop keeps retrying cycles forever.
                 bundle = await self._fetch_bundle(self._config.refresh_max_attempts)
                 await self._apply_bundle(bundle)
+            except NotRetryableTokenCommandError as e:
+                # Permanent (missing binary, bad bundle shape): retrying cannot help, and DEGRADED
+                # would promise a self-heal that never comes. Mark FAILED and stop the loop
+                self._logger.error(f"refresh permanently broken, stopping refresh: {e}")
+                self._state = ProxyState.FAILED
+                await self.write_status_best_effort()
+                break
             except TokenCommandError:
-                # Already logged at error; keep serving on the current credential and cool down.
+                # Transient (timeout, EX_TEMPFAIL, malformed output): already logged at error; keep
+                # serving on the current credential and cool down before the next cycle.
                 self._state = ProxyState.DEGRADED
                 await self.write_status_best_effort()
                 await asyncio.sleep(self._config.backoff_max_delay_seconds)
                 continue
             except Exception as e:
                 # An unexpected crash (not a token-command failure): the refresh machinery is
-                # dead and won't self-heal — mark FAILED and stop the loop, so the state reflects
-                # reality instead of a stale RUNNING. (CancelledError is a BaseException, so a
-                # stop()-driven cancel is not caught here.)
+                # dead and won't self-heal — mark FAILED and stop the loop. (CancelledError is a
+                # BaseException, so a stop()-driven cancel is not caught here.)
                 self._logger.error(f"refresh loop crashed, stopping refresh: {e}")
                 self._state = ProxyState.FAILED
                 await self.write_status_best_effort()
@@ -227,6 +243,16 @@ class JupyterDeployClientProxy:
             self._logger.info(f"credential refreshed: {get_bundle_summary(bundle)}")
 
     async def _handle(self, request: web.Request) -> web.StreamResponse:
+        # Enforce same-origin at the proxy BEFORE injecting the credential / rewriting Origin: only
+        # this listener's own loopback origin may drive it, else a hostile page could launder its
+        # Origin into an authorized request while `jd open` runs. self._port is set once started.
+        assert self._port is not None
+        if not is_loopback_request_allowed(request.headers, self._port):
+            self._logger.warning(
+                f"rejected non-loopback request: origin={request.headers.get('Origin')!r} "
+                f"host={request.headers.get('Host')!r}"
+            )
+            return web.Response(status=403, text="forbidden")
         if request.headers.get("Upgrade", "").lower() == "websocket":
             return await self._relay_ws(request)
         return await self._forward_http(request)
@@ -237,10 +263,16 @@ class JupyterDeployClientProxy:
         headers = get_forwarded_request_headers(
             request.headers, self._bundle.headers, self._bundle.host, self._bundle.port
         )
-        body = await request.read()
+        # Stream the request body rather than read() it. read() both buffers the whole body in memory
+        # and enforces aiohttp's default 1 MiB client_max_size, which would 413 notebook saves/uploads
+        # (/api/contents base64-inflates binary ~4/3x) at the proxy, before they reach upstream.
+        # Streaming skips both; content-length is dropped in DROP_FROM_REQUEST_HEADERS, so the body
+        # goes upstream as Transfer-Encoding: chunked (Tornado and Traefik both accept that).
+        data = request.content if request.can_read_body else None
+        response: web.StreamResponse | None = None
         try:
             async with self._session.request(
-                request.method, url, headers=headers, data=body, allow_redirects=False
+                request.method, url, headers=headers, data=data, allow_redirects=False
             ) as upstream:
                 self._logger.debug(f"{request.method} {request.path} -> {upstream.status}")
                 response = web.StreamResponse(
@@ -252,19 +284,28 @@ class JupyterDeployClientProxy:
                 await response.write_eof()
                 return response
         except aiohttp.ClientError as e:
-            self._logger.warning(f"upstream unreachable for {request.method} {request.path}: {e}")
-            return web.Response(status=502, text=f"upstream unreachable: {e}")
+            if response is None:
+                # Failed before any bytes went downstream — a clean 502 is safe.
+                self._logger.warning(f"upstream unreachable for {request.method} {request.path}: {e}")
+                return web.Response(status=502, text=f"upstream unreachable: {e}")
+            # Headers are already on the wire (streaming); a fresh Response would be written INSIDE
+            # this response's body. Aborting the connection is the only honest truncation signal.
+            self._logger.warning(f"upstream failed mid-response for {request.method} {request.path}: {e}")
+            if request.transport is not None:
+                request.transport.abort()
+            return response
 
     async def _relay_ws(self, request: web.Request) -> web.StreamResponse:
         assert self._session is not None and self._bundle is not None
 
-        # Negotiate the WebSocket subprotocol symmetrically on both legs. JupyterLab's kernel
-        # channels request `v1.kernel.websocket.jupyter.org`, whose framing is binary; if the
-        # downstream response doesn't echo the negotiated subprotocol back to the browser, the
-        # client silently falls back to the v0 text protocol while the server speaks v1, and
-        # every kernel message fails to deserialize ("cannot convert 'str' object to bytes").
-        # Passing `protocols` to both ends lets aiohttp regenerate the handshake header (the raw
-        # sec-websocket-protocol header is dropped in get_forwarded_request_headers).
+        # Send the browser its 101 IMMEDIATELY, then connect upstream — do NOT make the browser wait
+        # a full TLS+WS handshake to the remote host (~250ms to a cross-region instance) for its
+        # handshake. Preparing downstream only after ws_connect (what Gaurav's #347 review suggested)
+        # delayed every WS open by that RTT and, on reopen with many concurrent WS, made JupyterLab
+        # churn/abandon connections (browser-initiated close_code 0). JupyterLab offers a single
+        # subprotocol, so echoing the client's list downstream matches what upstream negotiates.
+        # (The raw sec-websocket-protocol header is dropped in get_forwarded_request_headers; aiohttp
+        # regenerates it from `protocols`.)
         client_protocols = [
             p.strip() for p in request.headers.get("Sec-WebSocket-Protocol", "").split(",") if p.strip()
         ]

@@ -57,6 +57,20 @@ outside of the instruction runner code paths.
 4. **No Engine-specific implementation in Core**: use the `/engine/<engine-name>` module
 5. **Not Provider-specific implementation in Core**: use the `/provider/<provider-name>` or `/api/<api-name>` modules
 
+## Client proxy package
+Code: `./libs/jupyter-deploy-client-proxy`
+
+Client-side local reverse proxy that lets `jd open`/`jd proxy` reach a template's remote host over
+pinned self-signed TLS, injecting the rotating AWS-identity credential. Runs on the user's laptop,
+not the cloud host. Two boundary invariants define this package:
+- **Zero cloud / `jupyter_deploy` dependencies.** It must not import `boto3`, any cloud SDK, or the
+  `jupyter_deploy` CLI package. It ships only via the CLI's optional `[proxy]` extra.
+- **`jd` never imports it — it shells out to the `jupyter-deploy-client-proxy` console script.** The
+  bare-install test (`libs/jupyter-deploy/tests/e2e/test_bare_installation.py::test_no_client_proxy`)
+  enforces this: a handler importing it turns the bare CI track red.
+
+Its functional suite is a separate track — see "Running the client-proxy functional tests" below.
+
 ## Base template package
 Code: `./libs/jupyter-deploy-tf-ec2-base`
 
@@ -72,6 +86,29 @@ There MUST NOT BE be any `variable` blocks in files other than `variables.tf`.
 IMPORTANT: Do not copy files to `/home/jovyan` during Docker build time.
 The EBS volume for Jupyter data is mounted at runtime, and any files copied during build will be hidden by this mount.
 Instead, copy files to a location like `/opt` during build and then copy them to `/home/jovyan` in startup scripts.
+
+## EC2 JupyterLab template package
+Code: `./libs/jupyter-deploy-tf-aws-ec2-jupyterlab`
+
+Single-user JupyterLab on a remote EC2 instance, reached from the user's laptop through the local
+client proxy over pinned self-signed TLS and authorized by the caller's AWS identity. AWS
+credentials are the only prerequisite — no domain, Route53, ACM, or OAuth app; no public URL, no EIP.
+- infrastructure-as-code engine: `terraform`
+- cloud provider: `aws`
+- identity provider: none — access is gated by AWS IAM identity (`auth_arn_allowlist`)
+
+Same variable rules as the base template: all variables in `variables.tf` (no defaults), defaults in
+`presets/defaults-all.tfvars`, no `variable` blocks elsewhere. The same `/opt`-vs-`/home/jovyan`
+build-time gotcha applies (the data volume mounts over `/home/jovyan` at runtime).
+
+`template/engine/` holds the EC2 infra (`main`/`variables`/`outputs` plus `iam`/`cert`/`commands`/
+`services`/`waiter.tf`) with reusable resources under `modules/`. `template/services/` holds the
+docker-compose stack rendered at boot: `jupyter` (two package-manager image flavors, `jupyter/` and
+`jupyter-pixi/`), `traefik` (TLS on :443), `auth-sidecar/` (Go ForwardAuth that replays a presigned
+`sts:GetCallerIdentity` token and allowlists the returned ARN), `fluent-bit`, and `log-rotator`.
+The auth boundary is pinned TLS + the STS-identity token, NOT the network layer (the security group
+opens :443 to the world). The Go sidecar is stdlib-only; build/test it with `go build`/`go test` in
+`template/services/auth-sidecar/` (no CI target yet).
 
 ## EKS OIDC template package
 Code: `./libs/jupyter-deploy-tf-aws-eks-oidc`

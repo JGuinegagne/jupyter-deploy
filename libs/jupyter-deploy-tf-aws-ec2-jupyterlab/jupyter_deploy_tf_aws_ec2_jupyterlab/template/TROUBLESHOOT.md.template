@@ -1,0 +1,28 @@
+# Troubleshooting Guide
+
+This guide details how to investigate and resolve common issues.
+
+## Service quota limits
+
+`jd up` can fail when an AWS service quota is exhausted. The common case:
+
+- **EC2 vCPUs** — `RunInstances` fails with `VcpuLimitExceeded`. New accounts
+  start with a low On-Demand vCPU limit per region, and `0` for accelerated
+  families (GPU/Neuron), so this often blocks a first deployment. Quotas are
+  measured in vCPUs, not instance counts.
+
+Relevant quota codes (service code `ec2`):
+
+| Quota code | Quota |
+|---|---|
+| `L-1216C47A` | Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances |
+| `L-DB2E81BA` | Running On-Demand G and VT instances (most GPU types) |
+| `L-417A185B` | Running On-Demand P instances |
+| `L-1945791B` / `L-2C3B7624` | Running On-Demand Inf / Trn instances (Neuron) |
+
+To resolve:
+
+- Pick a smaller `instance_type`, or request a higher limit. For the EC2 vCPU
+  quota, the service code is `ec2` and the quota code is `L-1216C47A`.
+
+{{ request-quota-increase-instructions }}

@@ -50,19 +50,24 @@ class TestGetForwardedRequestHeaders(unittest.TestCase):
         result = get_forwarded_request_headers({"Accept": "*/*"}, {"x-k8s-aws-id": "dep-1"}, "10.0.0.1", 443)
         self.assertEqual(result["x-k8s-aws-id"], "dep-1")
 
-    def test_rewrites_origin_to_upstream(self) -> None:
+    def test_rewrites_origin_omitting_default_https_port(self) -> None:
+        # Port 443 must be omitted so Origin's netloc matches the Host header aiohttp sends (no port).
         result = get_forwarded_request_headers({"Origin": "http://127.0.0.1:9999"}, {}, "10.0.0.1", 443)
-        self.assertEqual(result["Origin"], "https://10.0.0.1:443")
+        self.assertEqual(result["Origin"], "https://10.0.0.1")
+
+    def test_rewrites_origin_including_non_default_port(self) -> None:
+        result = get_forwarded_request_headers({"Origin": "http://127.0.0.1:9999"}, {}, "10.0.0.1", 8443)
+        self.assertEqual(result["Origin"], "https://10.0.0.1:8443")
 
     def test_rewrites_referer_origin_preserving_path_and_query(self) -> None:
         result = get_forwarded_request_headers(
             {"Referer": "http://127.0.0.1:9999/lab/tree?a=1#frag"}, {}, "10.0.0.1", 443
         )
-        self.assertEqual(result["Referer"], "https://10.0.0.1:443/lab/tree?a=1#frag")
+        self.assertEqual(result["Referer"], "https://10.0.0.1/lab/tree?a=1#frag")
 
     def test_rewrites_case_insensitively_preserving_key_casing(self) -> None:
         result = get_forwarded_request_headers({"origin": "http://127.0.0.1:9999"}, {}, "10.0.0.1", 443)
-        self.assertEqual(result["origin"], "https://10.0.0.1:443")
+        self.assertEqual(result["origin"], "https://10.0.0.1")
         self.assertNotIn("Origin", result)
 
     def test_does_not_add_origin_when_absent(self) -> None:
@@ -101,10 +106,18 @@ class TestGetSecondsUntilRefresh(unittest.TestCase):
         mock_datetime.now.return_value = now
         self.assertEqual(get_seconds_until_refresh(now + timedelta(seconds=60), margin_seconds=15), 45.0)
 
-    def test_never_negative(self, mock_datetime: Mock) -> None:
+    def test_margin_exceeds_remaining_falls_back_to_fraction(self, mock_datetime: Mock) -> None:
+        # 5s left, 15s margin: a plain lifetime-minus-margin sleep is -10 (would spin); instead we
+        # refresh at a fraction of what's left (5 * 0.5 = 2.5s), never 0.
         now = datetime(2026, 1, 1, tzinfo=UTC)
         mock_datetime.now.return_value = now
-        self.assertEqual(get_seconds_until_refresh(now + timedelta(seconds=5), margin_seconds=15), 0.0)
+        self.assertEqual(get_seconds_until_refresh(now + timedelta(seconds=5), margin_seconds=15), 2.5)
+
+    def test_already_expired_floors_to_minimum(self, mock_datetime: Mock) -> None:
+        # Past expiry (clock skew): never returns <= 0 — floors to MIN_REFRESH_SLEEP_SECONDS (1.0).
+        now = datetime(2026, 1, 1, tzinfo=UTC)
+        mock_datetime.now.return_value = now
+        self.assertEqual(get_seconds_until_refresh(now - timedelta(seconds=30), margin_seconds=15), 1.0)
 
     def test_reads_current_utc_clock(self, mock_datetime: Mock) -> None:
         fixed = datetime(2026, 1, 1, tzinfo=UTC)
