@@ -1,5 +1,6 @@
 """CLI wrapper for jupyter-deploy commands."""
 
+import json
 import logging
 import re
 import subprocess
@@ -327,6 +328,70 @@ class JDCli:
         result = self.run_command(["jupyter-deploy", "show", "--output", output_name, "--text"])
         self._jupyterlab_url = result.stdout.strip()
         return self._jupyterlab_url
+
+    def start_proxy(self, path: str = "") -> str:
+        """Start the local client proxy for this project and return its loopback URL.
+
+        Runs `jd proxy start` (always detached) then reads the bound port back from
+        `jd proxy show --json`. `jd proxy start` never replaces a running proxy — it exits
+        non-zero if one is already running for the project, so callers must stop any prior
+        proxy first. The instance must be running first — the proxy resolves the endpoint via
+        `jd proxy connect-info`, which fails if the host is stopped.
+
+        Args:
+            path: Optional path appended to the loopback URL (e.g. "/lab").
+
+        Returns:
+            The loopback URL the proxy is listening on (e.g. "http://127.0.0.1:54321/lab").
+
+        Raises:
+            JDCliError: If the proxy fails to start or its port cannot be read.
+        """
+        self.run_command(["jupyter-deploy", "proxy", "start"])
+        return self.get_proxy_url(path)
+
+    def get_proxy_port(self) -> int:
+        """Return the loopback port the running proxy is bound to.
+
+        Reads `jd proxy show --json`, which emits a single clean JSON document on stdout.
+
+        Raises:
+            JDCliError: If no proxy is running or the port cannot be parsed.
+        """
+        result = self.run_command(["jupyter-deploy", "proxy", "show", "--json"])
+        payload = json.loads(result.stdout.strip())
+        port = payload.get("port")
+        if not isinstance(port, int):
+            raise JDCliError(f"Could not read proxy port from `jd proxy show --json`: {result.stdout!r}")
+        return port
+
+    def get_proxy_url(self, path: str = "") -> str:
+        """Return the proxy's loopback URL, optionally with a path appended."""
+        return f"http://127.0.0.1:{self.get_proxy_port()}{path}"
+
+    def get_proxy_status(self) -> str:
+        """Return the running proxy's one-word state (e.g. "running").
+
+        Raises:
+            JDCliError: If no proxy is running.
+            ValueError: If the status cannot be parsed.
+        """
+        result = self.run_command(["jupyter-deploy", "proxy", "status"])
+        for line in result.stdout.splitlines():
+            if "Proxy status:" in line:
+                status = line.split(":", 1)[1].strip()
+                return re.sub(r"\x1b\[[0-9;]*m", "", status)
+        raise ValueError("Could not parse proxy status from command output")
+
+    def stop_proxy(self) -> None:
+        """Stop the local proxy for this project.
+
+        Raises:
+            JDCliError: If no proxy is running (`jd proxy stop` exits non-zero via
+                `NoProxyFoundError`). Callers using this for idempotent setup/teardown must
+                suppress it — see the ``client_proxy_app`` fixture.
+        """
+        self.run_command(["jupyter-deploy", "proxy", "stop"])
 
     def get_str_output(self, output_name: str) -> str:
         """Return a template output value as text via `jd show --output <name> --text`.
