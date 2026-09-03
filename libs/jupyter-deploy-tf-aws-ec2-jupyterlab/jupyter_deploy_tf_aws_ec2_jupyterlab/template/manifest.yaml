@@ -2,7 +2,7 @@ schema_version: 1
 template:
   name: tf-aws-ec2-jupyterlab
   engine: terraform
-  version: 0.1.0
+  version: 0.1.0rc1
 requirements:
 - name: terraform
 - name: awscli
@@ -31,8 +31,6 @@ values:
   source-key: iam_user_names_allowlist
 project-store:
   store-type: s3-only
-# `jd open` has no public URL for this template: it launches the local client proxy and
-# opens the loopback address the proxy binds, at <path>.
 open:
   mode: proxy
   path: /lab

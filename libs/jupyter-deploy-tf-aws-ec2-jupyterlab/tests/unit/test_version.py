@@ -50,19 +50,19 @@ def test_version_consistency() -> None:
     services_dir = project_path / PACKAGE_DIR / "template" / "services"
     jupyter_pyproject_version = _extract_version(
         services_dir / "jupyter" / "pyproject.jupyter.toml",
-        r'version\s*=\s*["\']([\d\.]+)["\']',
+        r'version\s*=\s*["\']([^"\']+)["\']',
     )
     jupyter_pixi_version = _extract_version(
         services_dir / "jupyter-pixi" / "pixi.jupyter.toml.tftpl",
-        r'version\s*=\s*["\']([\d\.]+)["\']',
+        r'version\s*=\s*["\']([^"\']+)["\']',
     )
     jupyter_kernel_version = _extract_version(
         services_dir / "jupyter" / "pyproject.kernel.toml",
-        r'version\s*=\s*["\']([\d\.]+)["\']',
+        r'version\s*=\s*["\']([^"\']+)["\']',
     )
     jupyter_pixi_kernel_version = _extract_version(
         services_dir / "jupyter-pixi" / "pyproject.kernel.toml",
-        r'version\s*=\s*["\']([\d\.]+)["\']',
+        r'version\s*=\s*["\']([^"\']+)["\']',
     )
 
     assert pyproject_version == init_version, (

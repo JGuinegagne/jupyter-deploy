@@ -1231,7 +1231,7 @@ dev = [
 
 [[package]]
 name = "jupyter-deploy-tf-aws-ec2-jupyterlab"
-version = "0.1.0"
+version = "0.1.0rc1"
 source = { editable = "libs/jupyter-deploy-tf-aws-ec2-jupyterlab" }
 dependencies = [
     { name = "boto3" },
