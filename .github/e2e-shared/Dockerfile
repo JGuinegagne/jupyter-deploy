@@ -25,8 +25,9 @@ ARG PKG_VERSION=""
 ARG EXTRA_INDEX_URL=https://test.pypi.org/simple/
 # Template under test (only applies when INSTALL_MODE=pypi): selects which
 # .github/e2e-<template>/pyproject.*.toml declares the published package.
-#   "base"     — jupyter-deploy-tf-aws-ec2-base
-#   "eks-oidc" — jupyter-deploy-tf-aws-eks-oidc
+#   "base"       — jupyter-deploy-tf-aws-ec2-base
+#   "eks-oidc"   — jupyter-deploy-tf-aws-eks-oidc
+#   "jupyterlab" — jupyter-deploy-tf-aws-ec2-jupyterlab
 ARG TEMPLATE=base
 
 # --- Dependency layer (cached when pyproject.toml unchanged) ---

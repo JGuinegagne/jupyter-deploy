@@ -75,6 +75,29 @@ Lessons from coordinated plugin/CLI/template releases — read before releasing:
 - **Test PyPI re-publish is a safe no-op.** `uv publish --check-url` skips identical
   files, so re-running a release gate from the same commit does NOT burn the version —
   as long as the built artifact is byte-identical (don't change the package between runs).
+- **The jupyterlab template release gate fresh-deploys + destroys — no persistent slot.**
+  `release-jupyterlab.yml` calls `e2e-jupyterlab-release.yml` → `e2e-jupyterlab-fresh.yml`,
+  which deploys the template in-container (CLI installed with the `[aws,proxy]` extra),
+  runs the E2E suite, then tears the deployment down (best-effort even on failure).
+  - **TEMPORARY CLI source:** `.github/e2e-jupyterlab/pyproject.release.toml` sources
+    `jupyter-deploy` + `jupyter-deploy-client-proxy` from the **workspace** (editable), NOT
+    prod PyPI — a prod install of the CLI's `[proxy]` extra can't resolve yet (the extra pins
+    `>=0.1.0`, no final proxy published). So the jupyterlab template can release **before** the
+    CLI. The gate still tests the PUBLISHED template (Test PyPI). Once a final CLI + proxy ship,
+    drop those two path sources so the gate installs the CLI from PyPI (restores the normal
+    `plugin → proxy → CLI → templates` ordering). Unlike
+  base/eks there's no OAuth app, subdomain, cert quota, or restorable app slot: the template
+  is AWS-creds-only, so canary can fresh-deploy every run (canary is not wired yet). The
+  fresh workflow also runs on `workflow_dispatch` for transport-level proxy changes.
+  - **ECR:** all six original repos are claimed (base 1/2/3, eks 4/5/6 — canary pins **#3**
+    and **#6**), so jupyterlab gets its **own trio, repos 7-9**, added to the CI template
+    (`ecr.tf`/`outputs.tf`, no OAuth app tags; the admin e2e/release roles already cover
+    any ECR repo, so no IAM wiring). One repo per concurrent trigger — **7 = PR/dispatch,
+    8 = release, 9 = canary** — because in the worst case canary, a PR hook, and a release
+    can run at once; a shared repo would collide on the `:latest`/`:<sha>` image tags.
+    Concurrency is keyed per slot (`e2e-jupyterlab-<slot>`) so the three run in parallel.
+    **Requires a `sandbox-ci` redeploy** (`jd up` on the CI project) before the jupyterlab
+    E2E workflows can resolve `ecr_repository_url_7..9`.
 
 ## Testing Workflow Changes
 

@@ -1,0 +1,116 @@
+name: E2E jupyterlab template job
+
+# Self-contained fresh-deploy job for the aws-ec2-jupyterlab template. Unlike the
+# base/eks jobs (which RESTORE a long-lived deployment from S3 and run read-only),
+# jupyterlab has no persistent app slot: this job deploys fresh in-container, runs
+# the E2E suite against it, then tears it down. The jupyterlab template needs only
+# AWS creds — no OAuth app, subdomain, or bot credentials — so there is no .env
+# plumbing beyond the container build vars.
+on:
+  workflow_call:
+    inputs:
+      ecr-tag:
+        description: "ECR image tag to pull (the pre-built E2E image)"
+        required: true
+        type: string
+      ecr-slot:
+        description: "ECR repo slot the image was pushed to (7=PR/dispatch, 8=release, 9=canary)"
+        required: true
+        type: string
+      project-dir:
+        description: "Project directory to deploy into (sandbox-*)"
+        required: false
+        type: string
+        default: "sandbox-jupyterlab"
+      test-filter:
+        description: "Pytest -k filter (empty = all tests)"
+        required: false
+        type: string
+        default: ""
+      destroy-after:
+        description: "Destroy the deployment after tests (best-effort; also on failure)"
+        required: false
+        type: boolean
+        default: true
+      timeout-minutes:
+        description: "Job timeout in minutes"
+        required: false
+        type: number
+        default: 60
+      ref:
+        description: "Git ref to checkout (default: triggering ref)"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  deploy-test:
+    name: Deploy, test, teardown
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    environment: e2e
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install UV and Python
+        uses: ./.github/actions/install-uv
+        with:
+          python-version: "3.13"
+
+      - name: Install just
+        uses: ./.github/actions/install-just
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.7"
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::997498698382:role/jupyter-infra-ci-e2e-6a3e2625
+          aws-region: us-west-2
+          role-duration-seconds: 7200
+
+      # sandbox-ci provides the ECR repo URL + region for the image pull (no bot creds needed).
+      - name: Restore CI project
+        run: just ci-restore sandbox-ci
+
+      - name: Pull pre-built E2E image
+        run: just ci-e2e-base-pull ${{ inputs.ecr-slot }} ${{ inputs.ecr-tag }}
+
+      - name: Seed .env
+        run: just env-setup-jupyterlab
+
+      # Deploy from INSIDE the pre-built container, so a pypi-mode image deploys the
+      # PUBLISHED package — not the runner's workspace code.
+      - name: Deploy (jd init / config / up)
+        id: deploy
+        run: just ci-e2e-jupyterlab-deploy ${{ inputs.project-dir }}
+
+      - name: Run E2E tests
+        if: steps.deploy.outcome == 'success'
+        run: just test-e2e-jupyterlab ${{ inputs.project-dir }} "${{ inputs.test-filter }}" "skip-sync=true"
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-jupyterlab
+          path: test-results/
+          if-no-files-found: ignore
+
+      # Best-effort teardown — runs even if deploy or tests failed, so a fresh run
+      # never inherits leaked infrastructure. jd down runs on the runner (the tfstate
+      # lives in the project dir written by the in-container deploy).
+      - name: Teardown deployment
+        if: always() && inputs.destroy-after
+        continue-on-error: true
+        run: cd ${{ inputs.project-dir }} && uv run jd down -y -v

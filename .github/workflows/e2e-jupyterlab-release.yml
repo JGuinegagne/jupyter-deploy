@@ -1,0 +1,23 @@
+name: E2E release gate (jupyterlab template)
+
+on:
+  workflow_call:
+    inputs:
+      pkg-version:
+        description: "Package version (from build job)"
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  e2e-release:
+    uses: ./.github/workflows/e2e-jupyterlab-fresh.yml
+    with:
+      ecr-slot: "8" # release repo — isolated from PR/dispatch (7) and canary (9)
+      install-mode: pypi
+      pkg-version: ${{ inputs.pkg-version }}
+      destroy-after: true
+    secrets: inherit

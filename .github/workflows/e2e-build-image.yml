@@ -28,7 +28,7 @@ on:
         type: string
         default: ""
       template:
-        description: "Template under test when install-mode=pypi: base (default) or eks-oidc"
+        description: "Template under test when install-mode=pypi: base (default), eks-oidc, or jupyterlab"
         required: false
         type: string
         default: "base"
