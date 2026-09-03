@@ -45,7 +45,7 @@ services:
       - "traefik.http.services.jupyter.loadbalancer.healthcheck.path=/lab/favicon.ico"
       - "traefik.http.services.jupyter.loadbalancer.healthcheck.interval=30s"
       - "traefik.http.services.jupyter.loadbalancer.healthcheck.timeout=10s"
-      - "traefik.http.routers.jupyter.middlewares=forwardauth@docker"
+      - "traefik.http.routers.jupyter.middlewares=forwardauth@file"
     volumes:
       - /mnt/jupyter-data:/home/jovyan
       - /var/run/docker.sock:/var/run/docker.sock
@@ -111,18 +111,19 @@ services:
       # The auth sidecar treats these as its whole interface (clean for later extraction):
       # bind the token to this deployment, scope to this account, allowlist IAM role/user
       # names (unique per account regardless of path), and pin the STS endpoint.
+      # The two allowlists are interpolated from /opt/docker/.env (written by docker-startup.sh
+      # from /etc/AUTH_ALLOWLIST), NOT baked in here — so `jd users`/`jd teams` can change them at
+      # runtime by rewriting .env and recreating only this container. See update-allowlist.sh.
       - DEPLOYMENT_ID=${deployment_id}
       - AWS_ACCOUNT_ID=${aws_account_id}
-      - ROLE_NAME_ALLOWLIST=${role_allowlist}
-      - USER_NAME_ALLOWLIST=${user_allowlist}
+      - ROLE_NAME_ALLOWLIST=$${ROLE_NAME_ALLOWLIST}
+      - USER_NAME_ALLOWLIST=$${USER_NAME_ALLOWLIST}
       - AWS_REGION=${aws_region}
       - STS_ENDPOINT=https://sts.${aws_region}.amazonaws.com
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.services.auth-sidecar.loadbalancer.server.port=4181"
-      # ForwardAuth middleware Traefik consults before proxying to jupyter.
-      - "traefik.http.middlewares.forwardauth.forwardauth.address=http://auth-sidecar:4181/auth"
-      - "traefik.http.middlewares.forwardauth.forwardauth.trustForwardHeader=true"
+    # No `traefik.enable`: the sidecar is reached by the `forwardauth@file` middleware over the
+    # compose network (http://auth-sidecar:4181/auth), so it needs no Traefik route. Enabling it
+    # would make Traefik publish a default plain-HTTP route to it on :443. The middleware is
+    # defined in traefik-dynamic.yml.
   traefik:
     image: traefik:latest
     container_name: traefik

@@ -11,6 +11,14 @@ data "local_file" "update_server" {
   filename = "${path.module}/../services/commands/update-server.sh"
 }
 
+data "local_file" "update_allowlist" {
+  filename = "${path.module}/../services/commands/update-allowlist.sh"
+}
+
+data "local_file" "get_allowlist" {
+  filename = "${path.module}/../services/commands/get-allowlist.sh"
+}
+
 # Define SSM documents for all commands
 locals {
   ssm_status_check   = <<DOC
@@ -89,12 +97,11 @@ description: Execute a command inside a service container.
 parameters:
   service:
     type: String
-    description: "The service in which to execute the command (jupyter, traefik or auth-sidecar)."
+    description: "The service in which to execute the command (jupyter or traefik). The auth-sidecar image is distroless (no shell), so exec is not supported there."
     default: jupyter
     allowedValues:
       - jupyter
       - traefik
-      - auth-sidecar
   commands:
     type: String
     description: "The command to execute inside the container."
@@ -122,6 +129,68 @@ properties:
   linux:
     commands: "case {{service}} in jupyter) docker exec -it {{service}} /bin/bash;; traefik) docker exec -it {{service}} /bin/sh;; esac"
     runAsElevated: true
+DOC
+  ssm_users_update   = <<DOC
+schemaVersion: '2.2'
+description: Update the IAM user names allowlisted to access the app (recreates only auth-sidecar).
+parameters:
+  users:
+    type: String
+    description: "The IAM user names (comma-separated) to add, remove or set in the allowlist."
+  action:
+    type: String
+    description: "The type of action to perform."
+    default: add
+    allowedValues:
+      - add
+      - remove
+      - set
+mainSteps:
+  - action: aws:runShellScript
+    name: UpdateAllowlistedUsers
+    inputs:
+      runCommand:
+        - "sh /usr/local/bin/update-allowlist.sh users {{action}} {{users}}"
+DOC
+  ssm_teams_update   = <<DOC
+schemaVersion: '2.2'
+description: Update the IAM role names allowlisted to access the app (recreates only auth-sidecar).
+parameters:
+  teams:
+    type: String
+    description: "The IAM role names (comma-separated) to add, remove or set in the allowlist."
+  action:
+    type: String
+    description: "The type of action to perform."
+    default: add
+    allowedValues:
+      - add
+      - remove
+      - set
+mainSteps:
+  - action: aws:runShellScript
+    name: UpdateAllowlistedRoles
+    inputs:
+      runCommand:
+        - "sh /usr/local/bin/update-allowlist.sh roles {{action}} {{teams}}"
+DOC
+  ssm_auth_check     = <<DOC
+schemaVersion: '2.2'
+description: Read the IAM principal names allowlisted to access the app.
+parameters:
+  category:
+    type: String
+    description: "Which allowlist to read: 'users' (IAM users) or 'teams' (IAM roles)."
+    default: users
+    allowedValues:
+      - users
+      - teams
+mainSteps:
+  - action: aws:runShellScript
+    name: GetAllowlist
+    inputs:
+      runCommand:
+        - "sh /usr/local/bin/get-allowlist.sh {{category}}"
 DOC
 }
 
@@ -168,5 +237,32 @@ resource "aws_ssm_document" "server_connect" {
   document_format = "YAML"
 
   content = local.ssm_server_connect
+  tags    = local.combined_tags
+}
+
+resource "aws_ssm_document" "auth_users_update" {
+  name            = "auth-users-update-${local.doc_postfix}"
+  document_type   = "Command"
+  document_format = "YAML"
+
+  content = local.ssm_users_update
+  tags    = local.combined_tags
+}
+
+resource "aws_ssm_document" "auth_teams_update" {
+  name            = "auth-teams-update-${local.doc_postfix}"
+  document_type   = "Command"
+  document_format = "YAML"
+
+  content = local.ssm_teams_update
+  tags    = local.combined_tags
+}
+
+resource "aws_ssm_document" "auth_check" {
+  name            = "auth-check-${local.doc_postfix}"
+  document_type   = "Command"
+  document_format = "YAML"
+
+  content = local.ssm_auth_check
   tags    = local.combined_tags
 }

@@ -9,7 +9,17 @@ provider "aws" {
 
 data "aws_region" "current" {}
 data "aws_partition" "current" {}
-data "aws_caller_identity" "current" {}
+data "aws_caller_identity" "current" {
+  # The auth model (and the caller-name derivation below) only makes sense for an IAM role
+  # (assumed-role) or IAM user caller. Root and federated identities have no allowlist-able
+  # role/user name, so fail the plan with a clear message rather than deriving a bogus name.
+  lifecycle {
+    postcondition {
+      condition     = can(regex(":(assumed-role|user)/", self.arn))
+      error_message = "This template must be deployed by an IAM role or IAM user. The current identity (${self.arn}) is not supported. Deploy as an assumed IAM role or an IAM user."
+    }
+  }
+}
 resource "random_id" "postfix" {
   byte_length = 4
 }

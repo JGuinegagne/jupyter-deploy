@@ -35,8 +35,21 @@ class TestManifest(unittest.TestCase):
         "server.connect",
     ]
     EXPECTED_PROXY_COMMANDS = ["proxy.connect-info"]
-    # The jupyterlab template must NOT declare any OAuth / user / team / org / secret commands.
-    FORBIDDEN_COMMAND_PREFIXES = ["users.", "teams.", "organization.", "secret."]
+    # Runtime IAM-allowlist management (users. -> IAM users, teams. -> IAM roles); recreates only
+    # the auth-sidecar, no full redeploy. Distinct from base's GitHub-OAuth users/teams.
+    EXPECTED_ACCESS_COMMANDS = [
+        "users.add",
+        "users.remove",
+        "users.set",
+        "users.list",
+        "teams.add",
+        "teams.remove",
+        "teams.set",
+        "teams.list",
+    ]
+    # The jupyterlab template gates access by AWS IAM identity, not OAuth — so no GitHub
+    # organization allowlisting and no stored secret. (users./teams. ARE declared; see above.)
+    FORBIDDEN_COMMAND_PREFIXES = ["organization.", "secret."]
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -104,6 +117,11 @@ class TestManifest(unittest.TestCase):
         command_names = self._command_names()
         for expected_cmd in self.EXPECTED_PROXY_COMMANDS:
             self.assertIn(expected_cmd, command_names, f"Expected proxy command {expected_cmd} missing from manifest")
+
+    def test_all_expected_access_commands_declared(self) -> None:
+        command_names = self._command_names()
+        for expected_cmd in self.EXPECTED_ACCESS_COMMANDS:
+            self.assertIn(expected_cmd, command_names, f"Expected access command {expected_cmd} missing from manifest")
 
     def test_no_forbidden_commands_declared(self) -> None:
         command_names = self._command_names()
