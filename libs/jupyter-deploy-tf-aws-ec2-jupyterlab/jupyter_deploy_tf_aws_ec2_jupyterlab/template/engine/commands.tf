@@ -137,6 +137,10 @@ parameters:
   users:
     type: String
     description: "The IAM user names (comma-separated) to add, remove or set in the allowlist."
+    # Constrain to comma-separated bare IAM names. This value is substituted into a root shell
+    # by aws:runShellScript, so no whitespace or shell metacharacters (`;`, `$`, backticks, `&`,
+    # `|`, newlines). IAM names allow [A-Za-z0-9+=,.@_-]; comma is the list separator.
+    allowedPattern: "^[a-zA-Z0-9+=,.@_-]*$"
   action:
     type: String
     description: "The type of action to perform."
@@ -159,6 +163,10 @@ parameters:
   teams:
     type: String
     description: "The IAM role names (comma-separated) to add, remove or set in the allowlist."
+    # Constrain to comma-separated bare IAM names. This value is substituted into a root shell
+    # by aws:runShellScript, so no whitespace or shell metacharacters (`;`, `$`, backticks, `&`,
+    # `|`, newlines). IAM names allow [A-Za-z0-9+=,.@_-]; comma is the list separator.
+    allowedPattern: "^[a-zA-Z0-9+=,.@_-]*$"
   action:
     type: String
     description: "The type of action to perform."

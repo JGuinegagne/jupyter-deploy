@@ -66,9 +66,20 @@ case "$ENTITY_TYPE" in
     ;;
 esac
 
+# Defense-in-depth: this value normally arrives via SSM with an allowedPattern, but reject anything
+# outside comma-separated bare IAM names here too (no whitespace or shell metacharacters).
+if [ -n "$VALUES" ] && ! printf '%s' "$VALUES" | grep -Eq '^[a-zA-Z0-9+=,.@_-]+$'; then
+  echo "Error: values must be comma-separated bare IAM names ([A-Za-z0-9+=,.@_-])."
+  exit 1
+fi
+
+# IAM names are unique per account regardless of case, and the sidecar matches case-insensitively
+# (it lower-cases both the allowlist and the caller name). Fold to lower case here too so add/remove/
+# set/dedup agree with the sidecar — otherwise `remove datascience` would silently no-op against a
+# stored `DataScience` while access stays granted.
 CURRENT=$(get_section_content "$ENTITY_TYPE")
-IFS=',' read -ra CURRENT_ARR <<< "$CURRENT"
-IFS=',' read -ra INPUT_ARR <<< "$VALUES"
+IFS=',' read -ra CURRENT_ARR <<< "${CURRENT,,}"
+IFS=',' read -ra INPUT_ARR <<< "${VALUES,,}"
 
 # Build the resulting set of names for this section.
 declare -A RESULT_SET=()
