@@ -1,11 +1,11 @@
-name: E2E jupyterlab template job
+name: E2E jupyterlab template test job
 
-# Self-contained fresh-deploy job for the aws-ec2-jupyterlab template. Unlike the
-# base/eks jobs (which RESTORE a long-lived deployment from S3 and run read-only),
-# jupyterlab has no persistent app slot: this job deploys fresh in-container, runs
-# the E2E suite against it, then tears it down. The jupyterlab template needs only
-# AWS creds — no OAuth app, subdomain, or bot credentials — so there is no .env
-# plumbing beyond the container build vars.
+# Reusable NON-deployment test job for the aws-ec2-jupyterlab template. It restores the
+# fresh deployment produced by the deploy job (by project ID, from the S3 store) and runs
+# the E2E suite against it. The full_deployment tests are auto-skipped here (no
+# --with-full-deployment on an existing project) — they run in the deploy job instead.
+# jupyterlab needs only AWS creds (no OAuth app / subdomain / bot credentials), and has no
+# masked secrets, so the restore is a plain jd init --restore-project (no --restore-secrets).
 on:
   workflow_call:
     inputs:
@@ -17,26 +17,25 @@ on:
         description: "ECR repo slot the image was pushed to (7=PR/dispatch, 8=release, 9=canary)"
         required: true
         type: string
+      deployment-id:
+        description: "Deployment id to restore from the S3 store (emitted by the deploy job)"
+        required: true
+        type: string
       project-dir:
-        description: "Project directory to deploy into (sandbox-*)"
+        description: "Project directory to restore into (sandbox-*)"
         required: false
         type: string
-        default: "sandbox-jupyterlab"
+        default: "sandbox-e2e"
       test-filter:
-        description: "Pytest -k filter (empty = all tests)"
+        description: "Pytest -k filter (empty = all non-deployment tests)"
         required: false
         type: string
         default: ""
-      destroy-after:
-        description: "Destroy the deployment after tests (best-effort; also on failure)"
-        required: false
-        type: boolean
-        default: true
       timeout-minutes:
         description: "Job timeout in minutes"
         required: false
         type: number
-        default: 60
+        default: 30
       ref:
         description: "Git ref to checkout (default: triggering ref)"
         required: false
@@ -44,8 +43,8 @@ on:
         default: ""
 
 jobs:
-  deploy-test:
-    name: Deploy, test, teardown
+  test:
+    name: Run E2E tests
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
     environment: e2e
@@ -86,17 +85,14 @@ jobs:
       - name: Pull pre-built E2E image
         run: just ci-e2e-base-pull ${{ inputs.ecr-slot }} ${{ inputs.ecr-tag }}
 
+      - name: Restore deployment from store
+        run: just ci-restore-jupyterlab ${{ inputs.project-dir }} ${{ inputs.deployment-id }}
+
       - name: Seed .env
         run: just env-setup-jupyterlab
 
-      # Deploy from INSIDE the pre-built container, so a pypi-mode image deploys the
-      # PUBLISHED package — not the runner's workspace code.
-      - name: Deploy (jd init / config / up)
-        id: deploy
-        run: just ci-e2e-jupyterlab-deploy ${{ inputs.project-dir }}
-
+      # Existing project + no --with-full-deployment ⇒ full_deployment tests auto-skip.
       - name: Run E2E tests
-        if: steps.deploy.outcome == 'success'
         run: just test-e2e-jupyterlab ${{ inputs.project-dir }} "${{ inputs.test-filter }}" "skip-sync=true"
 
       - name: Upload test artifacts
@@ -106,11 +102,3 @@ jobs:
           name: test-results-jupyterlab
           path: test-results/
           if-no-files-found: ignore
-
-      # Best-effort teardown — runs even if deploy or tests failed, so a fresh run
-      # never inherits leaked infrastructure. jd down runs on the runner (the tfstate
-      # lives in the project dir written by the in-container deploy).
-      - name: Teardown deployment
-        if: always() && inputs.destroy-after
-        continue-on-error: true
-        run: cd ${{ inputs.project-dir }} && uv run jd down -y -v

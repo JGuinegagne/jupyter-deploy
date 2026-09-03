@@ -573,6 +573,30 @@ ci-restore-base oauth_app_num ci_dir="sandbox-ci" project_dir="sandbox-base":
 ci-restore-eks oauth_app_num ci_dir="sandbox-ci" project_dir="sandbox-e2e":
     uv run python scripts/ci_restore_eks.py {{ci_dir}} {{oauth_app_num}} {{project_dir}}
 
+# Restore a jupyterlab template project from the S3 store (for tests/teardown/inspection).
+# jupyterlab has no OAuth app / subdomain to look up (base/eks restore by subdomain), so
+# pass a deployment_id to pick a specific project when several coexist (parallel runs);
+# with none, restore the sole project. No --restore-secrets: the template has no masked
+# secrets (AWS-identity auth).
+# Usage: just ci-restore-jupyterlab [project-dir] [deployment-id]
+ci-restore-jupyterlab project_dir="sandbox-e2e" deployment_id="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ARGS="{{project_dir}}"
+    if [ -n "{{deployment_id}}" ]; then ARGS="$ARGS --deployment-id {{deployment_id}}"; fi
+    uv run python {{justfile_directory()}}/scripts/ci_restore_jupyterlab.py $ARGS
+
+# Tear down + delete jupyterlab e2e project(s) from the store. With a deployment_id, reap
+# only that one (the standard e2e flow's own-deployment teardown). Without one, reap ALL —
+# the nuclear option for a standalone cleanup of orphans from interrupted runs.
+# Usage: just find-takedown-jupyterlab [project-dir] [deployment-id]
+find-takedown-jupyterlab project_dir="sandbox-e2e" deployment_id="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ARGS="{{project_dir}}"
+    if [ -n "{{deployment_id}}" ]; then ARGS="$ARGS --deployment-id {{deployment_id}}"; fi
+    uv run python {{justfile_directory()}}/scripts/find_takedown_jupyterlab.py $ARGS
+
 # Find a base template project by subdomain, take it down (jd down), and delete from S3 store
 # Exits successfully if no matching project is found (nothing to take down)
 # Usage: just find-takedown-base <oauth-app-num> [ci-dir] [project-dir]
@@ -824,7 +848,7 @@ ci-e2e-eks-deploy project_dir="sandbox-e2e" ci_dir="sandbox-ci":
 # runner's workspace code. Tests run separately afterwards via `just test-e2e-jupyterlab`.
 #
 # Usage: just ci-e2e-jupyterlab-deploy <project-dir>
-ci-e2e-jupyterlab-deploy project_dir="sandbox-jupyterlab":
+ci-e2e-jupyterlab-deploy project_dir="sandbox-e2e":
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -864,8 +888,18 @@ ci-e2e-jupyterlab-deploy project_dir="sandbox-jupyterlab":
     echo "=== jd config ==="
     $EXEC ". .venv/bin/activate && cd /workspace/{{project_dir}} && jupyter-deploy config -v"
     echo "=== jd up ==="
-    $EXEC ". .venv/bin/activate && cd /workspace/{{project_dir}} && jupyter-deploy up -y -v"
-    echo "✓ JupyterLab deployment complete"
+    # Capture the rc but do NOT abort: we still want to emit the deployment_id below so a
+    # mid-apply failure can be torn down scoped to its own deployment (jd backs the partial
+    # state up to the store even on failure).
+    UP_RC=0
+    $EXEC ". .venv/bin/activate && cd /workspace/{{project_dir}} && jupyter-deploy up -y -v" || UP_RC=$?
+    # Emit the deployment_id so the caller can scope teardown to THIS deployment (parallel
+    # runs each reap only their own). Written to $GITHUB_OUTPUT in CI.
+    echo "=== deployment id ==="
+    DEPLOYMENT_ID=$($EXEC ". .venv/bin/activate && cd /workspace/{{project_dir}} && jupyter-deploy show -o deployment_id --text" 2>/dev/null | tr -d '[:space:]' || true)
+    echo "deployment_id=$DEPLOYMENT_ID"
+    if [ -n "${GITHUB_OUTPUT:-}" ]; then echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"; fi
+    exit "$UP_RC"
 
 # --- CLI release E2E commands ---
 
