@@ -32,6 +32,11 @@ resource "aws_instance" "ec2_jupyter_server" {
   vpc_security_group_ids = [var.security_group_id]
   iam_instance_profile   = var.instance_profile_name
 
+  # Request a public IPv4 explicitly rather than relying on the subnet's auto-assign attribute
+  # (which security baselines commonly disable). The template needs this address both for the
+  # instance to reach SSM/S3/STS and for the client proxy to dial it; there is no EIP.
+  associate_public_ip_address = true
+
   tags = merge(
     var.combined_tags,
     {
