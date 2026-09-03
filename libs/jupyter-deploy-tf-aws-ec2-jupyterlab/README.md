@@ -27,6 +27,22 @@ jd open                                              # start the proxy and open 
 - **Network:** the security group allows inbound `:443` only (open to `0.0.0.0/0`); the access
   boundary is the pinned TLS cert plus the STS-identity token above, not the network layer.
 
+## Managing access
+
+The deploying identity is always authorized. To grant others (matched case-insensitively by bare
+IAM name, scoped to this account), use the runtime commands — they recreate only the auth-sidecar
+(~1-2s), leave JupyterLab running, and write the change back into the terraform variables so `jd up`
+stays in sync:
+
+- IAM **roles**: `jd teams add|remove|set|list <RoleName>...`
+- IAM **users**: `jd users add|remove|set|list <name>...`
+
+(`jd teams` → IAM roles, `jd users` → IAM users.) The `iam_role_names_allowlist` /
+`iam_user_names_allowlist` variables are the source of truth — editing them and running `jd up` also
+reconciles the allowlist, but restarts the whole app, so the commands above are preferred for routine
+access changes. Because those commands write their change back into the variables, a later `jd up`
+re-applies the same list rather than reverting it.
+
 ## New IAM permissions
 
 The *local* CLI credentials need, in addition to the base SSM permissions:

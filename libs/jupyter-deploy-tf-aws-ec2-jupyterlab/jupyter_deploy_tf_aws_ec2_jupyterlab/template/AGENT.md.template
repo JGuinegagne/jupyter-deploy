@@ -87,12 +87,29 @@ The client proxy ships as an optional extra — install it with `pip install "ju
 
 ### Manage access
 
-Access is authorized by **AWS IAM identity**. The `auth-sidecar` validates a short-lived STS
-`GetCallerIdentity` token minted by `jd proxy connect-info` and checks the caller's IAM role or user
-name (in this deployment's AWS account) against `iam_role_names_allowlist` / `iam_user_names_allowlist`
-(the deployer is always authorized). To grant additional identities, add their bare IAM role or user
-names — not ARNs — to the matching list in the `overrides:` block of `./variables.yaml`, then re-apply
-with `jd config` followed by `jd up`.
+{{ proxy-aws-sts-based-access }}
+
+The **local caller** needs these IAM permissions for the proxy data path:
+
+- `ec2:DescribeInstances` — resolve the instance's current public IP (there is no Elastic IP).
+- `ssm:GetParameter` — read the published self-signed cert PEM (the TLS pin) from SSM Parameter Store.
+
+Minting the token is a local presign that makes no API call, so it needs no IAM permission. The
+security group opens `:443` to `0.0.0.0/0`, so no `ec2:*SecurityGroupIngress` permissions are required.
+Auto-starting a stopped instance on `jd open` and `jd host start`/`stop` additionally use
+`ec2:StartInstances` / `ec2:StopInstances`.
+
+{{ iam-roles-users-for-proxy-cmd-instructions }}
+
+The deploying identity is always authorized. There are two ways to change the allowlist:
+
+- **`jd users` / `jd teams` (above)** — recreate only the `auth-sidecar` (~1-2s; JupyterLab keeps
+  running) and write the change back into `iam_user_names_allowlist` / `iam_role_names_allowlist`.
+- **Edit those variables and run `jd up`** — reconciles the running allowlist from the variables, but
+  restarts the whole app (all containers). Prefer the CLI commands above for routine access changes.
+
+The variables are the source of truth. Because the CLI commands write back to them, a later `jd up`
+re-applies the same list (a no-op) rather than reverting a runtime change.
 
 ### View the full terraform logs
 
