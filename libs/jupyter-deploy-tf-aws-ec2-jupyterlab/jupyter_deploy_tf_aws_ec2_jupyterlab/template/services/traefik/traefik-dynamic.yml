@@ -7,3 +7,14 @@ tls:
   certificates:
     - certFile: /certs/cert.pem
       keyFile: /certs/key.pem
+http:
+  middlewares:
+    # ForwardAuth to the auth sidecar. Defined here (file provider) rather than via Docker labels
+    # on the sidecar so the sidecar needs no `traefik.enable`: with an enabled service and no
+    # router labels, Traefik would apply its defaultRule and publish a plain-HTTP route to the
+    # sidecar on the :443 entrypoint. The middleware reaches the sidecar over the compose network
+    # regardless of routing, so it needs no route.
+    forwardauth:
+      forwardAuth:
+        address: http://auth-sidecar:4181/auth
+        trustForwardHeader: true

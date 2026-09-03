@@ -104,12 +104,15 @@ func loadConfig() (*config, error) {
 	}, nil
 }
 
-// csvSet splits a comma-separated env value into a set, dropping blanks.
+// csvSet splits a comma-separated env value into a set, dropping blanks. Entries are
+// lower-cased: IAM role and user names are unique per account without regard to case, so
+// matching is case-insensitive (see config.allows) — "DataScience" in the allowlist must
+// authorize a caller STS reports as "datascience" and vice versa.
 func csvSet(raw string) map[string]bool {
 	set := map[string]bool{}
 	for v := range strings.SplitSeq(raw, ",") {
 		if v = strings.TrimSpace(v); v != "" {
-			set[v] = true
+			set[strings.ToLower(v)] = true
 		}
 	}
 	return set
@@ -159,6 +162,9 @@ func (c *config) allows(arn string) bool {
 	if account == "" || account != c.accountID {
 		return false
 	}
+	// Match case-insensitively: IAM names are unique per account regardless of case, and the
+	// allowlist sets are already lower-cased (see csvSet).
+	name = strings.ToLower(name)
 	switch kind {
 	case "role":
 		return c.roleNames[name]

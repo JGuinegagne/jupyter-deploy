@@ -22,12 +22,26 @@ PERC_MEM_RESERVATION_MB=$((TOTAL_MEMORY_MB * 95 / 100))
 JUPYTER_MEM_LIMIT_MB=$(( PERC_MEM_RESERVATION_MB < MAX_MEM_RESERVATION_MB ? PERC_MEM_RESERVATION_MB : MAX_MEM_RESERVATION_MB ))
 JUPYTER_MEM_RESERVATION_MB=$((JUPYTER_MEM_LIMIT_MB / 2))
 
+# Read the IAM principal allowlist (seeded first-boot by cloudinit, then owned at runtime by
+# `jd users`/`jd teams`). docker-compose interpolates these into the auth-sidecar env, so the live
+# lists survive reboots/redeploys without being baked into the compose file.
+read_allowlist_section() {
+    local section=$1
+    if [ -f /etc/AUTH_ALLOWLIST ]; then
+        sed -n "/^\[$section\]$/,/^\[/p" /etc/AUTH_ALLOWLIST | grep -v "^\[$section\]$" | grep -v "^\[" | tr -d '\n' | tr -d ' '
+    fi
+}
+ROLE_NAME_ALLOWLIST=$(read_allowlist_section roles)
+USER_NAME_ALLOWLIST=$(read_allowlist_section users)
+
 tee /opt/docker/.env >/dev/null << EOFENV
 SERVICE_UID=$(id -u service-user)
 SERVICE_GID=$(id -g service-user)
 DOCKER_GID=$(getent group docker | cut -d: -f3)
 JUPYTER_MEM_LIMIT_MB=${JUPYTER_MEM_LIMIT_MB}
 JUPYTER_MEM_RESERVATION_MB=${JUPYTER_MEM_RESERVATION_MB}
+ROLE_NAME_ALLOWLIST=${ROLE_NAME_ALLOWLIST}
+USER_NAME_ALLOWLIST=${USER_NAME_ALLOWLIST}
 EOFENV
 echo "Saved environment file /opt/docker/.env"
 

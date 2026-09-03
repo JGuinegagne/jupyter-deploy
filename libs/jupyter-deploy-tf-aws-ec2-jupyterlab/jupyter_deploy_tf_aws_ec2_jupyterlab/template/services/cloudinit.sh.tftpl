@@ -149,3 +149,16 @@ fi
 # Create dirs
 mkdir -p /opt/docker
 mkdir -p /var/log/services
+
+# Write the IAM principal allowlist from the terraform-provided values on EVERY run, so editing
+# `iam_role_names_allowlist` / `iam_user_names_allowlist` and running `jd up` reconciles the running
+# allowlist (docker-startup below reads this file into the sidecar's env and recreates it). The
+# terraform variables are the source of truth: `jd users` / `jd teams` (update-allowlist.sh) are the
+# no-restart fast path that edit this file AND write the change back into those variables, so a later
+# `jd up` re-writing this file from the variables is a no-op rather than a revert. [roles] holds IAM
+# role names (jd teams), [users] holds IAM user names (jd users).
+echo "[roles]" > /etc/AUTH_ALLOWLIST
+echo "${role_allowlist}" >> /etc/AUTH_ALLOWLIST
+echo "[users]" >> /etc/AUTH_ALLOWLIST
+echo "${user_allowlist}" >> /etc/AUTH_ALLOWLIST
+chmod 600 /etc/AUTH_ALLOWLIST

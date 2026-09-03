@@ -14,9 +14,11 @@ resource "null_resource" "wait_for_instance_ready" {
   triggers = {
     # Instance parameters:
     instance_id = module.ec2_instance.id
-    # the instance ID might be preserved even on VM swap
-    # add instance public IP (dynamic — no EIP; a new IP after stop/start is fine).
-    instance_ip    = module.ec2_instance.public_ip
+    # the instance ID might be preserved even on VM swap.
+    # NOTE: deliberately no public IP trigger — without an EIP the IP changes on every
+    # stop/start, and the await script never uses it (it keys on instance/association/document
+    # ids); triggering on it would needlessly replace this resource and re-run the multi-minute
+    # SSM/status wait after a plain `jd host stop` + `jd up`.
     ami            = module.ec2_instance.ami
     instance_type  = module.ec2_instance.instance_type
     root_volume_id = module.ec2_instance.root_block_device_id
