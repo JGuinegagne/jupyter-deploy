@@ -251,6 +251,168 @@ commands:
     - api-attribute: service
       source: cli
       source-key: service
+- cmd: users.add
+  sequence:
+  - api-name: aws.ssm.wait-command-sync
+    arguments:
+    - api-attribute: document_name
+      source: output
+      source-key: auth_users_update_document
+    - api-attribute: instance_id
+      source: output
+      source-key: instance_id
+    - api-attribute: users
+      source: cli
+      source-key: users
+    - api-attribute: action
+      source: cli
+      source-key: action
+  updates:
+  - variable-name: iam_user_names_allowlist
+    source: result
+    source-key: '[0].StandardOutputContent'
+    transform: comma-separated-str-to-list-str
+- cmd: users.remove
+  sequence:
+  - api-name: aws.ssm.wait-command-sync
+    arguments:
+    - api-attribute: document_name
+      source: output
+      source-key: auth_users_update_document
+    - api-attribute: instance_id
+      source: output
+      source-key: instance_id
+    - api-attribute: users
+      source: cli
+      source-key: users
+    - api-attribute: action
+      source: cli
+      source-key: action
+  updates:
+  - variable-name: iam_user_names_allowlist
+    source: result
+    source-key: '[0].StandardOutputContent'
+    transform: comma-separated-str-to-list-str
+- cmd: users.set
+  sequence:
+  - api-name: aws.ssm.wait-command-sync
+    arguments:
+    - api-attribute: document_name
+      source: output
+      source-key: auth_users_update_document
+    - api-attribute: instance_id
+      source: output
+      source-key: instance_id
+    - api-attribute: users
+      source: cli
+      source-key: users
+    - api-attribute: action
+      source: cli
+      source-key: action
+  updates:
+  - variable-name: iam_user_names_allowlist
+    source: result
+    source-key: '[0].StandardOutputContent'
+    transform: comma-separated-str-to-list-str
+- cmd: users.list
+  sequence:
+  - api-name: aws.ssm.wait-command-sync
+    arguments:
+    - api-attribute: document_name
+      source: output
+      source-key: auth_check_document
+    - api-attribute: instance_id
+      source: output
+      source-key: instance_id
+    - api-attribute: category
+      source: cli
+      source-key: category
+  results:
+  - result-name: users.list
+    source: result
+    source-key: '[0].StandardOutputContent'
+    transform: comma-separated-str-to-list-str
+- cmd: teams.add
+  sequence:
+  - api-name: aws.ssm.wait-command-sync
+    arguments:
+    - api-attribute: document_name
+      source: output
+      source-key: auth_teams_update_document
+    - api-attribute: instance_id
+      source: output
+      source-key: instance_id
+    - api-attribute: teams
+      source: cli
+      source-key: teams
+    - api-attribute: action
+      source: cli
+      source-key: action
+  updates:
+  - variable-name: iam_role_names_allowlist
+    source: result
+    source-key: '[0].StandardOutputContent'
+    transform: comma-separated-str-to-list-str
+- cmd: teams.remove
+  sequence:
+  - api-name: aws.ssm.wait-command-sync
+    arguments:
+    - api-attribute: document_name
+      source: output
+      source-key: auth_teams_update_document
+    - api-attribute: instance_id
+      source: output
+      source-key: instance_id
+    - api-attribute: teams
+      source: cli
+      source-key: teams
+    - api-attribute: action
+      source: cli
+      source-key: action
+  updates:
+  - variable-name: iam_role_names_allowlist
+    source: result
+    source-key: '[0].StandardOutputContent'
+    transform: comma-separated-str-to-list-str
+- cmd: teams.set
+  sequence:
+  - api-name: aws.ssm.wait-command-sync
+    arguments:
+    - api-attribute: document_name
+      source: output
+      source-key: auth_teams_update_document
+    - api-attribute: instance_id
+      source: output
+      source-key: instance_id
+    - api-attribute: teams
+      source: cli
+      source-key: teams
+    - api-attribute: action
+      source: cli
+      source-key: action
+  updates:
+  - variable-name: iam_role_names_allowlist
+    source: result
+    source-key: '[0].StandardOutputContent'
+    transform: comma-separated-str-to-list-str
+- cmd: teams.list
+  sequence:
+  - api-name: aws.ssm.wait-command-sync
+    arguments:
+    - api-attribute: document_name
+      source: output
+      source-key: auth_check_document
+    - api-attribute: instance_id
+      source: output
+      source-key: instance_id
+    - api-attribute: category
+      source: cli
+      source-key: category
+  results:
+  - result-name: teams.list
+    source: result
+    source-key: '[0].StandardOutputContent'
+    transform: comma-separated-str-to-list-str
 - cmd: proxy.connect-info
   sequence:
   - api-name: aws.ec2.resolve-endpoint
@@ -308,9 +470,9 @@ supervised-execution:
         - enter-pattern: Cloudinit script is running
           label: Configuring EC2 instance
           weight: 35
-        - enter-pattern: Generating self-signed cert
-          label: Generating self-signed cert
-          weight: 20
+        # Note: `generate-cert.sh` prints "Generating self-signed cert" on the instance, so that
+        # line never reaches Terraform's output — it can't be a sub-phase (the bar would stall
+        # waiting for it). Its weight is folded into "Checking instance status" below.
         - enter-pattern: Checking instance status
           label: Checking instance status
-          weight: 35
+          weight: 55

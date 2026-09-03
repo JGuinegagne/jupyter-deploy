@@ -90,6 +90,21 @@ output "server_connect_document" {
   value       = aws_ssm_document.server_connect.name
 }
 
+output "auth_users_update_document" {
+  description = "Name of the SSM document to update the IAM user names allowlisted to access the app."
+  value       = aws_ssm_document.auth_users_update.name
+}
+
+output "auth_teams_update_document" {
+  description = "Name of the SSM document to update the IAM role names allowlisted to access the app."
+  value       = aws_ssm_document.auth_teams_update.name
+}
+
+output "auth_check_document" {
+  description = "Name of the SSM document to read the IAM principal names allowlisted to access the app."
+  value       = aws_ssm_document.auth_check.name
+}
+
 # Resources that should not be destroyed by `jd down`
 output "persisting_resources" {
   description = "List of identifiers of resources that should not be destroyed (have persist=true)."

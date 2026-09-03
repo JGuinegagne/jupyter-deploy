@@ -144,9 +144,10 @@ variable "iam_role_names_allowlist" {
   description = <<-EOT
     IAM role names authorized to reach JupyterLab through the auth sidecar.
 
-    The deploying identity is always authorized. List every role that may open the app
-    (e.g. your Admin role, a teammate's role, CI/CD roles) so switching callers produces
-    no Terraform state diff.
+    The deploying identity is always authorized. It must be an IAM role or IAM user;
+    the template rejects root and federated identities are rejected at plan time.
+    List every role that may open the app (e.g. your Admin role, a teammate's role,
+    CI/CD roles) so switching callers produces no Terraform state diff.
 
     Pass the bare role name only (e.g. "DataScience"), not an ARN or path. IAM role names
     are unique per AWS account regardless of path, so the name alone identifies the role.
@@ -171,8 +172,10 @@ variable "iam_user_names_allowlist" {
   description = <<-EOT
     IAM user names authorized to reach JupyterLab through the auth sidecar.
 
-    The deploying identity is always authorized. List every user that may open the app
-    so switching callers produces no Terraform state diff.
+    The deploying identity is always authorized. It must be an IAM role or IAM user;
+    the template rejects root and federated identities are rejected at plan time.
+    List every user that may open the app so switching callers produces no Terraform
+    state diff.
 
     Pass the bare user name only (e.g. "alice"), not an ARN or path. IAM user names are
     unique per AWS account regardless of path, so the name alone identifies the user.
