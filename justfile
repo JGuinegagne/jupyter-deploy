@@ -989,23 +989,28 @@ ci-e2e-cli-pull variant ci_dir="sandbox-ci":
 # For the bare track, the default workspace image has all deps (including boto3),
 # so the bare installation tests would fail. When no custom image is provided,
 # this recipe auto-builds a pypi bare image from the published PyPI version.
-# Variants: bare (CLI only), aws (CLI[aws]), aws-k8s (CLI[aws,k8s] + k8s tests).
+# Variants: bare (CLI only), aws (CLI[aws]), aws-k8s (CLI[aws,k8s] + k8s tests),
+# aws-proxy (CLI[aws,proxy] — proxy from prod PyPI + proxy install tests).
 # Usage: just test-smoke-cli bare                              # auto-builds pypi bare image
 # Usage: just test-smoke-cli aws                               # uses default workspace image
 # Usage: just test-smoke-cli aws-k8s                           # aws + k8s installation tests
+# Usage: just test-smoke-cli aws-proxy                         # aws + proxy installation tests
 # Usage: just test-smoke-cli bare my-image:tag                 # custom image (skip build)
 test-smoke-cli variant image="" log_level="INFO":
     #!/usr/bin/env bash
     set -euo pipefail
 
     if [ "{{variant}}" = "bare" ]; then
-        FILTER='-k "not aws_installation and not k8s_installation"'
+        FILTER='-k "not aws_installation and not k8s_installation and not proxy_installation"'
     elif [ "{{variant}}" = "aws" ]; then
-        FILTER='-k "not bare_installation and not k8s_installation"'
+        FILTER='-k "not bare_installation and not k8s_installation and not proxy_installation"'
     elif [ "{{variant}}" = "aws-k8s" ]; then
-        FILTER='-k "not bare_installation"'
+        FILTER='-k "not bare_installation and not proxy_installation"'
+    elif [ "{{variant}}" = "aws-proxy" ]; then
+        # aws + proxy install tests (boto3 present via [aws]; proxy console script via [proxy]).
+        FILTER='-k "not bare_installation and not k8s_installation"'
     else
-        echo "Error: variant must be 'bare', 'aws' or 'aws-k8s', got '{{variant}}'"
+        echo "Error: variant must be 'bare', 'aws', 'aws-k8s' or 'aws-proxy', got '{{variant}}'"
         exit 1
     fi
 
