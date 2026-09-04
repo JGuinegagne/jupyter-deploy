@@ -2,7 +2,7 @@ schema_version: 1
 template:
   name: tf-aws-ec2-jupyterlab
   engine: terraform
-  version: 0.1.0rc1
+  version: 0.1.0rc2
 requirements:
 - name: terraform
 - name: awscli
@@ -470,9 +470,6 @@ supervised-execution:
         - enter-pattern: Cloudinit script is running
           label: Configuring EC2 instance
           weight: 35
-        # Note: `generate-cert.sh` prints "Generating self-signed cert" on the instance, so that
-        # line never reaches Terraform's output — it can't be a sub-phase (the bar would stall
-        # waiting for it). Its weight is folded into "Checking instance status" below.
         - enter-pattern: Checking instance status
           label: Checking instance status
           weight: 55

@@ -46,8 +46,7 @@ re-applies the same list rather than reverting it.
 ## New IAM permissions
 
 The *local* CLI credentials need, in addition to the base SSM permissions:
-`ec2:DescribeInstances`, `ec2:{Authorize,Revoke,Describe}SecurityGroupIngress`, and
-`ssm:GetParameter` (to read the cert pin).
+`ec2:DescribeInstances` (resolve the instance IP) and `ssm:GetParameter` (read the cert pin). `jd host start`/`stop` additionally use `ec2:StartInstances` / `ec2:StopInstances`.
 
 ## License
 
