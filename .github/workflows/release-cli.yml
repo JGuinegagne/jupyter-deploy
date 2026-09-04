@@ -67,7 +67,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [bare, aws, aws-k8s]
+        variant: [bare, aws, aws-k8s, aws-proxy]
     env:
       VERSION: ${{ needs.build.outputs.version }}
     steps:

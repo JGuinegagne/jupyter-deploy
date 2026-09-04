@@ -10,7 +10,7 @@
 | `release-proxy.yml` | `workflow_dispatch` | Release `jupyter-deploy-client-proxy` to PyPI — functional gate → Test PyPI → PyPI (no live-deploy E2E; cloud-blind) |
 | `release-base.yml` | `workflow_dispatch` | Release `jupyter-deploy-tf-aws-ec2-base` to PyPI (with E2E gate) |
 | `release-plugin.yml` | `workflow_dispatch` | Release `pytest-jupyter-deploy` to PyPI |
-| `e2e-cli.yml` | `workflow_call` | CLI release E2E gate — smoke tests (bare/aws/aws-k8s) + functional tests against base app #2 and EKS app #5 |
+| `e2e-cli.yml` | `workflow_call` | CLI release E2E gate — smoke tests (bare/aws/aws-k8s/aws-proxy) + functional tests against base app #2 and EKS app #5 |
 | `release-eks-oidc.yml` | `workflow_dispatch` | Release `jupyter-deploy-tf-aws-eks-oidc` to PyPI (with E2E gate) |
 | `e2e-base.yml` | `workflow_dispatch` | E2E tests against an existing deployment |
 | `e2e-base-fresh.yml` | `workflow_dispatch` / `workflow_call` | Deploy from scratch + full E2E chain |
@@ -77,15 +77,12 @@ Lessons from coordinated plugin/CLI/template releases — read before releasing:
   as long as the built artifact is byte-identical (don't change the package between runs).
 - **The jupyterlab template release gate fresh-deploys + destroys — no persistent slot.**
   `release-jupyterlab.yml` calls `e2e-jupyterlab-release.yml` → `e2e-jupyterlab-fresh.yml`,
-  which deploys the template in-container (CLI installed with the `[aws,proxy]` extra),
-  runs the E2E suite, then tears the deployment down (best-effort even on failure).
-  - **TEMPORARY CLI source:** `.github/e2e-jupyterlab/pyproject.release.toml` sources
-    `jupyter-deploy` + `jupyter-deploy-client-proxy` from the **workspace** (editable), NOT
-    prod PyPI — a prod install of the CLI's `[proxy]` extra can't resolve yet (the extra pins
-    `>=0.1.0`, no final proxy published). So the jupyterlab template can release **before** the
-    CLI. The gate still tests the PUBLISHED template (Test PyPI). Once a final CLI + proxy ship,
-    drop those two path sources so the gate installs the CLI from PyPI (restores the normal
-    `plugin → proxy → CLI → templates` ordering). Unlike
+  which deploys the template in-container (CLI installed from prod PyPI with the `[aws,proxy]`
+  extra), runs the E2E suite, then tears the deployment down (best-effort even on failure).
+  - **Release order must be respected:** the gate installs `jupyter-deploy[aws,proxy]` from prod
+    PyPI, so proxy and CLI must publish **before** the template (the usual
+    `plugin → proxy → CLI → templates` order). The gate itself tests the PUBLISHED template
+    (from Test PyPI). Unlike
   base/eks there's no OAuth app, subdomain, cert quota, or restorable app slot: the template
   is AWS-creds-only, so canary can fresh-deploy every run (canary is not wired yet). The
   fresh workflow also runs on `workflow_dispatch` for transport-level proxy changes.

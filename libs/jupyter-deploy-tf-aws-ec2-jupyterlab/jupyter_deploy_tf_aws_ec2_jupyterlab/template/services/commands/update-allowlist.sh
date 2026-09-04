@@ -5,7 +5,8 @@
 #   sudo sh update-allowlist.sh users [add|remove|set] alice,bob     # IAM user names (jd users)
 #
 # The persistent source of truth is /etc/AUTH_ALLOWLIST (two sections, [roles] and [users]),
-# seeded first-boot-only by cloudinit and preserved across reboots and redeploys. This script
+# re-seeded from the terraform allowlist vars on every cloud-init run; because this script writes
+# edits back into those vars, that re-seed is a no-op rather than a revert. This script
 # edits that file, mirrors both sections into /opt/docker/.env (which docker-compose interpolates
 # into the sidecar's ROLE_NAME_ALLOWLIST / USER_NAME_ALLOWLIST env), and recreates ONLY the
 # auth-sidecar container — JupyterLab keeps running. On success it echoes the modified section's
@@ -74,26 +75,38 @@ if [ -n "$VALUES" ] && ! printf '%s' "$VALUES" | grep -Eq '^[a-zA-Z0-9+=,.@_-]+$
 fi
 
 # IAM names are unique per account regardless of case, and the sidecar matches case-insensitively
-# (it lower-cases both the allowlist and the caller name). Fold to lower case here too so add/remove/
-# set/dedup agree with the sidecar — otherwise `remove datascience` would silently no-op against a
-# stored `DataScience` while access stays granted.
+# (it lower-cases both the allowlist and the caller name). Compare/dedup case-insensitively here too
+# so add/remove/set agree with the sidecar — otherwise `remove datascience` would silently no-op
+# against a stored `DataScience` while access stays granted. But PRESERVE the given casing in the
+# stored list: main.tf re-adds the caller in its ARN casing on every `jd up`, so folding to lower
+# case would make the write-back differ from terraform's rendered list and restart the whole stack
+# each run. So key the set by lower-case name (dedup) but store the original casing as the value.
 CURRENT=$(get_section_content "$ENTITY_TYPE")
-IFS=',' read -ra CURRENT_ARR <<< "${CURRENT,,}"
-IFS=',' read -ra INPUT_ARR <<< "${VALUES,,}"
+IFS=',' read -ra CURRENT_ARR <<< "$CURRENT"
+IFS=',' read -ra INPUT_ARR <<< "$VALUES"
 
-# Build the resulting set of names for this section.
+# Build the resulting set of names for this section: lower-case key -> original-casing name.
 declare -A RESULT_SET=()
 case "$ACTION" in
   add)
-    for v in "${CURRENT_ARR[@]}"; do [ -n "$v" ] && RESULT_SET["$v"]=1; done
-    for v in "${INPUT_ARR[@]}"; do [ -n "$v" ] && RESULT_SET["$v"]=1; done
+    for v in "${CURRENT_ARR[@]}"; do [ -n "$v" ] && RESULT_SET["${v,,}"]="$v"; done
+    # Keep the existing casing when a name is re-added; only genuinely new names bring their own.
+    for v in "${INPUT_ARR[@]}"; do
+      [ -n "$v" ] || continue
+      k="${v,,}"
+      [ -n "${RESULT_SET[$k]+x}" ] || RESULT_SET["$k"]="$v"
+    done
     ;;
   remove)
-    for v in "${CURRENT_ARR[@]}"; do [ -n "$v" ] && RESULT_SET["$v"]=1; done
-    for v in "${INPUT_ARR[@]}"; do [ -n "$v" ] && unset 'RESULT_SET[$v]'; done
+    for v in "${CURRENT_ARR[@]}"; do [ -n "$v" ] && RESULT_SET["${v,,}"]="$v"; done
+    for v in "${INPUT_ARR[@]}"; do
+      [ -n "$v" ] || continue
+      k="${v,,}"
+      unset 'RESULT_SET[$k]'
+    done
     ;;
   set)
-    for v in "${INPUT_ARR[@]}"; do [ -n "$v" ] && RESULT_SET["$v"]=1; done
+    for v in "${INPUT_ARR[@]}"; do [ -n "$v" ] && RESULT_SET["${v,,}"]="$v"; done
     ;;
   *)
     echo "Error: invalid action '$ACTION'. Use 'add', 'remove' or 'set'."
@@ -105,7 +118,7 @@ esac
 # string, so the write-back keeps terraform state stable instead of reordering it on every edit.
 FINAL=""
 if [ ${#RESULT_SET[@]} -gt 0 ]; then
-  FINAL=$(printf '%s\n' "${!RESULT_SET[@]}" | sort | paste -sd, -)
+  FINAL=$(printf '%s\n' "${RESULT_SET[@]}" | sort | paste -sd, -)
 fi
 
 if [ "$CURRENT" != "$FINAL" ]; then

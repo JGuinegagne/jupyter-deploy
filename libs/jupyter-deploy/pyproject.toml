@@ -1,6 +1,6 @@
 [project]
 name = "jupyter-deploy"
-version = "0.6.8"
+version = "0.7.0"
 description = "CLI based tool to deploy Jupyter applications that integrates with infrastructure as code frameworks."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -134,6 +134,7 @@ ignore = [
 "tests/e2e/test_bare_installation.py" = ["PLC0415"]
 "tests/e2e/test_aws_installation.py" = ["PLC0415"]
 "tests/e2e/test_k8s_installation.py" = ["PLC0415"]
+"tests/e2e/test_proxy_installation.py" = ["PLC0415"]
 
 [tool.ruff.format]
 quote-style = "double"
