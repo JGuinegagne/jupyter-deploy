@@ -5,13 +5,6 @@
 #
 # The jupyterlab template reaches JupyterLab through the local client proxy, so the
 # CLI install pulls the [aws,proxy] extra (aws SDK + the client-proxy console script).
-#
-# TEMPORARY: jupyter-deploy + jupyter-deploy-client-proxy are sourced from the WORKSPACE
-# (editable), not prod PyPI. This breaks the chicken-and-egg: the CLI's [proxy] extra pins
-# jupyter-deploy-client-proxy>=0.1.0, which no published (rc-only) version satisfies yet, so
-# a prod-PyPI CLI install can't resolve until a FINAL CLI + proxy ship. The gate still
-# exercises the PUBLISHED template (from Test PyPI). Once the template v0.1.0 is out and the
-# CLI + proxy are released, DROP these two path sources so the gate installs the CLI from PyPI.
 [project]
 name = "e2e-jupyterlab-release"
 version = "0.0.0"
@@ -31,6 +24,3 @@ explicit = true
 [tool.uv.sources]
 jupyter-deploy-tf-aws-ec2-jupyterlab = { index = "extra" }
 pytest-jupyter-deploy = { path = "libs/pytest-jupyter-deploy", editable = true }
-# TEMPORARY (see header): CLI + proxy from the workspace until a final CLI/proxy is on PyPI.
-jupyter-deploy = { path = "libs/jupyter-deploy", editable = true }
-jupyter-deploy-client-proxy = { path = "libs/jupyter-deploy-client-proxy", editable = true }
