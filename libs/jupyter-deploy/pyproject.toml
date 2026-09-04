@@ -134,6 +134,7 @@ ignore = [
 "tests/e2e/test_bare_installation.py" = ["PLC0415"]
 "tests/e2e/test_aws_installation.py" = ["PLC0415"]
 "tests/e2e/test_k8s_installation.py" = ["PLC0415"]
+"tests/e2e/test_proxy_installation.py" = ["PLC0415"]
 
 [tool.ruff.format]
 quote-style = "double"
