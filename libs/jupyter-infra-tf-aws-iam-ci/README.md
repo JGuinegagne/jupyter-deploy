@@ -83,7 +83,7 @@ This project:
 - seeds secret values via `local-exec` provisioner to keep them out of Terraform state
 - applies resource-based deny policies on OAuth client secrets (deny write except maintainers)
 - applies resource-based deny policies on bot account secrets (deny all except maintainers)
-- creates 5 ECR repositories for pre-built E2E test container images (one per OAuth app, KMS-encrypted, lifecycle policy keeps last 5 images)
+- creates 9 ECR repositories for pre-built E2E test container images (6 mapped to OAuth apps, 3 without, KMS-encrypted, lifecycle policy keeps last 5 images)
 - creates an S3 bucket for E2E test result uploads (KMS-encrypted, public access blocked, 90-day object expiration)
 - enables Amazon Inspector enhanced scanning for ECR account-wide (so `jd image vulnerabilities` reports OS + language-package CVEs and EPSS scores)
 - tags all resources with `Source`, `Template`, `Version`, and `DeploymentId`
@@ -170,7 +170,7 @@ This project:
 | `github_bot_account_email_arn` | ARN of the SSM parameter for GitHub bot account email |
 | `github_oauth_app_client_id_1..5_arn` | ARNs of the SSM parameters for OAuth app client IDs |
 | `github_oauth_app_client_secret_1..5_arn` | ARNs of the secrets for OAuth app client secrets |
-| `ecr_repository_url_1..5` | URLs of the ECR repositories for pre-built E2E test images |
+| `ecr_repository_url_1..9` | URLs of the ECR repositories for pre-built E2E test images (1-6 OAuth apps, 7-9 without) |
 | `test_results_bucket_name` | Name of the S3 bucket for E2E test result uploads |
 | `review_publish_iam_role_arn` | ARN of the IAM role that builds and pushes the review image (null unless create_review_resources) |
 | `review_run_iam_role_arn` | ARN of the IAM role that pulls the review image and runs reviews (null unless create_review_resources) |

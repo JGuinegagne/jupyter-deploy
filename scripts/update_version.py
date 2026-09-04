@@ -4,15 +4,16 @@
 Usage:
     python scripts/update_version.py <target> <bump-or-version>
 
-    <target>           cli | plugin | proxy | base-template | eks-oidc-template
+    <target>           cli | plugin | proxy | base-template | eks-oidc-template | jupyterlab-template
     <bump-or-version>  patch | minor | major | an explicit version (e.g. 0.1.4, 0.1.0rc1)
 
 Dispatch:
-    - cli               bumps BOTH the root and CLI pyproject.toml (they move in lockstep)
-    - plugin            bumps the plugin pyproject.toml
-    - proxy             bumps the client-proxy pyproject.toml
-    - base-template     delegates to scripts/upgrade_base_template_version.py
-    - eks-oidc-template delegates to scripts/upgrade_eks_oidc_template_version.py
+    - cli                 bumps BOTH the root and CLI pyproject.toml (they move in lockstep)
+    - plugin              bumps the plugin pyproject.toml
+    - proxy               bumps the client-proxy pyproject.toml
+    - base-template       delegates to scripts/upgrade_base_template_version.py
+    - eks-oidc-template   delegates to scripts/upgrade_eks_oidc_template_version.py
+    - jupyterlab-template delegates to scripts/upgrade_jupyterlab_template_version.py
 
 For a `patch|minor|major` bump the new version is computed from the target's current
 `pyproject.toml` version, using only its X.Y.Z core (any pre-release suffix is dropped).
@@ -37,12 +38,14 @@ TARGET_PYPROJECT: dict[str, Path] = {
     "proxy": REPO_ROOT / "libs" / "jupyter-deploy-client-proxy" / "pyproject.toml",
     "base-template": REPO_ROOT / "libs" / "jupyter-deploy-tf-aws-ec2-base" / "pyproject.toml",
     "eks-oidc-template": REPO_ROOT / "libs" / "jupyter-deploy-tf-aws-eks-oidc" / "pyproject.toml",
+    "jupyterlab-template": REPO_ROOT / "libs" / "jupyter-deploy-tf-aws-ec2-jupyterlab" / "pyproject.toml",
 }
 
 # template targets delegate their multi-file bump to a dedicated script
 TEMPLATE_SCRIPTS: dict[str, Path] = {
     "base-template": REPO_ROOT / "scripts" / "upgrade_base_template_version.py",
     "eks-oidc-template": REPO_ROOT / "scripts" / "upgrade_eks_oidc_template_version.py",
+    "jupyterlab-template": REPO_ROOT / "scripts" / "upgrade_jupyterlab_template_version.py",
 }
 
 BUMP_KEYWORDS = ("patch", "minor", "major")

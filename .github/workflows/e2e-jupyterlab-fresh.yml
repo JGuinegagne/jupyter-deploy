@@ -1,0 +1,226 @@
+name: E2E jupyterlab template (fresh deploy)
+
+# Builds the E2E image, then fresh-deploys the aws-ec2-jupyterlab template, runs the
+# E2E suite against it, and tears it down. Three entry points share this workflow:
+# a proxy/template release gate (workflow_call, pypi install), manual dispatch, and
+# (later) a weekly canary. jupyterlab needs only AWS creds — no OAuth app / subdomain
+# / cert quota — so it fresh-deploys and destroys on every run (no persistent slot).
+on:
+  workflow_call:
+    inputs:
+      ecr-slot:
+        description: "ECR repo slot for the E2E image (7=PR/dispatch, 8=release, 9=canary)"
+        required: false
+        type: string
+        default: "7"
+      test-filter:
+        description: "Pytest -k filter (empty = all tests)"
+        required: false
+        type: string
+        default: ""
+      destroy-after:
+        description: "Destroy the deployment after tests (best-effort; also on failure)"
+        required: false
+        type: boolean
+        default: true
+      install-mode:
+        description: "Install mode: workspace (default) or pypi (from package index)"
+        required: false
+        type: string
+        default: "workspace"
+      install-variant:
+        description: "Install variant when install-mode=pypi: release (default) or canary"
+        required: false
+        type: string
+        default: "release"
+      pkg-version:
+        description: "Package version (required when install-mode=pypi, variant=release)"
+        required: false
+        type: string
+        default: ""
+      ref:
+        description: "Git ref to checkout (e.g. refs/pull/185/merge for a fork PR)"
+        required: false
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      ecr-slot:
+        description: "ECR repo slot for the E2E image (7=PR/dispatch, 8=release, 9=canary)"
+        required: false
+        type: choice
+        options: ["7", "8", "9"]
+        default: "7"
+      test-filter:
+        description: "Pytest -k filter (empty = all tests)"
+        required: false
+        type: string
+        default: ""
+      destroy-after:
+        description: "Destroy the deployment after tests pass"
+        required: false
+        type: boolean
+        default: true
+      ref:
+        description: "Git ref to checkout (e.g. refs/pull/185/merge for a fork PR)"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  id-token: write
+  contents: read
+
+# Per-slot concurrency (not one shared group): each trigger owns a distinct ECR repo
+# (7=PR/dispatch, 8=release, 9=canary), so release, canary, and PR/dispatch runs can
+# proceed simultaneously without ever sharing an image tag. Runs within a slot serialize.
+concurrency:
+  group: e2e-jupyterlab-${{ inputs.ecr-slot }}
+  cancel-in-progress: false
+
+jobs:
+  # jupyterlab owns ECR e2e-image repos 7-9 (no OAuth app); the slot input selects one.
+  build-image:
+    name: "Build E2E image"
+    uses: ./.github/workflows/e2e-build-image.yml
+    secrets: inherit
+    with:
+      oauth-app-num: ${{ inputs.ecr-slot }}
+      ref: ${{ inputs.ref }}
+      install-mode: ${{ inputs.install-mode || 'workspace' }}
+      install-variant: ${{ inputs.install-variant || 'release' }}
+      pkg-version: ${{ inputs.pkg-version }}
+      template: jupyterlab
+
+  # Job 1 — deploy fresh in-container + verify the app is immediately available.
+  # `jd up` backs the project (files + tfstate) up to the S3 store; the deploy recipe
+  # emits this run's deployment_id (even on a failed apply) so the test/destroy jobs can
+  # scope to it — jupyterlab has no subdomain to look up the way base/eks do.
+  deploy:
+    name: "Deploy + verify"
+    needs: [build-image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: e2e
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      deployment-id: ${{ steps.deploy.outputs.deployment_id }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install UV and Python
+        uses: ./.github/actions/install-uv
+        with:
+          python-version: "3.13"
+
+      - name: Install just
+        uses: ./.github/actions/install-just
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.7"
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::997498698382:role/jupyter-infra-ci-e2e-6a3e2625
+          aws-region: us-west-2
+          role-duration-seconds: 7200
+
+      - name: Restore CI project
+        run: just ci-restore sandbox-ci
+
+      - name: Pull pre-built E2E image
+        run: just ci-e2e-base-pull ${{ inputs.ecr-slot }} ${{ needs.build-image.outputs.ecr-tag }}
+
+      - name: Seed .env
+        run: just env-setup-jupyterlab
+
+      # The deploy recipe emits `deployment_id` to $GITHUB_OUTPUT (even if `jd up` fails,
+      # then re-raises the failure), so the destroy job can always scope its teardown.
+      - name: Deploy (jd init / config / up)
+        id: deploy
+        run: just ci-e2e-jupyterlab-deploy sandbox-e2e
+
+      # Verify the app responds the moment `jd up` finishes (the full_deployment tests).
+      - name: Verify deployment
+        if: steps.deploy.outcome == 'success'
+        run: >-
+          just test-e2e-jupyterlab sandbox-e2e "test_deployment"
+          "full-deploy=true,skip-sync=true"
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-jupyterlab-deploy
+          path: test-results/
+          if-no-files-found: ignore
+
+  # Job 2 — restore the deployment from the store and run the remaining tests.
+  test:
+    name: "Non-deployment tests"
+    needs: [build-image, deploy]
+    if: needs.deploy.result == 'success'
+    uses: ./.github/workflows/e2e-jupyterlab-job.yml
+    secrets: inherit
+    with:
+      ecr-tag: ${{ needs.build-image.outputs.ecr-tag }}
+      ecr-slot: ${{ inputs.ecr-slot }}
+      deployment-id: ${{ needs.deploy.outputs.deployment-id }}
+      test-filter: ${{ inputs.test-filter }}
+      ref: ${{ inputs.ref }}
+      timeout-minutes: 45
+
+  # Job 3 — teardown. Runs even if deploy/test failed (best-effort), as long as a
+  # deployment id was emitted, so a fresh run never inherits leaked infrastructure.
+  destroy:
+    name: "Teardown deployment"
+    needs: [build-image, deploy, test]
+    if: always() && inputs.destroy-after && needs.deploy.outputs.deployment-id != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: e2e
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install UV and Python
+        uses: ./.github/actions/install-uv
+        with:
+          python-version: "3.13"
+
+      - name: Install just
+        uses: ./.github/actions/install-just
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.7"
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::997498698382:role/jupyter-infra-ci-e2e-6a3e2625
+          aws-region: us-west-2
+          role-duration-seconds: 7200
+
+      - name: Restore CI project
+        run: just ci-restore sandbox-ci
+
+      # Restore this run's project by deployment id, jd down, and delete the store entry.
+      - name: Teardown deployment
+        run: just find-takedown-jupyterlab sandbox-e2e ${{ needs.deploy.outputs.deployment-id }}

@@ -2,13 +2,14 @@
 
 [![Documentation](https://readthedocs.org/projects/jupyter-deploy/badge/?version=latest)](https://jupyter-deploy.readthedocs.io/en/latest/)
 [![CI](https://github.com/jupyter-infra/jupyter-deploy/actions/workflows/ci.yml/badge.svg)](https://github.com/jupyter-infra/jupyter-deploy/actions/workflows/ci.yml)
-[![base-template-e2e](https://img.shields.io/github/actions/workflow/status/jupyter-infra/jupyter-deploy/e2e-base-canary.yml?label=base-template-e2e)](https://github.com/jupyter-infra/jupyter-deploy/actions/workflows/e2e-base-canary.yml)
-[![eks-oidc-template-e2e](https://img.shields.io/github/actions/workflow/status/jupyter-infra/jupyter-deploy/e2e-eks-oidc-canary.yml?label=eks-oidc-template-e2e)](https://github.com/jupyter-infra/jupyter-deploy/actions/workflows/e2e-eks-oidc-canary.yml)
-[![PyPI - jupyter-deploy](https://img.shields.io/pypi/v/jupyter-deploy?label=jupyter-deploy)](https://pypi.org/project/jupyter-deploy/)
-[![PyPI - base template](https://img.shields.io/pypi/v/jupyter-deploy-tf-aws-ec2-base?label=base-template)](https://pypi.org/project/jupyter-deploy-tf-aws-ec2-base/)
-[![PyPI - eks-oidc template](https://img.shields.io/pypi/v/jupyter-deploy-tf-aws-eks-oidc?label=eks-oidc-template)](https://pypi.org/project/jupyter-deploy-tf-aws-eks-oidc/)
-[![PyPI - pytest plugin](https://img.shields.io/pypi/v/pytest-jupyter-deploy?label=pytest-plugin)](https://pypi.org/project/pytest-jupyter-deploy/)
-[![PyPI - proxy](https://img.shields.io/pypi/v/jupyter-deploy-client-proxy?label=client-proxy)](https://pypi.org/project/jupyter-deploy-client-proxy/)
+[![ec2-base-e2e](https://img.shields.io/github/actions/workflow/status/jupyter-infra/jupyter-deploy/e2e-base-canary.yml?label=ec2-base-e2e)](https://github.com/jupyter-infra/jupyter-deploy/actions/workflows/e2e-base-canary.yml)
+[![eks-oidc-e2e](https://img.shields.io/github/actions/workflow/status/jupyter-infra/jupyter-deploy/e2e-eks-oidc-canary.yml?label=eks-oidc-e2e)](https://github.com/jupyter-infra/jupyter-deploy/actions/workflows/e2e-eks-oidc-canary.yml)
+[![PyPI - jupyter-deploy](https://img.shields.io/pypi/v/jupyter-deploy?label=cli)](https://pypi.org/project/jupyter-deploy/)
+[![PyPI - ec2-base](https://img.shields.io/pypi/v/jupyter-deploy-tf-aws-ec2-base?label=ec2-base)](https://pypi.org/project/jupyter-deploy-tf-aws-ec2-base/)
+[![PyPI - eks-oidc](https://img.shields.io/pypi/v/jupyter-deploy-tf-aws-eks-oidc?label=eks-oidc)](https://pypi.org/project/jupyter-deploy-tf-aws-eks-oidc/)
+[![PyPI - ec2-jupyterlab](https://img.shields.io/pypi/v/jupyter-deploy-tf-aws-ec2-jupyterlab?label=ec2-jupyterlab)](https://pypi.org/project/jupyter-deploy-tf-aws-ec2-jupyterlab/)
+[![PyPI - pytest plugin](https://img.shields.io/pypi/v/pytest-jupyter-deploy?label=plugin)](https://pypi.org/project/pytest-jupyter-deploy/)
+[![PyPI - proxy](https://img.shields.io/pypi/v/jupyter-deploy-client-proxy?label=proxy)](https://pypi.org/project/jupyter-deploy-client-proxy/)
 
 An open-source command line interface (CLI) to deploy interactive applications to the Cloud.
 

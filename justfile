@@ -573,6 +573,30 @@ ci-restore-base oauth_app_num ci_dir="sandbox-ci" project_dir="sandbox-base":
 ci-restore-eks oauth_app_num ci_dir="sandbox-ci" project_dir="sandbox-e2e":
     uv run python scripts/ci_restore_eks.py {{ci_dir}} {{oauth_app_num}} {{project_dir}}
 
+# Restore a jupyterlab template project from the S3 store (for tests/teardown/inspection).
+# jupyterlab has no OAuth app / subdomain to look up (base/eks restore by subdomain), so
+# pass a deployment_id to pick a specific project when several coexist (parallel runs);
+# with none, restore the sole project. No --restore-secrets: the template has no masked
+# secrets (AWS-identity auth).
+# Usage: just ci-restore-jupyterlab [project-dir] [deployment-id]
+ci-restore-jupyterlab project_dir="sandbox-e2e" deployment_id="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ARGS="{{project_dir}}"
+    if [ -n "{{deployment_id}}" ]; then ARGS="$ARGS --deployment-id {{deployment_id}}"; fi
+    uv run python {{justfile_directory()}}/scripts/ci_restore_jupyterlab.py $ARGS
+
+# Tear down + delete jupyterlab e2e project(s) from the store. With a deployment_id, reap
+# only that one (the standard e2e flow's own-deployment teardown). Without one, reap ALL —
+# the nuclear option for a standalone cleanup of orphans from interrupted runs.
+# Usage: just find-takedown-jupyterlab [project-dir] [deployment-id]
+find-takedown-jupyterlab project_dir="sandbox-e2e" deployment_id="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ARGS="{{project_dir}}"
+    if [ -n "{{deployment_id}}" ]; then ARGS="$ARGS --deployment-id {{deployment_id}}"; fi
+    uv run python {{justfile_directory()}}/scripts/find_takedown_jupyterlab.py $ARGS
+
 # Find a base template project by subdomain, take it down (jd down), and delete from S3 store
 # Exits successfully if no matching project is found (nothing to take down)
 # Usage: just find-takedown-base <oauth-app-num> [ci-dir] [project-dir]
@@ -816,6 +840,67 @@ ci-e2e-eks-deploy project_dir="sandbox-e2e" ci_dir="sandbox-ci":
     $EXEC ". .venv/bin/activate && cd /workspace/{{project_dir}} && jupyter-deploy up -y -v"
     echo "✓ EKS deployment complete"
 
+# Deploy an aws-ec2-jupyterlab project from scratch INSIDE the pre-built E2E container.
+# Mirrors ci-e2e-eks-deploy but far simpler: the jupyterlab template has NO required
+# variables and NO browser sign-in (access is gated by the caller's AWS identity), so
+# there is no .env / variables.yaml to render — an empty configuration is complete.
+# Deploying in-container means a pypi-mode image deploys the PUBLISHED package, not the
+# runner's workspace code. Tests run separately afterwards via `just test-e2e-jupyterlab`.
+#
+# Usage: just ci-e2e-jupyterlab-deploy <project-dir>
+ci-e2e-jupyterlab-deploy project_dir="sandbox-e2e":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # AWS_REGION must be set: the compose file interpolates ${AWS_REGION} from the
+    # shell env to inject it into the container, and the SDK treats "" as broken.
+    # In CI it is exported by configure-aws-credentials; fall back to local AWS
+    # config for dev runs. (AWS creds flow the same way via compose interpolation.)
+    : "${AWS_REGION:=$(aws configure get region 2>/dev/null || true)}"
+    if [ -z "${AWS_REGION:-}" ]; then
+        echo "Error: AWS_REGION is not set and no default region in AWS config"
+        exit 1
+    fi
+    export AWS_REGION
+
+    # Start the pre-built container with the project dir mounted.
+    mkdir -p "{{justfile_directory()}}/{{project_dir}}"
+    OVERRIDE_FILE="{{justfile_directory()}}/docker-compose.e2e-override.yml"
+    {
+        echo "services:"
+        echo "  e2e:"
+        echo "    image: jupyter-deploy-e2e-base:latest"
+        echo "    volumes:"
+        echo "      - ./{{project_dir}}:/workspace/{{project_dir}}"
+    } > "$OVERRIDE_FILE"
+    trap 'rm -f "$OVERRIDE_FILE"' EXIT
+
+    echo "Starting E2E container (pre-built image)..."
+    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} down
+    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} -f "$OVERRIDE_FILE" up -d --no-build
+
+    # Deploy via explicit jd steps inside the container. Activate the venv directly
+    # (not `uv run`, which would re-sync the workspace and clobber a pypi install).
+    EXEC="{{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} exec -e PYTHONUNBUFFERED=1 e2e bash -c"
+
+    echo "=== jd init ==="
+    $EXEC ". .venv/bin/activate && cd /workspace && jupyter-deploy init -E terraform -P aws -I ec2 -T jupyterlab {{project_dir}}"
+    echo "=== jd config ==="
+    $EXEC ". .venv/bin/activate && cd /workspace/{{project_dir}} && jupyter-deploy config -v"
+    echo "=== jd up ==="
+    # Capture the rc but do NOT abort: we still want to emit the deployment_id below so a
+    # mid-apply failure can be torn down scoped to its own deployment (jd backs the partial
+    # state up to the store even on failure).
+    UP_RC=0
+    $EXEC ". .venv/bin/activate && cd /workspace/{{project_dir}} && jupyter-deploy up -y -v" || UP_RC=$?
+    # Emit the deployment_id so the caller can scope teardown to THIS deployment (parallel
+    # runs each reap only their own). Written to $GITHUB_OUTPUT in CI.
+    echo "=== deployment id ==="
+    DEPLOYMENT_ID=$($EXEC ". .venv/bin/activate && cd /workspace/{{project_dir}} && jupyter-deploy show -o deployment_id --text" 2>/dev/null | tr -d '[:space:]' || true)
+    echo "deployment_id=$DEPLOYMENT_ID"
+    if [ -n "${GITHUB_OUTPUT:-}" ]; then echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"; fi
+    exit "$UP_RC"
+
 # --- CLI release E2E commands ---
 
 # Build the CLI release E2E image
@@ -993,6 +1078,13 @@ env-setup-base project_dir ci_dir="sandbox-ci" oauth_app_num="1" options="":
 # Example: just env-setup-eks "" sandbox-ci 4 'org=jupyter-infra,team=my-team,rbac-team=my-team'
 env-setup-eks project_dir ci_dir="sandbox-ci" oauth_app_num="4" options="":
     uv run python scripts/env_setup_eks.py "{{project_dir}}" {{ci_dir}} {{oauth_app_num}} "{{options}}"
+
+# Generate a minimal .env for jupyterlab template E2E tests.
+# The jupyterlab template needs NO test env vars (no OAuth/domain/user/team/org) — access
+# is authorized by the caller's AWS identity. This just seeds a .env with the container
+# build vars, which `test-e2e` then auto-populates (HOST_UID/GID/E2E_DOCKERFILE/AWS_REGION).
+env-setup-jupyterlab:
+    cp libs/jupyter-deploy-tf-aws-ec2-jupyterlab/tests/e2e/configurations/env.example .env
 
 # --- roborev review image (tf-aws-iam-review template) ---
 

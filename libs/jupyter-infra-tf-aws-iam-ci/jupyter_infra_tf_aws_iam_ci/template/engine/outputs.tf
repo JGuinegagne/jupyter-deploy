@@ -115,7 +115,7 @@ output "github_oauth_app_client_secret_6_arn" {
   value       = module.github_oauth_app_client_secret_6.secret_arn
 }
 
-# ECR repositories for pre-built E2E images (x6)
+# ECR repositories for pre-built E2E images (x9)
 output "ecr_repository_url_1" {
   description = "URL of the ECR repository for E2E image (OAuth app #1)."
   value       = module.ecr_e2e_image_1.repository_url
@@ -144,6 +144,21 @@ output "ecr_repository_url_5" {
 output "ecr_repository_url_6" {
   description = "URL of the ECR repository for E2E image (OAuth app #6)."
   value       = module.ecr_e2e_image_6.repository_url
+}
+
+output "ecr_repository_url_7" {
+  description = "URL of the ECR repository for E2E image."
+  value       = module.ecr_e2e_image_7.repository_url
+}
+
+output "ecr_repository_url_8" {
+  description = "URL of the ECR repository for E2E image."
+  value       = module.ecr_e2e_image_8.repository_url
+}
+
+output "ecr_repository_url_9" {
+  description = "URL of the ECR repository for E2E image."
+  value       = module.ecr_e2e_image_9.repository_url
 }
 
 # S3 bucket for E2E test results
