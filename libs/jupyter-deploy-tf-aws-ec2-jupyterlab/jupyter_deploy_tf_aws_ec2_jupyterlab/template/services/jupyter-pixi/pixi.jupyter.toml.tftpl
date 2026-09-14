@@ -22,3 +22,8 @@ python = ">=3.12"
 # Single-user template: no RTC / jupyter-server-documents, so no @jupyter/ydoc
 # frontend-singleton constraint — track the latest JupyterLab 4.x.
 jupyterlab = ">=4.6"
+# tornado 6.5.9 breaks jupyter_server's static handlers (FileFindHandler, ThemesHandler
+# override initialize() without super(), so allowed_symlink_directory is missing): every
+# /static/* request 500s and the app renders blank while /api/status answers 200.
+# Excluded rather than capped: the fix lands in 6.5.10 (tornadoweb/tornado#3724, #3725).
+tornado = "!=6.5.9"
