@@ -24,6 +24,10 @@ ENTITY_TYPE=$1
 ACTION=$2
 VALUES=$3
 
+# Set to 1 if the sidecar never came back healthy. Checked only after the terraform write-back has
+# been echoed, so a failed recreate is reported without costing the write-back.
+RECREATE_FAILED=0
+
 log_message() {
   echo "[$(date +"%Y-%m-%d %H:%M:%S")] $*" >> "$LOG_FILE"
 }
@@ -131,13 +135,18 @@ if [ "$CURRENT" != "$FINAL" ]; then
   log_message "Recreating auth-sidecar to apply changes..."
   cd /opt/docker
   # Recreate only the sidecar so it picks up the new env from .env; JupyterLab keeps running.
-  # A --wait hiccup (e.g. the health probe racing a just-finished full-stack restart) must NOT
-  # fail the command: the allowlist file and .env are already updated, so the change is durable
-  # and we still need to emit the new list below for the terraform write-back. Log and continue.
+  # --wait gates on the container's healthcheck, so this call does not return until the sidecar is
+  # actually serving the new allowlist. That makes the CLI authoritative: `jd teams add` returning
+  # 0 means the decision is live, so callers need no settle-poll of their own.
   if OUTPUT=$(docker compose up -d auth-sidecar --wait --wait-timeout 60 2>&1); then
     log_message "auth-sidecar recreate complete: $OUTPUT"
   else
-    log_message "auth-sidecar recreate returned non-zero (change is applied to .env regardless): $OUTPUT"
+    # Do NOT return early and do NOT skip the write-back below: the allowlist file and .env are
+    # already updated, so the change is durable, and exiting before the echo would leave terraform
+    # state disagreeing with the host (the split-brain test_allowlist_write_back_leaves_no_terraform_diff
+    # guards against). Record the failure and report it after the write-back has been emitted.
+    log_message "ERROR: auth-sidecar did not become healthy within 60s: $OUTPUT"
+    RECREATE_FAILED=1
   fi
 else
   log_message "No change to [$ENTITY_TYPE]; auth-sidecar left running."
@@ -146,3 +155,7 @@ fi
 # Echo the modified section's new content. The manifest runner writes this back into the matching
 # terraform variable (iam_role_names_allowlist / iam_user_names_allowlist), keeping state in sync.
 echo "$(get_section_content "$ENTITY_TYPE")"
+
+# Non-zero only now that the write-back is out: the edit is applied and terraform will agree, but
+# the sidecar is not serving it, so the command must not report success.
+exit "$RECREATE_FAILED"
