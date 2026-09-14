@@ -359,8 +359,11 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="" template=default-te
     fi
 
     if [ "$IS_DEPLOYMENT_FROM_SCRATCH" = "true" ]; then
-        # Deploy from scratch - don't pass --e2e-existing-project (uses default config "base")
-        PYTEST_ARGS="$E2E_TESTS_DIR -m $MARKER --e2e-tests-dir=$E2E_TESTS_DIR"
+        # Deploy from scratch - don't pass --e2e-existing-project (uses default config "base").
+        # --e2e-project-dir must be passed too: without it the fixture deploys into the fixed
+        # `sandbox-e2e` default regardless of the directory mounted above, so asking for another
+        # sandbox-* dir would be silently ignored.
+        PYTEST_ARGS="$E2E_TESTS_DIR -m $MARKER --e2e-tests-dir=$E2E_TESTS_DIR --e2e-project-dir={{project_dir}}"
     else
         # Use existing project
         PYTEST_ARGS="$E2E_TESTS_DIR -m $MARKER --e2e-tests-dir=$E2E_TESTS_DIR --e2e-existing-project={{project_dir}}"
@@ -875,31 +878,30 @@ ci-e2e-jupyterlab-deploy project_dir="sandbox-e2e":
     } > "$OVERRIDE_FILE"
     trap 'rm -f "$OVERRIDE_FILE"' EXIT
 
-    echo "Starting E2E container (pre-built image)..."
-    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} down
-    {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} -f "$OVERRIDE_FILE" up -d --no-build
+    # Deploy THROUGH pytest, in fresh-deploy mode: the project dir is empty, so `test-e2e`
+    # omits --e2e-existing-project and the session-scoped e2e_deployment fixture runs
+    # `jd init` / `config` / `up -y` INSIDE the pytest session. That is what makes
+    # test_immediately_available_after_deployment mean anything — the assertion runs in the
+    # same process, seconds after the apply returns, with no `jd config` and no container
+    # restart in between (which is what a separate verify step used to insert, masking exactly
+    # the propagation delay a user would feel). It also removes the need to force-pass
+    # --with-full-deployment, which was the smell that flagged the old arrangement.
+    #
+    # Capture the rc but do NOT abort: the deployment_id must still be emitted below so a
+    # mid-apply failure can be torn down scoped to its own deployment (`jd up` backs the
+    # partial state up to the store even on failure).
+    echo "=== deploy + verify (pytest fresh-deploy) ==="
+    DEPLOY_RC=0
+    just test-e2e-jupyterlab {{project_dir}} "test_deployment" "skip-sync=true" || DEPLOY_RC=$?
 
-    # Deploy via explicit jd steps inside the container. Activate the venv directly
-    # (not `uv run`, which would re-sync the workspace and clobber a pypi install).
-    EXEC="{{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} exec -e PYTHONUNBUFFERED=1 e2e bash -c"
-
-    echo "=== jd init ==="
-    $EXEC ". .venv/bin/activate && cd /workspace && jupyter-deploy init -E terraform -P aws -I ec2 -T jupyterlab {{project_dir}}"
-    echo "=== jd config ==="
-    $EXEC ". .venv/bin/activate && cd /workspace/{{project_dir}} && jupyter-deploy config -v"
-    echo "=== jd up ==="
-    # Capture the rc but do NOT abort: we still want to emit the deployment_id below so a
-    # mid-apply failure can be torn down scoped to its own deployment (jd backs the partial
-    # state up to the store even on failure).
-    UP_RC=0
-    $EXEC ". .venv/bin/activate && cd /workspace/{{project_dir}} && jupyter-deploy up -y -v" || UP_RC=$?
     # Emit the deployment_id so the caller can scope teardown to THIS deployment (parallel
     # runs each reap only their own). Written to $GITHUB_OUTPUT in CI.
+    EXEC="{{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} exec -e PYTHONUNBUFFERED=1 e2e bash -c"
     echo "=== deployment id ==="
     DEPLOYMENT_ID=$($EXEC ". .venv/bin/activate && cd /workspace/{{project_dir}} && jupyter-deploy show -o deployment_id --text" 2>/dev/null | tr -d '[:space:]' || true)
     echo "deployment_id=$DEPLOYMENT_ID"
     if [ -n "${GITHUB_OUTPUT:-}" ]; then echo "deployment_id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"; fi
-    exit "$UP_RC"
+    exit "$DEPLOY_RC"
 
 # --- CLI release E2E commands ---
 
@@ -1084,12 +1086,41 @@ env-setup-base project_dir ci_dir="sandbox-ci" oauth_app_num="1" options="":
 env-setup-eks project_dir ci_dir="sandbox-ci" oauth_app_num="4" options="":
     uv run python scripts/env_setup_eks.py "{{project_dir}}" {{ci_dir}} {{oauth_app_num}} "{{options}}"
 
-# Generate a minimal .env for jupyterlab template E2E tests.
-# The jupyterlab template needs NO test env vars (no OAuth/domain/user/team/org) — access
-# is authorized by the caller's AWS identity. This just seeds a .env with the container
-# build vars, which `test-e2e` then auto-populates (HOST_UID/GID/E2E_DOCKERFILE/AWS_REGION).
-env-setup-jupyterlab:
+# Generate a .env for jupyterlab template E2E tests.
+# The jupyterlab template needs NO identity test vars (no OAuth/domain/user/team/org) and NO
+# CI-project lookup — access is authorized by the caller's own AWS identity, and the auth tests
+# revoke/restore that same principal, so there is nothing to fetch from sandbox-ci. Seeds the
+# container build vars (which `test-e2e` then auto-populates: HOST_UID/GID/E2E_DOCKERFILE/
+# AWS_REGION) plus the mutating-pass instance types.
+#
+# Options: comma-separated key=value pairs, to override the env.example defaults.
+#   cpu-instance=<type>                 instance type apply #2 switches back to
+#   gpu-instance=<type>                 instance type apply #1 switches to
+#   larger-log-retention-days=<days>    retention value applied alongside the instance swap
+#
+# Usage: just env-setup-jupyterlab [options]
+# Example: just env-setup-jupyterlab gpu-instance=g5.xlarge
+env-setup-jupyterlab options="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
     cp libs/jupyter-deploy-tf-aws-ec2-jupyterlab/tests/e2e/configurations/env.example .env
+
+    # Replace a KEY=value line in .env if the matching option was given.
+    override() {
+        local opt_key="$1" env_key="$2"
+        if echo "{{options}}" | grep -qE "(^|,)${opt_key}="; then
+            local value
+            value=$(echo "{{options}}" | grep -oE "(^|,)${opt_key}=[^,]+" | cut -d'=' -f2)
+            sed -i "s|^${env_key}=.*|${env_key}=${value}|" .env
+            echo "  - ${env_key}=${value}"
+        fi
+    }
+
+    override cpu-instance JD_E2E_CPU_INSTANCE
+    override gpu-instance JD_E2E_GPU_INSTANCE
+    override larger-log-retention-days JD_E2E_LARGER_LOG_RETENTION_DAYS
+    echo "✓ Seeded .env for the jupyterlab template"
 
 # --- roborev review image (tf-aws-iam-review template) ---
 
