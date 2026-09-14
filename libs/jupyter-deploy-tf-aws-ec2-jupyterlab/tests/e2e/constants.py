@@ -1,4 +1,4 @@
-"""Constants for E2E test ordering (jupyterlab template).
+"""Shared constants for the jupyterlab E2E suite: test ordering, and the mutating pass fixtures.
 
 Test Execution Order
 ====================
@@ -27,3 +27,19 @@ ORDER_MUTATING_GPU_PIXI = _MUTATING_BASE  # 10
 
 # Apply #2: GPU + pixi  ->  CPU + uv (external volumes stay mounted)
 ORDER_MUTATING_CPU_UV = _MUTATING_BASE + 10  # 20
+
+# --------------------------------------------------------------------------- mutating pass
+# Shared by BOTH mutating files: apply #1 provisions the mounts and writes the flags, apply #2
+# asserts they survived. They live here rather than in either test module so neither has to import
+# the other -- the two applies are ordered peers, not a dependency.
+
+# Flag written to the home volume BEFORE apply #1, so its survival proves the data volume
+# reattached to a brand-new instance. The external-volume flags are written after apply #1
+# (the volumes do not exist before it) and checked after apply #2.
+HOME_FLAG = "e2e_flag_home.txt"
+EBS_FLAG = "external-ebs1/e2e_flag_ebs.txt"
+EFS_FLAG = "external-efs1/e2e_flag_efs.txt"
+
+# Mount points the applies provision.
+EBS_MOUNT = "name=ebs1,mount_point=external-ebs1,size_gb=50"
+EFS_MOUNT = "name=efs1,mount_point=external-efs1"
