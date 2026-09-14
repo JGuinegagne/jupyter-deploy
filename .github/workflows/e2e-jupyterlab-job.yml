@@ -118,3 +118,8 @@ jobs:
           name: test-results-jupyterlab-${{ inputs.mutate && 'mutating' || 'non-mutating' }}
           path: test-results/
           if-no-files-found: ignore
+
+      - name: Upload test results to S3
+        if: failure()
+        continue-on-error: true
+        run: just ci-upload-test-results ${{ inputs.ecr-slot }}

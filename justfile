@@ -649,8 +649,10 @@ ci-test-results-bucket ci_dir="sandbox-ci":
     @uv run jd show -o test_results_bucket_name --text -p {{ci_dir}}
 
 # Upload test results to S3
-# Usage: just ci-upload-test-results <oauth-app-num> [ci-dir] [results-dir]
-ci-upload-test-results oauth_app_num ci_dir="sandbox-ci" results_dir="test-results":
+# The first argument is only a path segment under the timestamp prefix: the OAuth app number for
+# the templates that have one, the ECR slot for the jupyterlab template, which does not.
+# Usage: just ci-upload-test-results <path-segment> [ci-dir] [results-dir]
+ci-upload-test-results path_segment ci_dir="sandbox-ci" results_dir="test-results":
     #!/usr/bin/env bash
     set -euo pipefail
 
@@ -661,7 +663,7 @@ ci-upload-test-results oauth_app_num ci_dir="sandbox-ci" results_dir="test-resul
 
     TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M")
     BUCKET=$(just ci-test-results-bucket {{ci_dir}})
-    S3_PATH="s3://${BUCKET}/${TIMESTAMP}/{{oauth_app_num}}/"
+    S3_PATH="s3://${BUCKET}/${TIMESTAMP}/{{path_segment}}/"
 
     echo "Uploading test results to ${S3_PATH}..."
     aws s3 cp "{{results_dir}}/" "$S3_PATH" --recursive

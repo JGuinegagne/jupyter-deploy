@@ -166,6 +166,11 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
 
+      - name: Upload test results to S3
+        if: failure()
+        continue-on-error: true
+        run: just ci-upload-test-results ${{ inputs.ecr-slot }}
+
   # Job 2 — restore the deployment from the store and run the non-mutating tests. These assume
   # the as-deployed defaults (t3.medium + uv, no external volumes), which is why they run before
   # the mutating pass and not after.
