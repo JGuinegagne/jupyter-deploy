@@ -18,6 +18,10 @@ services:
       - ~/.aws:/home/testuser/.aws:ro
       # Mount kube config - needed for kubectl commands and jd cluster login
       - ~/.kube:/home/testuser/.kube
+      # Terraform provider plugin cache (see TF_PLUGIN_CACHE_DIR below). A named volume so
+      # the ~140MB AWS provider survives the compose down/up that every `just test-e2e`
+      # performs; `just clean-e2e` (down -v) is what discards it.
+      - tf-plugin-cache:/home/testuser/.terraform.d/plugin-cache
       # Project directory will be mounted dynamically via override file in justfile
     env_file:
       - ./.env
@@ -38,6 +42,13 @@ services:
       - AWS_PROFILE
       - AWS_CONFIG_FILE=/home/testuser/.aws/config
       - AWS_SHARED_CREDENTIALS_FILE=/home/testuser/.aws/credentials
+      # Share one provider download across every `terraform init` in the session instead of
+      # re-fetching the AWS provider per project. The dominant cost of the config-test class,
+      # which runs `jd init` + `jd config` in a throwaway project per test.
+      - TF_PLUGIN_CACHE_DIR=/home/testuser/.terraform.d/plugin-cache
     network_mode: host
     # Keep container running in background
     command: sleep infinity
+
+volumes:
+  tf-plugin-cache:
