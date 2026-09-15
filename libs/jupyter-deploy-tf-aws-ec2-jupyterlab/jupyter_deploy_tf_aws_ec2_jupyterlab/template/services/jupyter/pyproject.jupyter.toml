@@ -5,10 +5,4 @@ description = "A basic single-user JupyterLab image"
 requires-python = ">=3.12"
 dependencies = [
     "jupyterlab>=4.6",
-    # tornado 6.5.9 breaks every jupyter_server static handler: FileFindHandler and
-    # ThemesHandler override initialize() without calling super(), so tornado's new
-    # allowed_symlink_directory attribute is missing and every /static/* request 500s
-    # while /api/status still answers 200 — the app renders a blank page. Excluded
-    # rather than capped: the fix lands in 6.5.10 (tornadoweb/tornado#3724, #3725).
-    "tornado!=6.5.9",
 ]
