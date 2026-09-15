@@ -18,10 +18,15 @@ services:
       - ~/.aws:/home/testuser/.aws:ro
       # Mount kube config - needed for kubectl commands and jd cluster login
       - ~/.kube:/home/testuser/.kube
-      # Terraform provider plugin cache (see TF_PLUGIN_CACHE_DIR below). A named volume so
-      # the ~140MB AWS provider survives the compose down/up that every `just test-e2e`
-      # performs; `just clean-e2e` (down -v) is what discards it.
-      - tf-plugin-cache:/home/testuser/.terraform.d/plugin-cache
+      # Terraform provider plugin cache (see TF_PLUGIN_CACHE_DIR below), bind-mounted at the
+      # SAME absolute path inside and outside the container. That symmetry is the point, not the
+      # sharing: `terraform init` records provider locations in <project>/.terraform/providers as
+      # ABSOLUTE symlinks into this cache, and a project dir is visible from both worlds. With a
+      # container-only path those symlinks dangle on the host, and every `jd` command that reads
+      # terraform output then fails with "Required plugins are not installed" — or worse, a
+      # `jd down` that destroys nothing while exiting non-zero. It also survives `down -v`, and
+      # the host's own `terraform init` populates the very same cache.
+      - ${HOME}/.terraform.d/plugin-cache:${HOME}/.terraform.d/plugin-cache
       # Project directory will be mounted dynamically via override file in justfile
     env_file:
       - ./.env
@@ -45,10 +50,7 @@ services:
       # Share one provider download across every `terraform init` in the session instead of
       # re-fetching the AWS provider per project. The dominant cost of the config-test class,
       # which runs `jd init` + `jd config` in a throwaway project per test.
-      - TF_PLUGIN_CACHE_DIR=/home/testuser/.terraform.d/plugin-cache
+      - TF_PLUGIN_CACHE_DIR=${HOME}/.terraform.d/plugin-cache
     network_mode: host
     # Keep container running in background
     command: sleep infinity
-
-volumes:
-  tf-plugin-cache:

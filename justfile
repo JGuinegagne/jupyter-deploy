@@ -127,6 +127,7 @@ e2e-up no_cache="false":
     fi
 
     mkdir -p ~/.kube  # must exist before compose up; Docker creates missing bind-mount sources as root
+    mkdir -p ~/.terraform.d/plugin-cache  # same: bind-mounted at the identical path in the container
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} up -d e2e
     echo "E2E container started. Syncing latest code..."
     just e2e-sync
@@ -310,6 +311,7 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="" template=default-te
     # Stop and restart container with new mounts (ensures clean mount state)
     echo "Restarting E2E container with project mount..."
     mkdir -p ~/.kube  # must exist before compose up; Docker creates missing bind-mount sources as root
+    mkdir -p ~/.terraform.d/plugin-cache  # same: bind-mounted at the identical path in the container
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} down
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} -f "$OVERRIDE_FILE" up -d --no-build
 
@@ -821,6 +823,7 @@ ci-e2e-eks-deploy project_dir="sandbox-e2e" ci_dir="sandbox-ci":
 
     echo "Starting E2E container (pre-built image)..."
     mkdir -p ~/.kube  # must exist before compose up; Docker creates missing bind-mount sources as root
+    mkdir -p ~/.terraform.d/plugin-cache  # same: bind-mounted at the identical path in the container
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} down
     {{container-tool}} compose --project-directory {{justfile_directory()}} -f {{e2e-compose-file}} -f "$OVERRIDE_FILE" up -d --no-build
 
