@@ -141,11 +141,23 @@ if [ "$CURRENT" != "$FINAL" ]; then
   if OUTPUT=$(docker compose up -d auth-sidecar --wait --wait-timeout 60 2>&1); then
     log_message "auth-sidecar recreate complete: $OUTPUT"
   else
-    # Do NOT return early and do NOT skip the write-back below: the allowlist file and .env are
-    # already updated, so the change is durable, and exiting before the echo would leave terraform
-    # state disagreeing with the host (the split-brain test_allowlist_write_back_leaves_no_terraform_diff
-    # guards against). Record the failure and report it after the write-back has been emitted.
+    # Roll the host edit back, because this command is about to fail and a failed command gets NO
+    # terraform write-back: aws_ssm_runner raises on SSM Status=Failed before returning results, and
+    # the handlers only call update_variables() on success. Leaving the edit in place would put the
+    # host ahead of terraform, and the direction that costs is `remove` — the host would have
+    # revoked the entry while the terraform variable still lists it, so the next `jd up` re-seeds
+    # /etc/AUTH_ALLOWLIST and silently restores the access the operator just revoked.
+    # Rolling back keeps both sides at the pre-command state, so a non-zero exit means exactly
+    # "nothing changed, retry once the sidecar is healthy".
     log_message "ERROR: auth-sidecar did not become healthy within 60s: $OUTPUT"
+    log_message "Rolling back [$ENTITY_TYPE] to '$CURRENT' so the host still matches terraform."
+    update_section "$ENTITY_TYPE" "$CURRENT"
+    set_env_var "ROLE_NAME_ALLOWLIST" "$(get_section_content roles)"
+    set_env_var "USER_NAME_ALLOWLIST" "$(get_section_content users)"
+    # Best-effort, deliberately NOT gated on health: the running container still holds the
+    # abandoned edit in its environment, so recreate it against the rolled-back .env. If it stays
+    # unhealthy the files are still consistent, and its restart policy converges it later.
+    docker compose up -d auth-sidecar --force-recreate >/dev/null 2>&1 || true
     RECREATE_FAILED=1
   fi
 else
@@ -156,6 +168,7 @@ fi
 # terraform variable (iam_role_names_allowlist / iam_user_names_allowlist), keeping state in sync.
 echo "$(get_section_content "$ENTITY_TYPE")"
 
-# Non-zero only now that the write-back is out: the edit is applied and terraform will agree, but
-# the sidecar is not serving it, so the command must not report success.
+# Non-zero when the sidecar never became healthy. The write-back above is emitted either way, but
+# the CLI only consumes it on success, so the failure path rolled the host edit back rather than
+# relying on it: whichever path ran, host and terraform agree.
 exit "$RECREATE_FAILED"
