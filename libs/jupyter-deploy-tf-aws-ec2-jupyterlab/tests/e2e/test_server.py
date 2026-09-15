@@ -66,13 +66,25 @@ def test_start_server(e2e_deployment: EndToEndDeployment, client_proxy_app: Loca
 
 
 @pytest.mark.parametrize("service", _DECLARED_SERVICES)
-def test_all_service_logs(e2e_deployment: EndToEndDeployment, service: str) -> None:
+def test_all_service_logs(
+    e2e_deployment: EndToEndDeployment, client_proxy_app: LocalProxyApplication, service: str
+) -> None:
     """`jd server logs -s <service>` returns output for each declared service.
 
     Parametrized over the manifest's service list rather than hard-coded per service, so adding
     a service to the manifest without wiring its logs fails here.
+
+    The app is visited first, whcih guarantees there are logs for `traefik`: it is configured with
+    `accessLog` but no `log` section, so it inherits traefik's default ERROR level and writes
+    NOTHING to stdout until it either serves a request or fails. `ensure_server_running()` does not
+    produce one -- the readiness probe is `docker exec jupyter curl localhost:8888/...`, inside the
+    container, never through traefik's :8443. So after any test that recreates the containers
+    (`jd server stop` immediately precedes this one), a freshly started traefik has an empty log and
+    `jd server logs -s traefik` answers "no logs were retrieved". The base template's
+    `test_all_service_logs` visits the app first for exactly this reason.
     """
     e2e_deployment.ensure_server_running()
+    client_proxy_app.verify_jupyterlab_accessible()
 
     result = e2e_deployment.cli.run_command(["jupyter-deploy", "server", "logs", "-s", service])
     assert result.stdout, f"Expected non-empty logs output for {service}"
