@@ -59,6 +59,7 @@ class HostCycleObservations:
     stopped_connection_status: str
     stopped_connect_info_failed: bool
     stopped_open_failed: bool
+    stopped_host_status_after_open: str
     running_host_status: str
     running_connection_status: str
     flag_survived: bool
@@ -159,6 +160,10 @@ def host_cycle(e2e_deployment: EndToEndDeployment) -> Iterator[HostCycleObservat
     stopped_connection_status = e2e_deployment.cli.get_connection_status()
     stopped_connect_info_failed = _fails_gracefully(e2e_deployment, ["jupyter-deploy", "proxy", "connect-info"])
     stopped_open_failed = _fails_gracefully(e2e_deployment, ["jupyter-deploy", "open", "--detached"])
+    # Read the status straight after the failed `jd open`, while the host is still stopped: this is
+    # the only point where "jd open did not start the instance" is observable. Read after the
+    # `jd host start` below it would be "running" no matter what `jd open` did.
+    stopped_host_status_after_open = e2e_deployment.cli.get_host_status()
 
     # --- start once
     e2e_deployment.cli.run_command(["jupyter-deploy", "host", "start"])
@@ -189,6 +194,7 @@ def host_cycle(e2e_deployment: EndToEndDeployment) -> Iterator[HostCycleObservat
             stopped_connection_status=stopped_connection_status,
             stopped_connect_info_failed=stopped_connect_info_failed,
             stopped_open_failed=stopped_open_failed,
+            stopped_host_status_after_open=stopped_host_status_after_open,
             running_host_status=running_host_status,
             running_connection_status=running_connection_status,
             flag_survived=flag_survived,
@@ -263,8 +269,9 @@ def test_host_stopped_fails_open_gracefully(host_cycle: HostCycleObservations) -
     the user asked to open the app, not to provision. It reports the problem and stops.
     """
     assert host_cycle.stopped_open_failed, "`jd open` did not fail gracefully against a stopped host"
-    assert host_cycle.running_host_status == "running", (
-        "Sanity: the host must have been started by `jd host start`, not by `jd open`"
+    assert host_cycle.stopped_host_status_after_open == "stopped", (
+        "`jd open` started the host implicitly: expected it to still be 'stopped' after the failed "
+        f"open, got '{host_cycle.stopped_host_status_after_open}'"
     )
 
 

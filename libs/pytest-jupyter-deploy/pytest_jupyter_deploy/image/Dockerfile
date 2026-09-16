@@ -61,12 +61,9 @@ RUN set -e; \
 WORKDIR /workspace
 RUN chown ${USER_UID}:${USER_GID} /workspace
 
-# Shared terraform provider plugin cache (TF_PLUGIN_CACHE_DIR, set in docker-compose.yml).
-# Without it every `terraform init` — one per `jd config`, and the config tests run many in
-# throwaway /tmp projects — re-downloads the ~140 MB AWS provider into its own .terraform/.
-# Terraform requires the directory to exist; it never creates it.
-RUN mkdir -p /home/testuser/.terraform.d/plugin-cache && \
-    chown -R ${USER_UID}:${USER_GID} /home/testuser/.terraform.d
+# NOTE: no terraform plugin-cache dir is created here. TF_PLUGIN_CACHE_DIR points at the HOST
+# ${HOME} path, which docker-compose.yml bind-mounts at the identical absolute path inside the
+# container (see the rationale there), so a /home/testuser copy would never be read.
 
 # Install Playwright system dependencies only (browsers will be installed after uv sync)
 # We install system deps here so they're cached in the image layer

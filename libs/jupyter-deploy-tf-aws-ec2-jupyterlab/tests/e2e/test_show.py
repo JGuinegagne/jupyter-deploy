@@ -13,14 +13,11 @@ What is left is the four assertions that are about this template's declared surf
 outputs set, its no-secrets invariant, and the two outputs the access path depends on.
 """
 
-import re
-
 import pytest
+from jupyter_deploy.engine.terraform.tf_varfiles import parse_variables_dot_tf_content
 from jupyter_deploy.enum import ValueSource
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
 from pytest_jupyter_deploy.terraform.utils import get_variables_dot_tf_path
-
-_SENSITIVE_VARIABLE_RE = re.compile(r'variable\s+"(?P<name>[^"]+)"\s*\{(?P<body>[^}]*)\}', re.DOTALL)
 
 
 @pytest.mark.cli
@@ -60,11 +57,13 @@ def test_show_declares_no_sensitive_variables(e2e_deployment: EndToEndDeployment
     e2e_deployment.ensure_deployed()
 
     variables_tf = get_variables_dot_tf_path(e2e_deployment.suite_config.project_dir)
-    sensitive = [
-        match.group("name")
-        for match in _SENSITIVE_VARIABLE_RE.finditer(variables_tf.read_text())
-        if re.search(r"^\s*sensitive\s*=\s*true", match.group("body"), re.MULTILINE)
-    ]
+    declared = parse_variables_dot_tf_content(variables_tf.read_text())
+
+    # Guard the guard: a parse that silently yields nothing would make the assertion below pass
+    # vacuously, which is how the previous regex-based version of this test went blind.
+    assert declared, f"Parsed no variable definitions out of {variables_tf}"
+
+    sensitive = sorted(name for name, var_def in declared.items() if var_def.sensitive)
     assert not sensitive, f"Expected no sensitive variables, found: {sensitive}"
 
     variables_config = e2e_deployment.get_variables_config()

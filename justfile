@@ -871,17 +871,10 @@ ci-e2e-jupyterlab-deploy project_dir="sandbox-e2e":
     fi
     export AWS_REGION
 
-    # Start the pre-built container with the project dir mounted.
+    # `test-e2e` below writes the compose override (same path, same image, plus the test-results
+    # mount) and restarts the container itself, so this recipe only has to guarantee the project
+    # dir exists for it to mount.
     mkdir -p "{{justfile_directory()}}/{{project_dir}}"
-    OVERRIDE_FILE="{{justfile_directory()}}/docker-compose.e2e-override.yml"
-    {
-        echo "services:"
-        echo "  e2e:"
-        echo "    image: jupyter-deploy-e2e-base:latest"
-        echo "    volumes:"
-        echo "      - ./{{project_dir}}:/workspace/{{project_dir}}"
-    } > "$OVERRIDE_FILE"
-    trap 'rm -f "$OVERRIDE_FILE"' EXIT
 
     # Deploy THROUGH pytest, in fresh-deploy mode: the project dir is empty, so `test-e2e`
     # omits --e2e-existing-project and the session-scoped e2e_deployment fixture runs

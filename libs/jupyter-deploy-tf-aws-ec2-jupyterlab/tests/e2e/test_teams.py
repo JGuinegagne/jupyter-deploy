@@ -25,10 +25,6 @@ from pytest_jupyter_deploy.local_proxy import LocalProxyApplication
 # between a revoke and its restore would 403 every later test in the file.
 pytestmark = pytest.mark.usefixtures("restore_allowlist")
 
-# `jd teams` recreates only the auth-sidecar container, during which Traefik's ForwardAuth can
-# briefly see a connection refused and answer 5xx. Poll to the expected status rather than sampling
-# once — the claim under test is "the new decision takes effect", not "within one round-trip".
-
 # A name no real role will have, for CRUD assertions that must not touch the caller's own access.
 _PROBE_TEAM = "JupyterDeployE2ETeamsProbe"
 
