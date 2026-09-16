@@ -1122,6 +1122,7 @@ env-setup-jupyterlab options="":
         fi
     }
 
+    override availability-zone JD_E2E_AVAILABILITY_ZONE
     override cpu-instance JD_E2E_CPU_INSTANCE
     override gpu-instance JD_E2E_GPU_INSTANCE
     override larger-log-retention-days JD_E2E_LARGER_LOG_RETENTION_DAYS

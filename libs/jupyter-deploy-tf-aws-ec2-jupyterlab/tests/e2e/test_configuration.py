@@ -21,6 +21,7 @@ expensive part happens a few times rather than once per test. Only the tests tha
 run or drive `jd config` take their own throwaway project.
 """
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -66,6 +67,50 @@ def test_config_requires_no_variables(e2e_deployment: EndToEndDeployment) -> Non
         # Do NOT prepare any configuration — the freshly initialized project must be complete.
         result = cli.run_command(["jupyter-deploy", "config"])
         assert "Your project is ready" in result.stdout
+
+
+@pytest.mark.cli
+@pytest.mark.no_deploy
+def test_availability_zone_is_settable_and_clearable_from_the_cli(e2e_deployment: EndToEndDeployment) -> None:
+    """`jd config --availability-zone <zone>` pins placement, and `any` gives up the pin again.
+
+    Both directions matter and only the second is subtle. The zone decides where the instance AND
+    its EBS volumes land, and EBS cannot cross zones, so this is a deploy-time-only choice — which
+    makes "how do I undo it" a real question.
+
+    The sentinel is the word `any` rather than an empty value because the CLI cannot express
+    emptiness: `--availability-zone ""` is stored in variables.yaml as '""' and rendered into
+    tfvars as a two-character zone name, so it pins garbage instead of clearing the pin. `any` is
+    something a caller can actually type.
+
+    Each `jd config` runs a real plan, so this covers the placement lookup end to end — and only a
+    real plan does: `terraform validate` cannot catch the unknown-value and empty-list errors this
+    path went through, because it never resolves the default VPC's subnets.
+    """
+    with undeployed_project(e2e_deployment.suite_config) as (project_path, cli):
+
+        def configured_zone() -> str | None:
+            """The zone as terraform receives it, not as variables.yaml spells it.
+
+            `jd config --availability-zone ""` records the cleared override in variables.yaml as
+            the two-character string '""', so asserting on the YAML would be asserting on a
+            serialization quirk. The generated tfvars is what the template actually consumes.
+            """
+            tfvars = (project_path / "engine" / "jdinputs.auto.tfvars").read_text()
+            match = re.search(r'^availability_zone\s*=\s*"(.*)"$', tfvars, re.MULTILINE)
+            return match.group(1) if match else None
+
+        # us-west-2b rather than the zone the suite deploys into: a value that differs from both the
+        # preset and the suite's own pin, so a no-op would be visible.
+        result = cli.run_command(["jupyter-deploy", "config", "--availability-zone", "us-west-2b"])
+        assert "Your project is ready" in result.stdout, f"`jd config` did not complete: {result.stdout[-500:]}"
+        assert configured_zone() == "us-west-2b", f"Expected the zone to be pinned, got: {configured_zone()!r}"
+
+        result = cli.run_command(["jupyter-deploy", "config", "--availability-zone", "any"])
+        assert "Your project is ready" in result.stdout, (
+            f"Giving up the pin broke `jd config`; the sentinel is not usable: {result.stdout[-500:]}"
+        )
+        assert configured_zone() == "any", f"Expected the zone to be back to any, got: {configured_zone()!r}"
 
 
 @pytest.mark.cli
