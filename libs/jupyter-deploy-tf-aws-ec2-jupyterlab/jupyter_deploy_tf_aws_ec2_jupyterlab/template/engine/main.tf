@@ -107,6 +107,7 @@ module "volumes" {
   additional_ebs_mounts = var.additional_ebs_mounts
   additional_efs_mounts = var.additional_efs_mounts
   availability_zone     = module.ec2_instance.availability_zone
+  subnet_id             = module.ec2_instance.subnet_id
   instance_id           = module.ec2_instance.id
   efs_security_group_id = module.network.efs_security_group_id
 }
