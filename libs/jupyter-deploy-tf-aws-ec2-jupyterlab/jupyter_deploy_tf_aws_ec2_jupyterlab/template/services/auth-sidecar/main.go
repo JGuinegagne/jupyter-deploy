@@ -71,6 +71,20 @@ type transientError struct{ err error }
 func (e *transientError) Error() string { return e.err.Error() }
 func (e *transientError) Unwrap() error { return e.err }
 
+// clockSkewError marks the one 401 the caller can fix without changing anything about their
+// credentials: the token's signed time window does not line up with this host's clock. X-Amz-Date is
+// stamped by the client and checked here, so a client whose clock has drifted past maxClockSkew has
+// EVERY token rejected, including freshly minted ones — refreshing cannot help. Suspended VMs are
+// the usual cause (WSL2 and Docker Desktop both fall behind by the length of a host sleep until they
+// re-sync). It is called out separately from other 401s so handleAuth can name the cause in the
+// response body: the generic "unauthorized" sends the user hunting through IAM and the allowlist,
+// while the real answer is `date` on their own machine. Safe to disclose — the offset is already
+// derivable from the HTTP Date response header.
+type clockSkewError struct{ err error }
+
+func (e *clockSkewError) Error() string { return e.err.Error() }
+func (e *clockSkewError) Unwrap() error { return e.err }
+
 type config struct {
 	deploymentID string
 	accountID    string
@@ -291,10 +305,12 @@ func (s *server) verify(ctx context.Context, bearer, binding string) (string, er
 	// one must not be rejected early just because our clock runs ahead.
 	age := time.Since(signedAt)
 	if age > time.Duration(expiry)*time.Second+maxClockSkew {
-		return "", fmt.Errorf("token is expired (signed %s ago, X-Amz-Expires=%ds)", age.Truncate(time.Second), expiry)
+		return "", &clockSkewError{fmt.Errorf(
+			"token is expired (signed %s ago, X-Amz-Expires=%ds)", age.Truncate(time.Second), expiry)}
 	}
 	if age < -maxClockSkew {
-		return "", fmt.Errorf("token X-Amz-Date is too far in the future (%s)", (-age).Truncate(time.Second))
+		return "", &clockSkewError{fmt.Errorf(
+			"token X-Amz-Date is too far in the future (%s)", (-age).Truncate(time.Second))}
 	}
 
 	// Replay the client's presigned request verbatim, but only ever to the pinned STS host we
@@ -405,6 +421,15 @@ func (s *server) handleAuth(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Printf("auth 401 (%s): %v", fwd, err)
+		if skew, ok := errors.AsType[*clockSkewError](err); ok {
+			// Name the cause in the body, not just the log: this is the only 401 whose fix is on
+			// the caller's machine rather than in IAM or the allowlist.
+			http.Error(w, fmt.Sprintf(
+				"unauthorized: %v. The token is outside its signed time window; this host allows %s of "+
+					"clock skew. Check that this machine's clock is in sync (e.g. a suspended VM).",
+				skew, maxClockSkew), http.StatusUnauthorized)
+			return
+		}
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
