@@ -245,6 +245,7 @@ def test_daemonset_component_status_ready(e2e_deployment: EndToEndDeployment) ->
 
 @skip_if_testvars_not_set(["JD_E2E_GPU_ENABLED"])
 @pytest.mark.usefixtures("kubernetes_cluster_login")
+@pytest.mark.usefixtures("gpu_pool_required")
 def test_nvidia_device_plugin_daemonset_when_gpu_enabled(e2e_deployment: EndToEndDeployment) -> None:
     """The device-plugin DaemonSet exists when a GPU pool is configured.
 

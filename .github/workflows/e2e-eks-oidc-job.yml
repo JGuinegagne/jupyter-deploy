@@ -91,6 +91,11 @@ jobs:
           just env-setup-eks sandbox-e2e sandbox-ci ${{ inputs.oauth-app-num }}
           "org=jupyter-infra,team=jupyter-deploy-e2e-app-access,rbac-team=jupyter-deploy-e2e-app-access,admin-roles=[\"Admin\",\"DeployRole\",\"jupyter-infra-ci-e2e-6a3e2625\"]"
 
+      # CI opts into the paid GPU tests (#357); locally this stays a manual
+      # .env opt-in (see env.example).
+      - name: Enable GPU tests
+        run: echo "JD_E2E_GPU_ENABLED=1" >> .env
+
       - name: Import auth state
         run: just auth-import sandbox-ci
 

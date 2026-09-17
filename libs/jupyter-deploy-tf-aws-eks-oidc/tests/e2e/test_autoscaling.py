@@ -2,24 +2,29 @@
 
 import subprocess
 import time
-from collections.abc import Callable
 
 import pytest
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
-from pytest_jupyter_deploy.kubernetes.ballast import ballast_deployment
+from pytest_jupyter_deploy.kubernetes.ballast import ballast_deployment, connection_ballast_deployment
+from pytest_jupyter_deploy.kubernetes.kubectl import run_kubectl
 from pytest_jupyter_deploy.kubernetes.nodes import (
     get_node_allocatable_cpu_millicores,
     get_node_names,
 )
+from pytest_jupyter_deploy.polling import poll
 from pytest_jupyter_deploy.workspaces.kubectl import (
     kubectl_apply_workspace,
     kubectl_delete_workspace,
 )
 
-from .conftest import WORKSPACES_DIR
+from .conftest import WORKSPACE_NAMESPACE, WORKSPACES_DIR
+
+
+def _kubectl_stdout(*args: str) -> str:
+    return run_kubectl(*args, check=True).stdout.strip()
+
 
 ROUTER_NAMESPACE = "jupyter-k8s-router"
-WORKSPACE_NAMESPACE = "default"
 KARPENTER_NAMESPACE = "karpenter"
 
 # Routing nodes are tainted with jupyter-deploy/role=routing:NoSchedule so ballast
@@ -33,19 +38,23 @@ BALLAST_IMAGE = "public.ecr.aws/docker/library/busybox:1.36"
 # Workspace used to trigger Karpenter workspace node provisioning.
 _SCALE_WORKSPACE = "e2e-autoscaling-workspace"
 
+# ── KEDA connection-load ballast ──────────────────────────────────────────────
+# All three routing ScaledObjects trigger on the same Prometheus metric,
+# sum(traefik_open_connections{entrypoint="websecure"}), divided per pod
+# (AverageValue). Per-pod thresholds from the aws-oidc chart values: traefik
+# 100, authmiddleware 150, web-app 200; each tier's minReplicaCount is 2. So
+# 3 pods x 200 held connections = 600 total moves every tier above its floor:
+# desired replicas 6 / 4 / 3.
+KEDA_SCALED_DEPLOYMENTS = ("traefik", "authmiddleware", "web-app")
+_CONN_BALLAST_NAME = "keda-conn-ballast"
+_CONN_BALLAST_PODS = 3
+_CONN_BALLAST_CONNECTIONS_PER_POD = 200
+_TRAEFIK_IN_CLUSTER_HOST = f"traefik.{ROUTER_NAMESPACE}.svc.cluster.local"
+_PYTHON_IMAGE = "public.ecr.aws/docker/library/python:3.12-alpine"
 
-def _kubectl(*args: str) -> str:
-    result = subprocess.run(["kubectl", *args], capture_output=True, text=True, check=True)
-    return result.stdout.strip()
 
-
-def _poll(condition: "Callable[[], bool]", timeout_s: int, interval_s: int = 5, msg: str = "") -> None:
-    deadline = time.time() + timeout_s
-    while time.time() < deadline:
-        if condition():
-            return
-        time.sleep(interval_s)
-    raise TimeoutError(f"Condition not met within {timeout_s}s: {msg}")
+def _routing_deployment_replicas(name: str) -> int:
+    return int(_kubectl_stdout("get", "deployment", name, "-n", ROUTER_NAMESPACE, "-o", "jsonpath={.spec.replicas}"))
 
 
 # ── KEDA HPAs ────────────────────────────────────────────────────────────────
@@ -56,7 +65,9 @@ def test_keda_hpas_exist(e2e_deployment: EndToEndDeployment) -> None:
     """KEDA must create HPAs for traefik, authmiddleware, and web-app."""
     e2e_deployment.ensure_deployed()
 
-    output = _kubectl("get", "hpa", "-n", ROUTER_NAMESPACE, "--no-headers", "-o", "custom-columns=NAME:.metadata.name")
+    output = _kubectl_stdout(
+        "get", "hpa", "-n", ROUTER_NAMESPACE, "--no-headers", "-o", "custom-columns=NAME:.metadata.name"
+    )
     hpa_names = set(output.splitlines())
 
     assert "keda-hpa-traefik" in hpa_names, f"Expected keda-hpa-traefik HPA, got: {hpa_names}"
@@ -75,7 +86,7 @@ def test_keda_hpas_reference_correct_deployments(e2e_deployment: EndToEndDeploym
         "keda-hpa-web-app": "web-app",
     }
     for hpa_name, deployment_name in expected.items():
-        ref = _kubectl(
+        ref = _kubectl_stdout(
             "get",
             "hpa",
             hpa_name,
@@ -123,7 +134,7 @@ def test_routing_deployments_have_no_hardcoded_replicas(e2e_deployment: EndToEnd
 
 def _workspaces_nodes() -> set[str]:
     """Return the set of node names currently labeled as workspaces-role nodes."""
-    output = _kubectl(
+    output = _kubectl_stdout(
         "get",
         "nodes",
         "-l",
@@ -138,7 +149,7 @@ def _workspaces_nodes() -> set[str]:
 
 def _workspace_pod_node() -> str:
     """Return the node hosting the _SCALE_WORKSPACE pod, or '' if none is scheduled yet."""
-    return _kubectl(
+    return _kubectl_stdout(
         "get",
         "pods",
         "-n",
@@ -174,7 +185,7 @@ def test_karpenter_workspace_provisioning_and_scale_to_zero(e2e_deployment: EndT
     # pod to be gone so its node isn't misattributed to this run.
     try:
         kubectl_delete_workspace(_SCALE_WORKSPACE)
-        _poll(
+        poll(
             lambda: _workspace_pod_node() == "",
             timeout_s=300,
             msg="pre-test cleanup: leftover workspace pod did not terminate",
@@ -192,10 +203,10 @@ def test_karpenter_workspace_provisioning_and_scale_to_zero(e2e_deployment: EndT
         pod_node = _workspace_pod_node()
         assert pod_node, f"Could not find pod node for workspace {_SCALE_WORKSPACE}"
 
-        node_role = _kubectl("get", "node", pod_node, "-o", "jsonpath={.metadata.labels.jupyter-deploy/role}")
+        node_role = _kubectl_stdout("get", "node", pod_node, "-o", "jsonpath={.metadata.labels.jupyter-deploy/role}")
         assert node_role == "workspaces", f"Workspace pod landed on node with role '{node_role}', expected 'workspaces'"
 
-        nodepool = _kubectl("get", "node", pod_node, "-o", r"jsonpath={.metadata.labels.karpenter\.sh/nodepool}")
+        nodepool = _kubectl_stdout("get", "node", pod_node, "-o", r"jsonpath={.metadata.labels.karpenter\.sh/nodepool}")
         assert nodepool == "workspace-cpu", f"Workspace pod node has nodepool '{nodepool}', expected 'workspace-cpu'"
 
         # Nodes Karpenter provisioned for this workspace (excludes any pre-existing
@@ -212,7 +223,7 @@ def test_karpenter_workspace_provisioning_and_scale_to_zero(e2e_deployment: EndT
 
     # After deletion Karpenter should terminate the node(s) it added for this
     # workspace (consolidateAfter is 60s; allow up to 10 minutes for drain + delete).
-    _poll(
+    poll(
         lambda: _workspaces_nodes().isdisjoint(new_nodes),
         timeout_s=600,
         msg=f"nodes {new_nodes} were not terminated after workspace deletion",
@@ -271,7 +282,7 @@ def test_karpenter_routing_nodepool_scales_up(e2e_deployment: EndToEndDeployment
             time.sleep(10)
 
         if not scaled_up:
-            karpenter_logs = _kubectl(
+            karpenter_logs = _kubectl_stdout(
                 "logs",
                 "-n",
                 KARPENTER_NAMESPACE,
@@ -285,3 +296,48 @@ def test_karpenter_routing_nodepool_scales_up(e2e_deployment: EndToEndDeployment
                 f"Karpenter did not provision a new routing node.\n"
                 f"--- Karpenter logs ---\n{karpenter_logs}"
             )
+
+
+# ── KEDA load-driven replica scaling ─────────────────────────────────────────
+
+
+@pytest.mark.mutating
+@pytest.mark.usefixtures("kubernetes_cluster_login")
+def test_keda_scales_routing_tier_under_connection_load(e2e_deployment: EndToEndDeployment) -> None:
+    """Held connections drive every KEDA-scaled Deployment above its floor, then back.
+
+    On an idle deployment the pre-load replica counts are the minReplicaCount
+    floors, so the scale-down check is exact equality. Asserts spec.replicas
+    (the HPA decision), not pod readiness: extra pods may wait on a Karpenter
+    routing node. Node consolidation after scale-down is not asserted
+    (jupyter-k8s-aws#81).
+    """
+    e2e_deployment.ensure_deployed()
+
+    baselines = {name: _routing_deployment_replicas(name) for name in KEDA_SCALED_DEPLOYMENTS}
+
+    with connection_ballast_deployment(
+        name=_CONN_BALLAST_NAME,
+        namespace=ROUTER_NAMESPACE,
+        image=_PYTHON_IMAGE,
+        replicas=_CONN_BALLAST_PODS,
+        target_host=_TRAEFIK_IN_CLUSTER_HOST,
+        connections_per_pod=_CONN_BALLAST_CONNECTIONS_PER_POD,
+        node_selector={"jupyter-deploy/role": "platform"},
+    ):
+        # Metric path: prometheus scrape + KEDA poll (30s) + HPA sync. Allow 7 minutes.
+        poll(
+            lambda: all(_routing_deployment_replicas(name) > baselines[name] for name in KEDA_SCALED_DEPLOYMENTS),
+            timeout_s=420,
+            interval_s=10,
+            msg=f"KEDA did not scale all of {KEDA_SCALED_DEPLOYMENTS} above their pre-load replica counts",
+        )
+
+    # HPA scale-down waits out its stabilization window (300s) after the
+    # connections drop; allow 15 minutes for every tier to settle back.
+    poll(
+        lambda: all(_routing_deployment_replicas(name) == baselines[name] for name in KEDA_SCALED_DEPLOYMENTS),
+        timeout_s=900,
+        interval_s=15,
+        msg=f"routing Deployments did not settle back to pre-load replica counts {baselines}",
+    )

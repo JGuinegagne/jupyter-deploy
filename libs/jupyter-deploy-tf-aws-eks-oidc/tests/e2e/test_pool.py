@@ -55,6 +55,7 @@ def test_pool_list_includes_managed_and_karpenter_pools(e2e_deployment: EndToEnd
 
 @skip_if_testvars_not_set(["JD_E2E_GPU_ENABLED"])
 @pytest.mark.usefixtures("kubernetes_cluster_login")
+@pytest.mark.usefixtures("gpu_pool_required")
 def test_pool_list_includes_gpu_pool_when_enabled(e2e_deployment: EndToEndDeployment) -> None:
     """enable_default_gpu_pool adds the synthesized workspace-gpu NodePool to jd pool list."""
     e2e_deployment.ensure_deployed()
