@@ -8,6 +8,7 @@ from jupyter_deploy.engine.vardefs import TemplateVariableDefinition
 from jupyter_deploy.enum import SecretSource, StoreType
 from jupyter_deploy.exceptions import InvalidPresetError, SecretNotFoundError
 from jupyter_deploy.handlers.base_project_handler import BaseProjectHandler, write_store_config
+from jupyter_deploy.handlers.resource.volume_handler import VolumeHandler
 from jupyter_deploy.manifest import JupyterDeploySecretV1
 from jupyter_deploy.provider.manifest_command_runner import ManifestCommandRunner
 from jupyter_deploy.provider.resolved_clidefs import ResolvedCliParameter, StrResolvedCliParameter
@@ -266,6 +267,42 @@ class ConfigHandler(BaseProjectHandler):
         # Write all restored values to variables.yaml
         self._handler.variables_handler.sync_project_variables_config(restored_values)
         self.display_manager.success(f"Restored {len(restored_values)} secret(s).")
+
+    def restore_volumes(self) -> None:
+        """Resolve each managed volume's latest backup into the variable the template declares for it.
+
+        Runs before the plan so terraform creates every volume from its backup instead of empty. This
+        is what makes a zone change non-destructive: moving zones replaces the volumes
+        (volumes cannot cross zones), and the backup is what carries the data across.
+
+        Reads backups and writes one local variable, so `jd config` stays free of cloud side effects;
+        creating the backups is the separate, explicit `jd volume backup`.
+
+        Validates before writing anything. Pointing the variable at a backup REPLACES the volume on the
+        next apply -- `snapshot_id` forces replacement -- so this path is destructive whether or not
+        anything else about the configuration changed, and it succeeds silently when the backup is old:
+        terraform recreates the volume from it, reports success, and the work done since is gone. The
+        check is only meaningful here, before the variable is written.
+
+        Scoped to this flag on purpose. A user who changes a zone WITHOUT asking for a restore gets no
+        check from here -- the engine's plan-time precondition is what stands between them and an empty
+        volume, and it only fires while the backups variable is still unset. That is a known footgun,
+        accepted deliberately rather than paid for by validating on every `jd config`.
+
+        Raises:
+            BackupsNotReadyError: If the backups cannot be shown to hold the volumes' current contents,
+                or if any managed volume has no backup. Restoring only some volumes would recreate the
+                rest empty, which is the data loss this path exists to prevent.
+            IncompatibleHostStateError: If the host is not stopped, so quiescence cannot be established.
+        """
+        volume_handler = VolumeHandler(display_manager=self.display_manager)
+        volume_handler.validate_backups_ready()
+        backups_map_value, backup_ids = volume_handler.resolve_backup_ids()
+        # The volumes declaration names a values: entry; that entry names the template's variable.
+        variable_name = self.project_manifest.get_declared_value(backups_map_value).source_key
+
+        self._handler.variables_handler.sync_project_variables_config({variable_name: backup_ids})
+        self.display_manager.success(f"Resolved {len(backup_ids)} volume backup(s) into '{variable_name}'.")
 
     @staticmethod
     def _resolve_secret_id(secret_def: JupyterDeploySecretV1, outputs_handler: EngineOutputsHandler) -> str:
