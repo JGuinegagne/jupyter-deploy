@@ -39,6 +39,7 @@ from jupyter_deploy.exceptions import (
     UnsupportedProviderRegionError,
     VariableNotFoundError,
     VolumeNotBackupableError,
+    VolumeNotFoundError,
     WriteConfigurationError,
 )
 
@@ -401,6 +402,22 @@ class TestImageErrors(unittest.TestCase):
 
 class TestVolumeErrors(unittest.TestCase):
     """Test cases for volume-related exceptions."""
+
+    def test_volume_not_found_error(self) -> None:
+        error = VolumeNotFoundError("scratch", ["home", "home/external-ebs1"])
+        self.assertIsInstance(error, JupyterDeployError)
+        self.assertIsInstance(error, ValueError)
+        self.assertEqual(error.volume_name, "scratch")
+        self.assertEqual(error.valid_volumes, ["home", "home/external-ebs1"])
+        self.assertIn("scratch", str(error))
+
+    def test_volume_not_found_is_not_an_instruction_error(self) -> None:
+        """A handler-layer error, so the CLI can list the valid names.
+
+        `ResourceNotFoundError` is the provider-layer sibling: it means an API could not find a
+        resource and carries no list of alternatives, so the two must not be interchangeable.
+        """
+        self.assertNotIsInstance(VolumeNotFoundError("scratch", []), InstructionError)
 
     def test_volume_not_backupable_error(self) -> None:
         error = VolumeNotBackupableError(

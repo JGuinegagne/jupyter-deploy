@@ -464,6 +464,25 @@ class InvalidComponentVerbError(JupyterDeployError, ValueError):
         super().__init__(f"'{verb}' is not supported for {component_type} component '{component_name}'.")
 
 
+class VolumeNotFoundError(JupyterDeployError, ValueError):
+    """Raised when a volume name is not one this deployment mounts.
+
+    A handler-layer error, like `ImageNotFoundError` and `ComponentNotFoundError`: the user named
+    something the declaration does not have, so the answer is the list of names that ARE valid. That
+    is why it is not `ResourceNotFoundError`, which is an `InstructionError` for a resource a provider
+    API could not find and carries no list.
+
+    Attributes:
+        volume_name: The name that was looked up
+        valid_volumes: The identities this deployment does mount
+    """
+
+    def __init__(self, volume_name: str, valid_volumes: list[str]) -> None:
+        self.volume_name = volume_name
+        self.valid_volumes = valid_volumes
+        super().__init__(f"Volume '{volume_name}' not found.")
+
+
 class VolumeNotBackupableError(JupyterDeployError, ValueError):
     """Raised when a volume exists but taking a backup of it is not something that can happen.
 

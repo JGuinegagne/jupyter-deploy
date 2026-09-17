@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from jupyter_deploy.exceptions import (
+    BackupsNotReadyError,
     CommandNotImplementedError,
     ComponentNotFoundError,
     ConfigurationError,
@@ -59,6 +60,8 @@ from jupyter_deploy.exceptions import (
     UrlNotAvailableError,
     UrlNotSecureError,
     VariableNotFoundError,
+    VolumeNotBackupableError,
+    VolumeNotFoundError,
     WriteConfigurationError,
 )
 
@@ -251,6 +254,13 @@ def handle_cli_errors(console: Console) -> Generator[None, None, None]:
         console.print(":bulb: Run [bold cyan]jd image list[/] to see all images.")
         raise typer.Exit(code=1) from None
 
+    except VolumeNotFoundError as e:
+        console.print(f":x: {e}", style="bold red", highlight=False)
+        console.line()
+        console.print(f"Mounted volumes: {', '.join(e.valid_volumes)}")
+        console.print(":bulb: Run [bold cyan]jd volume list[/] to see all volumes.")
+        raise typer.Exit(code=1) from None
+
     except ImageTagNotFoundError as e:
         console.print(f":x: {e}", style="bold red", highlight=False)
         console.line()
@@ -261,6 +271,20 @@ def handle_cli_errors(console: Console) -> Generator[None, None, None]:
         console.print(f":x: {e}", style="bold red", highlight=False)
         console.line()
         console.print(f"Available actions for '{e.component_name}': {', '.join(e.valid_verbs)}")
+        raise typer.Exit(code=1) from None
+
+    except VolumeNotBackupableError as e:
+        console.print(f":x: {e}", style="bold red", highlight=False)
+        console.line()
+        if e.hint:
+            console.print(f":bulb: {e.hint}")
+        raise typer.Exit(code=1) from None
+
+    except BackupsNotReadyError as e:
+        console.print(f":x: {e}", style="bold red", highlight=False)
+        console.line()
+        if e.hint:
+            console.print(f":bulb: {e.hint}")
         raise typer.Exit(code=1) from None
 
     except InvalidKubernetesClusterTargetError as e:
