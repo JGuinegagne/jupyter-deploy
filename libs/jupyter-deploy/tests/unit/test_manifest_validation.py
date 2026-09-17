@@ -41,6 +41,124 @@ class TestValidCommands(unittest.TestCase):
         manifest_validation.validate_command(cmd)  # no raise
 
 
+def _backup_like(gate: bool) -> dict:
+    """A create-then-wait command, optionally preceded by a gate step, with CORRECT indices.
+
+    Shaped after `volume.backup`: inserting the gate shifts every later reference by one, which is the
+    mistake this validation exists to catch.
+    """
+    steps: list[dict] = []
+    if gate:
+        steps.append({"api-name": "aws.ec2.verify-instance-stopped", "arguments": []})
+    offset = 1 if gate else 0
+    steps.append({"api-name": "aws.ec2.create-snapshot", "arguments": []})
+    steps.append(
+        {
+            "api-name": "aws.ec2.wait-snapshot-completed",
+            "arguments": [{"api-attribute": "snapshot_id", "source": "result", "source-key": f"[{offset}].SnapshotId"}],
+        }
+    )
+    return {
+        "cmd": "volume.backup",
+        "sequence": steps,
+        "results": [
+            {"result-name": "volume.backup.backup_id", "source": "result", "source-key": f"[{offset + 1}].SnapshotId"}
+        ],
+    }
+
+
+class TestStepReferences(unittest.TestCase):
+    """`source-key: '[N].Field'` is POSITIONAL, so a step insertion invalidates later references."""
+
+    def test_correct_indices_pass_without_a_gate(self) -> None:
+        manifest_validation.validate_command(JupyterDeployCommandV1.model_validate(_backup_like(gate=False)))
+
+    def test_correct_indices_pass_with_a_gate(self) -> None:
+        manifest_validation.validate_command(JupyterDeployCommandV1.model_validate(_backup_like(gate=True)))
+
+    def test_stale_index_after_removing_a_step_is_rejected(self) -> None:
+        """Deleting a step leaves later references past the end, which IS caught."""
+        cmd_dict = _backup_like(gate=True)
+        del cmd_dict["sequence"][0]
+        cmd = JupyterDeployCommandV1.model_validate(cmd_dict)
+
+        with self.assertRaises(InvalidCommandGrammarError):
+            manifest_validation.validate_command(cmd)
+
+    def test_a_shifted_but_in_bounds_reference_is_NOT_caught(self) -> None:
+        """Known gap, pinned so nobody assumes otherwise.
+
+        Inserting a step shifts later references to a *different but still valid* index, so bounds
+        checking cannot see it: `[0].SnapshotId` after a gate lands at [0] points at the gate, which is
+        in range. Catching this needs a static api-name -> result-names registry so the FIELD can be
+        checked against the referenced step, not just the index. Until then, the manifest's own
+        `[N]` comments and review are the only defense.
+        """
+        cmd_dict = _backup_like(gate=True)
+        cmd_dict["sequence"][2]["arguments"][0]["source-key"] = "[0].SnapshotId"
+        cmd = JupyterDeployCommandV1.model_validate(cmd_dict)
+
+        manifest_validation.validate_command(cmd)  # no raise -- documents the limitation
+
+    def test_a_step_cannot_reference_itself(self) -> None:
+        cmd = JupyterDeployCommandV1.model_validate(
+            {
+                "cmd": "c",
+                "sequence": [
+                    {
+                        "api-name": "a.b.c",
+                        "arguments": [{"api-attribute": "x", "source": "result", "source-key": "[0].Y"}],
+                    }
+                ],
+            }
+        )
+        with self.assertRaises(InvalidCommandGrammarError) as ctx:
+            manifest_validation.validate_command(cmd)
+        self.assertTrue(any("itself or later" in v for v in ctx.exception.violations))
+
+    def test_a_result_past_the_end_of_the_sequence_is_rejected(self) -> None:
+        cmd = JupyterDeployCommandV1.model_validate(
+            {
+                "cmd": "c",
+                "sequence": [{"api-name": "a.b.c", "arguments": []}],
+                "results": [{"result-name": "c.v", "source": "result", "source-key": "[3].V"}],
+            }
+        )
+        with self.assertRaises(InvalidCommandGrammarError) as ctx:
+            manifest_validation.validate_command(cmd)
+        self.assertTrue(any("has 1 step(s)" in v for v in ctx.exception.violations))
+
+    def test_a_result_source_key_naming_no_step_is_rejected(self) -> None:
+        cmd = JupyterDeployCommandV1.model_validate(
+            {
+                "cmd": "c",
+                "sequence": [{"api-name": "a.b.c", "arguments": []}],
+                "results": [{"result-name": "c.v", "source": "result", "source-key": "SnapshotId"}],
+            }
+        )
+        with self.assertRaises(InvalidCommandGrammarError):
+            manifest_validation.validate_command(cmd)
+
+    def test_non_result_sources_are_untouched(self) -> None:
+        """cli/output/literal arguments have no step semantics, so they must not be index-checked."""
+        cmd = JupyterDeployCommandV1.model_validate(
+            {
+                "cmd": "c",
+                "sequence": [
+                    {
+                        "api-name": "a.b.c",
+                        "arguments": [
+                            {"api-attribute": "x", "source": "cli", "source-key": "name"},
+                            {"api-attribute": "y", "source": "output", "source-key": "instance_id"},
+                            {"api-attribute": "z", "source": "literal", "value": "v"},
+                        ],
+                    }
+                ],
+            }
+        )
+        manifest_validation.validate_command(cmd)  # no raise
+
+
 class TestRejections(unittest.TestCase):
     def _assert_violation(self, cmd_dict: dict, needle: str) -> None:
         cmd = JupyterDeployCommandV1.model_validate(cmd_dict)
