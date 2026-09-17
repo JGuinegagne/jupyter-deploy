@@ -464,6 +464,55 @@ class InvalidComponentVerbError(JupyterDeployError, ValueError):
         super().__init__(f"'{verb}' is not supported for {component_type} component '{component_name}'.")
 
 
+class VolumeNotBackupableError(JupyterDeployError, ValueError):
+    """Raised when a volume exists but taking a backup of it is not something that can happen.
+
+    Deliberately not an `IncompatibleHostStateError`: nothing about the host is wrong, and no retry,
+    permission grant, or state change makes the answer different.
+
+    Two independent causes, kept apart because the remedy differs: a volume the deployment only
+    *references* is the operator's to back up by whatever means created it, while a storage kind for which
+    the template declares no backup mechanism has nothing to be done at all.
+
+    Attributes:
+        volume_name: The volume that was asked for
+        reason: Why no backup can be taken, phrased for the user
+        volume_class: The class of storage, when the template declared one
+        hint: What to do instead
+    """
+
+    def __init__(self, volume_name: str, reason: str, volume_class: str = "", hint: str | None = None) -> None:
+        self.volume_name = volume_name
+        self.reason = reason
+        self.volume_class = volume_class
+        self.hint = hint
+        super().__init__(f"Volume '{volume_name}' cannot be backed up: {reason}.")
+
+
+class BackupsNotReadyError(JupyterDeployError, ValueError):
+    """Raised when volumes are about to be replaced and their backups cannot be shown to hold all the data.
+
+    A refusal BEFORE the plan, which is the only place this can be caught in time. Replacing a volume from
+    a backup that predates the last write succeeds -- the apply reports success, the app comes back, and the
+    work done since the backup is simply gone. There is nothing to notice and nothing to roll back, so the
+    check has to happen while the operation can still be declined.
+
+    Deliberately not a warning. The alternative to refusing is completing an operation whose outcome the
+    user did not ask for and cannot undo.
+
+    Attributes:
+        reason: What could not be established, phrased for the user
+        volume_names: The volumes the answer applies to, when the reason is per-volume
+        hint: The commands that make the answer yes
+    """
+
+    def __init__(self, reason: str, volume_names: list[str] | None = None, hint: str | None = None) -> None:
+        self.reason = reason
+        self.volume_names = volume_names or []
+        self.hint = hint
+        super().__init__(f"Volume backups are not ready to restore from: {reason}.")
+
+
 class ResourceNotFoundError(InstructionError, RuntimeError):
     """Raised when a provider resource is not found (e.g., node, pod, deployment).
 

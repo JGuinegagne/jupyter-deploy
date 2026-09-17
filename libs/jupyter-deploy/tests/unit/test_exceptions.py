@@ -38,6 +38,7 @@ from jupyter_deploy.exceptions import (
     UnreachableHostError,
     UnsupportedProviderRegionError,
     VariableNotFoundError,
+    VolumeNotBackupableError,
     WriteConfigurationError,
 )
 
@@ -396,3 +397,42 @@ class TestImageErrors(unittest.TestCase):
         self.assertEqual(error.tag, "v99")
         self.assertIn("v99", str(error))
         self.assertIn("jupyterlab", str(error))
+
+
+class TestVolumeErrors(unittest.TestCase):
+    """Test cases for volume-related exceptions."""
+
+    def test_volume_not_backupable_error(self) -> None:
+        error = VolumeNotBackupableError(
+            "home/shared",
+            "the template declares no backup mechanism for 'efs' storage",
+            volume_class="efs",
+            hint="Run 'jd volume backup --all'.",
+        )
+        self.assertIsInstance(error, JupyterDeployError)
+        self.assertIsInstance(error, ValueError)
+        self.assertEqual(error.volume_name, "home/shared")
+        self.assertEqual(error.volume_class, "efs")
+        self.assertEqual(error.reason, "the template declares no backup mechanism for 'efs' storage")
+        self.assertEqual(error.hint, "Run 'jd volume backup --all'.")
+        self.assertIn("home/shared", str(error))
+        self.assertIn("no backup mechanism", str(error))
+
+    def test_volume_not_backupable_error_is_not_a_host_state_error(self) -> None:
+        """Deliberately NOT IncompatibleHostStateError: nothing about the host is wrong.
+
+        No retry, permission grant, or state change makes the answer different, so a caller that
+        caught the host-state error to offer "stop the host and try again" must not catch this.
+        """
+        error = VolumeNotBackupableError("vol-ref", "this deployment only references it")
+        self.assertNotIsInstance(error, IncompatibleHostStateError)
+
+    def test_volume_not_backupable_error_optional_fields_default(self) -> None:
+        error = VolumeNotBackupableError("vol-ref", "this deployment only references it")
+        self.assertEqual(error.volume_class, "")
+        self.assertIsNone(error.hint)
+
+    def test_volume_not_backupable_error_message_ends_with_a_period(self) -> None:
+        """The reason is a clause, not a sentence; the exception composes the sentence."""
+        error = VolumeNotBackupableError("home", "some reason")
+        self.assertEqual(str(error), "Volume 'home' cannot be backed up: some reason.")
