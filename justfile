@@ -602,6 +602,15 @@ find-takedown-jupyterlab project_dir="sandbox-e2e" deployment_id="":
     if [ -n "{{deployment_id}}" ]; then ARGS="$ARGS --deployment-id {{deployment_id}}"; fi
     uv run python {{justfile_directory()}}/scripts/find_takedown_jupyterlab.py $ARGS
 
+# Destroy jupyterlab E2E deployments older than N hours (the safety net for keep-on-failure).
+# Scoped by the caller's credentials + the Template tag + age, so it cannot touch a dev deployment
+# in another account, a base/eks deployment, or a run still in flight (E2E caps at 2h).
+# Usage: just reap-stale-jupyterlab [older-than-hours] [project-dir] [extra-args]
+# Example: just reap-stale-jupyterlab 12 sandbox-e2e --dry-run
+reap-stale-jupyterlab older_than_hours="12" project_dir="sandbox-e2e" *extra_args="":
+    uv run python scripts/reap_stale_jupyterlab.py \
+        --older-than-hours {{older_than_hours}} --project-dir {{project_dir}} {{extra_args}}
+
 # Find a base template project by subdomain, take it down (jd down), and delete from S3 store
 # Exits successfully if no matching project is found (nothing to take down)
 # Usage: just find-takedown-base <oauth-app-num> [ci-dir] [project-dir]
@@ -1092,6 +1101,7 @@ env-setup-eks project_dir ci_dir="sandbox-ci" oauth_app_num="4" options="":
 # AWS_REGION) plus the mutating-pass instance types.
 #
 # Options: comma-separated key=value pairs, to override the env.example defaults.
+#   alt-availability-zone=<zone>        zone the volume-preserving swap moves the deployment into
 #   cpu-instance=<type>                 instance type apply #2 switches back to
 #   gpu-instance=<type>                 instance type apply #1 switches to
 #   larger-log-retention-days=<days>    retention value applied alongside the instance swap
@@ -1116,6 +1126,7 @@ env-setup-jupyterlab options="":
     }
 
     override availability-zone JD_E2E_AVAILABILITY_ZONE
+    override alt-availability-zone JD_E2E_ALT_AVAILABILITY_ZONE
     override cpu-instance JD_E2E_CPU_INSTANCE
     override gpu-instance JD_E2E_GPU_INSTANCE
     override larger-log-retention-days JD_E2E_LARGER_LOG_RETENTION_DAYS
