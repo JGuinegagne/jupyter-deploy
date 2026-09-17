@@ -1,16 +1,83 @@
+# Volume identity, as the user sees it in the app file system: `home` for the data volume and
+# `home/<mount_point>` for each additional mount. This one string is the key into var.ebs_snapshot_ids,
+# the `--name` a user passes to `jd volume`, and the base of the Name tag -- composed HERE, next to the
+# lookup that consumes it, so the three cannot drift apart.
+#
+# Identity is the mount path rather than the mount's `name` field because `mount_point` is required on
+# every entry while `name` is optional (name XOR id), so this also covers referenced volumes; because
+# mount_point is uniqueness-validated; and because its charset forbids "/", so no additional mount can
+# ever collide with the bare `home` identity.
+locals {
+  home_volume_name = "home"
+  additional_volume_names = {
+    for idx, ebs_mount in var.additional_ebs_mounts :
+    idx => "${local.home_volume_name}/${ebs_mount["mount_point"]}"
+  }
+  additional_efs_names = {
+    for idx, efs_mount in var.additional_efs_mounts :
+    idx => "${local.home_volume_name}/${efs_mount["mount_point"]}"
+  }
+
+  # Mount points are uniqueness-validated WITHIN additional_ebs_mounts and WITHIN additional_efs_mounts,
+  # but nothing validates them across the two. Two mounts at one path shadow each other on the instance
+  # and collide on volume identity, so refuse the plan. Cannot be a variable validation: those may only
+  # reference their own variable.
+  duplicate_mount_points = [
+    for mount_point in distinct([for m in var.additional_ebs_mounts : m["mount_point"]]) :
+    mount_point
+    if contains([for m in var.additional_efs_mounts : m["mount_point"]], mount_point)
+  ]
+}
+
 # Define EBS volume for the notebook data (will mount on /home/jovyan)
 resource "aws_ebs_volume" "jupyter_data" {
   availability_zone = var.availability_zone
   size              = var.volume_size_gb
   type              = var.volume_type
   encrypted         = true
+  # Absent key -> null -> an empty volume, which is the fresh-deployment default. try() rather than
+  # lookup() because lookup's default would have to be "" and aws_ebs_volume wants null.
+  snapshot_id = try(var.ebs_snapshot_ids[local.home_volume_name], null)
 
   tags = merge(
     var.combined_tags,
     {
+      # Console label only, NOT the identity: it carries the deployment postfix, which is unknown when
+      # the manifest declares this volume. `jd volume` never reads tags to recover an identity -- the
+      # inventory comes from the additional_ebs_volumes output and the manifest's static declaration.
       Name = "jupyter-data-${var.postfix}"
     }
   )
+
+  # Attached HERE because this resource always exists in every configuration -- and because a
+  # precondition is evaluated even when the resource itself is a no-op, so a collision introduced
+  # without touching the home volume is still caught.
+  #
+  # `precondition`, NOT `check`: a failing check block is only a WARNING and leaves the plan exiting 0,
+  # so `jd config && jd up` would print it and then apply anyway. A precondition fails the plan.
+  # Verified rather than assumed -- the two constructs differ exactly here.
+  #
+  # Cross-variable input validation, which is why it lives here rather than in a `variable validation`
+  # block: it compares additional_ebs_mounts against additional_efs_mounts, and HCL variable validation
+  # can only see one variable.
+  #
+  # The zone-change guards that used to sit alongside this one are GONE, deliberately. They needed the
+  # live volume's zone, which needs a tag-filtered data source, which is unknown at plan time on a fresh
+  # deploy (var.postfix comes from random_id) -- that combination broke every from-scratch deploy of this
+  # template. They were also one-shot: the condition was `restore-is-set`, so they stopped firing the
+  # moment ebs_snapshot_ids was first populated and never fired again for that project. The real check now
+  # lives in the CLI, in `jd config --restore-volumes`, where it can compare each backup against the
+  # host's last shutdown and refuse with something actionable. See az-resiliency-plan.md.
+  lifecycle {
+    precondition {
+      condition = length(local.duplicate_mount_points) == 0
+      error_message = format(
+        "mount_point %s is used by both an EBS and an EFS mount. Both would mount at /home/jovyan/%s, where one shadows the other, and they would share a volume identity. Rename one of them.",
+        join(", ", local.duplicate_mount_points),
+        join(", ", local.duplicate_mount_points),
+      )
+    }
+  }
 }
 
 # Attach the main jupyter data volume to the EC2 instance
@@ -32,6 +99,7 @@ resource "aws_ebs_volume" "additional_volumes" {
   size              = try(tonumber(lookup(each.value, "size_gb", "30")), 30)
   type              = lookup(each.value, "type", "gp3")
   encrypted         = true
+  snapshot_id       = try(var.ebs_snapshot_ids[local.additional_volume_names[each.key]], null)
 
   tags = merge(
     var.combined_tags,
@@ -146,4 +214,66 @@ resource "aws_efs_mount_target" "additional_efs_targets" {
   file_system_id  = each.value.file_system_id
   subnet_id       = var.subnet_id
   security_groups = length(var.additional_efs_mounts) > 0 && var.efs_security_group_id != null ? [var.efs_security_group_id] : []
+}
+
+# STEP 5: Reap this deployment's volume backups on destroy
+#
+# `jd volume backup` creates snapshots OUTSIDE terraform state (deliberately: a managed
+# aws_ebs_snapshot would be destroyed with the stack, which is the opposite of a backup). Nothing else
+# would ever delete them, so teardown does.
+#
+# NOT best-effort: a delete that fails must fail the destroy. The provisioner runs as the OPERATOR
+# (local-exec), so a missing ec2:DeleteSnapshot grant is a likely misconfiguration, and swallowing it
+# would leak billable snapshots on every teardown while reporting success. What makes failing safe is
+# idempotency, not tolerance -- an already-deleted snapshot is treated as success, so re-running
+# `jd down` after fixing a permission converges.
+resource "null_resource" "reap_volume_backups" {
+  triggers = {
+    deployment_id = var.postfix
+    region        = var.region
+  }
+
+  provisioner "local-exec" {
+    when        = destroy
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-DOC
+      set -uo pipefail
+
+      SNAP_IDS=$(aws ec2 describe-snapshots \
+        --owner-ids self \
+        --region "${self.triggers.region}" \
+        --filters "Name=tag:DeploymentId,Values=${self.triggers.deployment_id}" \
+        --query 'Snapshots[].SnapshotId' \
+        --output text 2>&1) || {
+        echo "ERROR: could not list volume backups for deployment ${self.triggers.deployment_id}: $SNAP_IDS" >&2
+        exit 1
+      }
+
+      if [ -z "$SNAP_IDS" ]; then
+        echo "No volume backups to reap for deployment ${self.triggers.deployment_id}."
+        exit 0
+      fi
+
+      FAILED=""
+      for snap_id in $SNAP_IDS; do
+        OUTPUT=$(aws ec2 delete-snapshot --region "${self.triggers.region}" --snapshot-id "$snap_id" 2>&1)
+        RC=$?
+        if [ $RC -eq 0 ]; then
+          echo "Deleted volume backup $snap_id"
+        elif echo "$OUTPUT" | grep -q "InvalidSnapshot.NotFound"; then
+          # Already gone -- a concurrent reap or a manual delete. Idempotent, so not a failure.
+          echo "Volume backup $snap_id already deleted"
+        else
+          echo "ERROR: failed to delete volume backup $snap_id: $OUTPUT" >&2
+          FAILED="$FAILED $snap_id"
+        fi
+      done
+
+      if [ -n "$FAILED" ]; then
+        echo "ERROR: volume backups left behind:$FAILED" >&2
+        echo "Grant ec2:DeleteSnapshot to the identity running jd, then re-run 'jd down'." >&2
+        exit 1
+      fi
+    DOC
+  }
 }

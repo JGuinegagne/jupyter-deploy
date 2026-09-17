@@ -58,3 +58,12 @@ variable "efs_security_group_id" {
   description = "ID of the security group for EFS mount targets."
   type        = string
 }
+variable "ebs_snapshot_ids" {
+  description = <<-EOT
+    Map of volume name -> EBS snapshot id to create that volume from.
+
+    Key "home" is the jupyter data volume; other keys match the "name" of an additional_ebs_mounts
+    entry. An absent key means an empty volume.
+  EOT
+  type        = map(string)
+}

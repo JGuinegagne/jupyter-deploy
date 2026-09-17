@@ -106,6 +106,7 @@ module "volumes" {
   volume_type           = var.volume_type
   additional_ebs_mounts = var.additional_ebs_mounts
   additional_efs_mounts = var.additional_efs_mounts
+  ebs_snapshot_ids      = var.ebs_snapshot_ids
   availability_zone     = module.ec2_instance.availability_zone
   subnet_id             = module.ec2_instance.subnet_id
   instance_id           = module.ec2_instance.id
