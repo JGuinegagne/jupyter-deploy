@@ -724,8 +724,16 @@ class TestConfigHandler(unittest.TestCase):
         handler = ConfigHandler(display_manager=NullDisplay())
         handler.restore_volumes()
 
-        tf_mock_handler_instance.variables_handler.sync_project_variables_config.assert_called_once_with(
-            {"ebs_snapshot_ids": {"home": "snap-1", "home/external-ebs1": "snap-2"}}
+        expected = {"ebs_snapshot_ids": {"home": "snap-1", "home/external-ebs1": "snap-2"}}
+        variables_handler = tf_mock_handler_instance.variables_handler
+        # BOTH writes, in the order `ManifestCommandRunner.update_variables` uses. The record write is
+        # what validates the map against the variable's declared type, so dropping it would defer a
+        # malformed value to plan time, where it reads as a template bug rather than a bad restore.
+        variables_handler.update_variable_records.assert_called_once_with(expected)
+        variables_handler.sync_project_variables_config.assert_called_once_with(expected)
+        self.assertLess(
+            variables_handler.method_calls.index(("update_variable_records", (expected,), {})),
+            variables_handler.method_calls.index(("sync_project_variables_config", (expected,), {})),
         )
 
     @patch("jupyter_deploy.handlers.project.config_handler.VolumeHandler")
@@ -753,6 +761,7 @@ class TestConfigHandler(unittest.TestCase):
             handler.restore_volumes()
 
         tf_mock_handler_instance.variables_handler.sync_project_variables_config.assert_not_called()
+        tf_mock_handler_instance.variables_handler.update_variable_records.assert_not_called()
 
     @patch("jupyter_deploy.handlers.project.config_handler.VolumeHandler")
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
@@ -806,6 +815,7 @@ class TestConfigHandler(unittest.TestCase):
             handler.restore_volumes()
 
         tf_mock_handler_instance.variables_handler.sync_project_variables_config.assert_not_called()
+        tf_mock_handler_instance.variables_handler.update_variable_records.assert_not_called()
 
     @patch("jupyter_deploy.handlers.base_project_handler.retrieve_project_manifest")
     @patch("jupyter_deploy.engine.terraform.tf_config.TerraformConfigHandler")
@@ -883,6 +893,7 @@ class TestRestoreVolumesValidatesFirst(unittest.TestCase):
 
         volume_handler.resolve_backup_ids.assert_not_called()
         engine.variables_handler.sync_project_variables_config.assert_not_called()
+        engine.variables_handler.update_variable_records.assert_not_called()
 
     def test_a_passing_check_resolves_and_writes(self) -> None:
         engine = Mock()

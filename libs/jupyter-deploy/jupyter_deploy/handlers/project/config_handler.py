@@ -294,6 +294,8 @@ class ConfigHandler(BaseProjectHandler):
                 or if any managed volume has no backup. Restoring only some volumes would recreate the
                 rest empty, which is the data loss this path exists to prevent.
             IncompatibleHostStateError: If the host is not stopped, so quiescence cannot be established.
+            KeyError: If the template declares no variable by that name, raised by the record write
+                before the project is touched.
         """
         volume_handler = VolumeHandler(display_manager=self.display_manager)
         volume_handler.validate_backups_ready()
@@ -301,7 +303,14 @@ class ConfigHandler(BaseProjectHandler):
         # The volumes declaration names a values: entry; that entry names the template's variable.
         variable_name = self.project_manifest.get_declared_value(backups_map_value).source_key
 
-        self._handler.variables_handler.sync_project_variables_config({variable_name: backup_ids})
+        # Both writes, in this order, matching `ManifestCommandRunner.update_variables` -- the write-back
+        # every `updates:`-declaring command goes through. `update_variable_records` is not redundant with
+        # the config sync: it validates the value against the variable's DECLARED type before anything is
+        # written, so a malformed map is refused here rather than surfacing later as a plan error with no
+        # obvious cause.
+        varvalues = {variable_name: backup_ids}
+        self._handler.variables_handler.update_variable_records(varvalues)
+        self._handler.variables_handler.sync_project_variables_config(varvalues)
         self.display_manager.success(f"Resolved {len(backup_ids)} volume backup(s) into '{variable_name}'.")
 
     @staticmethod
