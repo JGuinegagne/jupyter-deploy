@@ -67,7 +67,7 @@ resource "aws_ebs_volume" "jupyter_data" {
   # template. They were also one-shot: the condition was `restore-is-set`, so they stopped firing the
   # moment ebs_snapshot_ids was first populated and never fired again for that project. The real check now
   # lives in the CLI, in `jd config --restore-volumes`, where it can compare each backup against the
-  # host's last shutdown and refuse with something actionable. See az-resiliency-plan.md.
+  # host's last shutdown and refuse with something actionable.
   lifecycle {
     precondition {
       condition = length(local.duplicate_mount_points) == 0
