@@ -31,6 +31,11 @@ on:
         required: false
         type: string
         default: ""
+      marker:
+        description: "Pytest -m marker expression (empty = the suite default, `e2e`)"
+        required: false
+        type: string
+        default: ""
       mutate:
         description: "Include mutating tests (they run `jd config` + `jd up` against the deployment)"
         required: false
@@ -107,7 +112,7 @@ jobs:
       - name: Run E2E tests
         run: >-
           just test-e2e-jupyterlab ${{ inputs.project-dir }} "${{ inputs.test-filter }}"
-          "skip-sync=true${{ inputs.mutate && ',mutate=true' || '' }}"
+          "skip-sync=true${{ inputs.mutate && ',mutate=true' || '' }}${{ inputs.marker && format(',marker={0}', inputs.marker) || '' }}"
 
       - name: Upload test artifacts
         if: always()

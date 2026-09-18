@@ -215,7 +215,7 @@ jobs:
       ecr-tag: ${{ needs.build-image.outputs.ecr-tag }}
       ecr-slot: ${{ inputs.ecr-slot }}
       deployment-id: ${{ needs.deploy.outputs.deployment-id }}
-      test-filter: "test_mutating_gpu_pixi"
+      marker: "gpu"
       mutate: true
       job-name: "Mutating tests (GPU swap)"
       ref: ${{ inputs.ref }}
@@ -224,8 +224,9 @@ jobs:
   # Job 4 — every other mutating test, on the SAME deployment: apply #2 (GPU/pixi -> CPU/uv) and
   # apply #3 (the availability-zone swap that preserves volume data).
   #
-  # Grouped because they share the serial chain anyway, and split from the GPU job only so a GPU
-  # capacity flake does not discard them. test_volume_swaps is the one file here that IS a valid
+  # Selected by marker rather than by file, so `mutating and not gpu` picks up any mutating test
+  # added later without touching this workflow. Split from the GPU job only so a GPU capacity flake
+  # does not discard them. test_volume_swaps is the one file here that IS a valid
   # standalone entry point (its volumes_provisioned fixture provisions what it needs), so it can be
   # promoted to its own job later without touching the tests.
   test-mutating:
@@ -238,7 +239,7 @@ jobs:
       ecr-tag: ${{ needs.build-image.outputs.ecr-tag }}
       ecr-slot: ${{ inputs.ecr-slot }}
       deployment-id: ${{ needs.deploy.outputs.deployment-id }}
-      test-filter: "test_mutating_cpu_uv or test_volume_swaps"
+      marker: "mutating and not gpu"
       mutate: true
       job-name: "Mutating tests (CPU swap + volumes)"
       ref: ${{ inputs.ref }}

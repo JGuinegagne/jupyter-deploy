@@ -44,6 +44,7 @@ _GPU_APPLY_TIMEOUT_SECONDS = 3600
 
 @pytest.mark.order(ORDER_MUTATING_GPU_PIXI)
 @pytest.mark.mutating
+@pytest.mark.gpu
 @skip_if_testvars_not_set(["JD_E2E_GPU_INSTANCE", "JD_E2E_LARGER_LOG_RETENTION_DAYS"])
 def test_switch_to_gpu_pixi_with_external_volumes(
     e2e_deployment: EndToEndDeployment,
@@ -128,6 +129,7 @@ def test_switch_to_gpu_pixi_with_external_volumes(
 
 @pytest.mark.order(ORDER_MUTATING_GPU_PIXI + 1)
 @pytest.mark.mutating
+@pytest.mark.gpu
 @skip_if_testvars_not_set(["JD_E2E_GPU_INSTANCE"])
 def test_run_gpu_notebook(
     e2e_deployment: EndToEndDeployment,
@@ -172,6 +174,7 @@ def test_run_gpu_notebook(
 
 @pytest.mark.order(ORDER_MUTATING_GPU_PIXI + 2)
 @pytest.mark.mutating
+@pytest.mark.gpu
 def test_pixi_install_and_persist(
     e2e_deployment: EndToEndDeployment,
     client_proxy_app: LocalProxyApplication,
@@ -203,6 +206,7 @@ def test_pixi_install_and_persist(
 
 @pytest.mark.order(ORDER_MUTATING_GPU_PIXI + 3)
 @pytest.mark.mutating
+@pytest.mark.gpu
 def test_pixi_environment_recovery(
     e2e_deployment: EndToEndDeployment,
     client_proxy_app: LocalProxyApplication,
