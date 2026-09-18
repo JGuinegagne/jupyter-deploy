@@ -365,15 +365,15 @@ test-e2e project_dir="sandbox-e2e" test_filter="" options="" template=default-te
         # --e2e-project-dir must be passed too: without it the fixture deploys into the fixed
         # `sandbox-e2e` default regardless of the directory mounted above, so asking for another
         # sandbox-* dir would be silently ignored.
-        PYTEST_ARGS="$E2E_TESTS_DIR -m $MARKER --e2e-tests-dir=$E2E_TESTS_DIR --e2e-project-dir={{project_dir}}"
+        PYTEST_ARGS="$E2E_TESTS_DIR -m \"$MARKER\" --e2e-tests-dir=$E2E_TESTS_DIR --e2e-project-dir={{project_dir}}"
     else
         # Use existing project
-        PYTEST_ARGS="$E2E_TESTS_DIR -m $MARKER --e2e-tests-dir=$E2E_TESTS_DIR --e2e-existing-project={{project_dir}}"
+        PYTEST_ARGS="$E2E_TESTS_DIR -m \"$MARKER\" --e2e-tests-dir=$E2E_TESTS_DIR --e2e-existing-project={{project_dir}}"
     fi
 
     # Add test filter if provided
     if [ -n "{{test_filter}}" ]; then
-        PYTEST_ARGS="$PYTEST_ARGS -k {{test_filter}}"
+        PYTEST_ARGS="$PYTEST_ARGS -k \"{{test_filter}}\""
     fi
 
     # Default log level

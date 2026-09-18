@@ -82,7 +82,26 @@ class WebAppNavigator:
         (the form defaults to "Public"), producing an OwnerOnly workspace.
         """
         self.goto_create_page()
+        return self._fill_and_submit_create_form(private)
 
+    def create_workspace_from_template(self, template_display_name: str, private: bool = False) -> str:
+        """Create a workspace from a named template card and return its auto-generated name.
+
+        The create page renders one card per discoverable template; selecting the
+        card locks the template's image and resource policy before submitting.
+        """
+        self.goto_create_page()
+        select = self.page.get_by_role("button", name=f"Select {template_display_name} template")
+        select.wait_for(state="visible", timeout=30000)
+        select.click()
+        # Selecting a card regenerates the suggested name; wait until the card reports
+        # selected before reading it, so the form submits the name it displays.
+        self.page.get_by_role("button", name=f"Select {template_display_name} template", pressed=True).wait_for(
+            state="visible", timeout=10000
+        )
+        return self._fill_and_submit_create_form(private)
+
+    def _fill_and_submit_create_form(self, private: bool) -> str:
         # Match the Name input by its accessible role + exact name: the form also
         # has a "Display Name" field, so a substring get_by_label("Name") matches
         # both and can resolve to a non-input node (MUI's fieldset legend).
