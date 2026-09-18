@@ -312,6 +312,15 @@ class ConfigHandler(BaseProjectHandler):
         self._handler.variables_handler.update_variable_records(varvalues)
         self._handler.variables_handler.sync_project_variables_config(varvalues)
         self.display_manager.success(f"Resolved {len(backup_ids)} volume backup(s) into '{variable_name}'.")
+        # The quiescence proof is established HERE, but the volumes are replaced at `jd up`. Starting the
+        # host in between reopens the window this command just closed, and the apply would then restore a
+        # backup the app has run since -- which succeeds silently. Re-validating at `jd up` was considered
+        # and rejected: it would make the apply re-plan, conflating `jd config` and `jd up`. So the
+        # constraint is named instead of enforced.
+        self.display_manager.hint(
+            "Keep the host stopped until 'jd up' completes: starting it invalidates these backups, "
+            "and the restore would silently lose whatever the app writes in the meantime."
+        )
 
     @staticmethod
     def _resolve_secret_id(secret_def: JupyterDeploySecretV1, outputs_handler: EngineOutputsHandler) -> str:

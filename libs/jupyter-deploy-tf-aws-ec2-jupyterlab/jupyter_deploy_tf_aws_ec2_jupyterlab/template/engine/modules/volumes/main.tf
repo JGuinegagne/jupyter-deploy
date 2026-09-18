@@ -18,6 +18,11 @@ locals {
     idx => "${local.home_volume_name}/${efs_mount["mount_point"]}"
   }
 
+  # Every identity this configuration can restore into. EFS is excluded deliberately: a filesystem is
+  # regional and has no snapshot to restore from, so naming one here would be a key that does nothing.
+  restorable_volume_names = concat([local.home_volume_name], values(local.additional_volume_names))
+  unknown_snapshot_keys   = setsubtract(keys(var.ebs_snapshot_ids), local.restorable_volume_names)
+
   # Mount points are uniqueness-validated WITHIN additional_ebs_mounts and WITHIN additional_efs_mounts,
   # but nothing validates them across the two. Two mounts at one path shadow each other on the instance
   # and collide on volume identity, so refuse the plan. Cannot be a variable validation: those may only
@@ -69,6 +74,22 @@ resource "aws_ebs_volume" "jupyter_data" {
   # lives in the CLI, in `jd config --restore-volumes`, where it can compare each backup against the
   # host's last shutdown and refuse with something actionable.
   lifecycle {
+    # A key naming nothing is silently IGNORED by the `try(...)` lookups below, which yields an empty
+    # volume -- the exact outcome this whole feature exists to prevent. The CLI only ever writes
+    # inventory-derived keys, but a hand-edited map, or a renamed `mount_point` (the identity is
+    # `home/<mount_point>`, so a rename orphans that volume's key), reaches the same place with no
+    # warning. Unlike the zone guards that were removed, this reads only variables and locals derived
+    # from them: no data source, no var.postfix, so it resolves at plan time on a fresh deploy too.
+    precondition {
+      condition = length(local.unknown_snapshot_keys) == 0
+      error_message = format(
+        "ebs_snapshot_ids names %s, which this configuration does not create. Keys must be '%s' or '%s/<mount_point>' of an additional_ebs_mounts entry. A key that matches nothing restores an EMPTY volume.",
+        join(", ", local.unknown_snapshot_keys),
+        local.home_volume_name,
+        local.home_volume_name,
+      )
+    }
+
     precondition {
       condition = length(local.duplicate_mount_points) == 0
       error_message = format(
@@ -243,6 +264,7 @@ resource "null_resource" "reap_volume_backups" {
         --owner-ids self \
         --region "${self.triggers.region}" \
         --filters "Name=tag:DeploymentId,Values=${self.triggers.deployment_id}" \
+        "Name=tag:Source,Values=jupyter-deploy" \
         --query 'Snapshots[].SnapshotId' \
         --output text 2>&1) || {
         echo "ERROR: could not list volume backups for deployment ${self.triggers.deployment_id}: $SNAP_IDS" >&2

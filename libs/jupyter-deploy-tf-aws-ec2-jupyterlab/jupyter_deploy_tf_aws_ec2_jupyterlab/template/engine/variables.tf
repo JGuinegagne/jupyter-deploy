@@ -516,9 +516,12 @@ variable "ebs_snapshot_ids" {
         delete. That is harmless while the volumes are not being replaced, but a later replacement fails
         with a not-found rather than silently emptying the volume -- loud, and recoverable by running
         `jd config --restore-volumes` again to repoint the map at the current backups;
-      - a `jd down` followed by `jd up` in the same project directory recreates the volumes FROM THIS
-        MAP, not empty. That is usually what you want; clear it only if you intend to start fresh, and
-        only while no volume exists.
+      - a `jd down` DELETES the backups this map names: the destroy reaps every snapshot tagged with
+        the deployment id, because a torn-down deployment has nothing left to restore into. A `jd up`
+        in the same project directory afterwards therefore fails with `InvalidSnapshot.NotFound`
+        instead of recreating anything. Clear the map before redeploying -- which is safe precisely
+        because the destroy left no volume that was created from it, the one case the rule above is
+        about.
 
     Recommended: {}
   EOT

@@ -87,9 +87,12 @@ jobs:
       - name: Restore CI project
         run: just ci-restore sandbox-ci
 
+      # Inputs travel through env rather than being interpolated into the script: only write-access
+      # actors can dispatch this, but a dispatch input expanded into a `run:` body is shell source,
+      # and this particular script destroys infrastructure.
       - name: Reap stale deployments
+        env:
+          OLDER_THAN_HOURS: ${{ inputs.older-than-hours || '12' }}
+          DRY_RUN: ${{ inputs.dry-run && '--dry-run' || '' }}
         run: |
-          just reap-stale-jupyterlab \
-            "${{ inputs.older-than-hours || '12' }}" \
-            sandbox-e2e \
-            ${{ inputs.dry-run && '--dry-run' || '' }}
+          just reap-stale-jupyterlab "$OLDER_THAN_HOURS" sandbox-e2e $DRY_RUN
