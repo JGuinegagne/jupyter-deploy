@@ -39,6 +39,57 @@ TEMPLATE_TAG = "tf-aws-ec2-jupyterlab"
 LIVE_STATES = "running,stopped,pending,stopping"
 
 
+def deployment_creation_ages(now: datetime, deployment_ids: set[str], region: str | None = None) -> dict[str, float]:
+    """Return deployment_id -> age in hours, from the SSM documents each deployment creates.
+
+    `LaunchTime` is the wrong clock: EC2 resets it when an instance starts, and the zone swap replaces
+    the instance outright, so a run that fails at or after the swap presents a minutes-old instance and
+    resets the very threshold this reaper trips on -- exactly the keep-on-failure case it exists for.
+
+    SSM documents are the anchor instead. They are created once at apply, are not AZ-bound, and update
+    in place rather than being replaced when their content changes, so the CreatedDate survives
+    everything the instance does not. Their names end in the deployment id and their prefixes are
+    hardcoded in the template, unlike the IAM role or bucket prefixes, which are variables a deployment
+    can change -- a name-prefix match would silently stop matching and fall back to the weaker floor.
+
+    One tag-filtered call, and `ssm:ListDocuments` rather than account-wide IAM or S3 enumeration.
+
+    Best-effort: on any failure the age falls back to `LaunchTime`, which understates rather than fails.
+    """
+    if not deployment_ids:
+        return {}
+
+    cmd = [
+        "aws",
+        "ssm",
+        "list-documents",
+        "--filters",
+        "Key=Owner,Values=Self",
+        f"Key=tag:Template,Values={TEMPLATE_TAG}",
+        "--query",
+        "DocumentIdentifiers[].[Name,CreatedDate]",
+        "--output",
+        "json",
+    ]
+    if region:
+        cmd += ["--region", region]
+
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        print(f"  ! could not read SSM documents, falling back to instance launch times: {result.stderr.strip()}")
+        return {}
+
+    ages: dict[str, float] = {}
+    for name, created_date in json.loads(result.stdout or "[]"):
+        # `<hardcoded-prefix>-<deployment_id>`; ignore anything whose id we did not ask about.
+        deployment_id = name.rsplit("-", 1)[-1]
+        if deployment_id not in deployment_ids:
+            continue
+        age_hours = (now - datetime.fromisoformat(created_date)).total_seconds() / 3600
+        ages[deployment_id] = max(ages.get(deployment_id, 0.0), age_hours)
+    return ages
+
+
 def find_stale_deployments(older_than_hours: float, region: str | None = None) -> list[tuple[str, float]]:
     """Return (deployment_id, age_hours) for every jupyterlab instance older than the threshold."""
     cmd = [
@@ -60,6 +111,11 @@ def find_stale_deployments(older_than_hours: float, region: str | None = None) -
     instances = json.loads(result.stdout or "[]")
 
     now = datetime.now(UTC)
+    created_ages = deployment_creation_ages(
+        now,
+        {i["DeploymentId"] for i in instances if i.get("DeploymentId") and i.get("LaunchTime")},
+        region=region,
+    )
     stale: dict[str, float] = {}
 
     for instance in instances:
@@ -71,13 +127,19 @@ def find_stale_deployments(older_than_hours: float, region: str | None = None) -
             print(f"  ! skipping an instance with no DeploymentId tag (launched {launch_time})")
             continue
 
+        # LaunchTime is the FLOOR, not the age: EC2 resets it when an instance starts, and a zone swap
+        # replaces the instance outright, so a run that fails at or after the swap would present a
+        # minutes-old instance and reset the very clock this reaper trips on -- which is precisely the
+        # keep-on-failure scenario it exists for. The deployment's SSM documents are created once and survive
+        # both, so the apply-time anchor wins when it is older.
         age_hours = (now - datetime.fromisoformat(launch_time)).total_seconds() / 3600
-        if age_hours > older_than_hours:
-            # Keep the OLDEST age seen per deployment: a deployment whose instance was replaced
-            # mid-run has a young instance, and reporting the young one would understate the leak.
-            stale[deployment_id] = max(stale.get(deployment_id, 0.0), age_hours)
+        stale[deployment_id] = max(age_hours, created_ages.get(deployment_id, 0.0))
 
-    return sorted(stale.items(), key=lambda item: item[1], reverse=True)
+    return sorted(
+        ((deployment_id, age) for deployment_id, age in stale.items() if age > older_than_hours),
+        key=lambda item: item[1],
+        reverse=True,
+    )
 
 
 def reap(deployment_id: str, project_dir: str) -> bool:

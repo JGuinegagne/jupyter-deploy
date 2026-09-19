@@ -55,7 +55,7 @@ volumes:
   # Every field below references a values: entry or a path -- no terraform identifiers appear here, so a
   # differently-backed template declares new values: entries rather than new fields.
   # `type` is the storage class, and it is what the live-state command branches on. The command itself is
-  # not named here: declaring `volume.list` at all is what opts this template into reporting live state.
+  # not named here: declaring `volume.live-state` at all is what opts this template into reporting live state.
   static:
   - name: home
     type: ebs
@@ -492,7 +492,7 @@ commands:
   - result-name: proxy.connect-info.expires_at
     source: result
     source-key: '[2].ExpiresAt'
-- cmd: volume.list
+- cmd: volume.live-state
   # One listing command for every storage kind this template mounts: the caller says which kind it
   # is asking about (the `type` its volumes: entry declares) and the matching branch answers, so the
   # CLI never learns that a block volume and a file system are two different APIs.
@@ -532,7 +532,7 @@ commands:
       source: result
       source-key: '[1].FileSystems'
   results:
-  - result-name: volume.list.volumes
+  - result-name: volume.live-state.volumes
     source: result
     source-key: '[2].Value'
 - cmd: volume.backups

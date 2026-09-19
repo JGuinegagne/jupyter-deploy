@@ -49,7 +49,7 @@ class TestManifest(unittest.TestCase):
     # in both cases DECLARING the command is the opt-in. So a rename here is a silent opt-out, which is
     # what test_volume_wellknown_commands_are_expected pins.
     EXPECTED_VOLUME_COMMANDS = [
-        "volume.list",
+        "volume.live-state",
         "volume.backups",
         "volume.backup",
         "volume.delete-backup",

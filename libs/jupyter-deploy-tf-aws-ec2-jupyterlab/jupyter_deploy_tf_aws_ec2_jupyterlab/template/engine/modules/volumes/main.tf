@@ -267,7 +267,19 @@ resource "null_resource" "reap_volume_backups" {
         "Name=tag:Source,Values=jupyter-deploy" \
         --query 'Snapshots[].SnapshotId' \
         --output text 2>&1) || {
-        echo "ERROR: could not list volume backups for deployment ${self.triggers.deployment_id}: $SNAP_IDS" >&2
+        # FAILS the destroy, like a failed delete below: if the backups cannot even be listed, there is no
+        # way to tell whether this teardown is leaking billable snapshots, and reporting success while it
+        # might be is the one outcome that is never discovered. The raw error is printed rather than
+        # classified -- a missing grant then reads as itself, with no code here to keep in sync with IAM.
+        #
+        # So `ec2:DescribeSnapshots` is a prerequisite for destroying ANY deployment of this template,
+        # including one that never took a backup. Deliberate: the alternative tolerates a silent leak.
+        #
+        # Not gated on `length(var.ebs_snapshot_ids)`: a destroy provisioner may only read `self`, so the
+        # count would have to be a trigger, and changing a trigger REPLACES this resource -- which runs
+        # this provisioner. `jd config --restore-volumes` + `jd up` would then reap the very snapshots it
+        # is restoring from, mid-apply. Verified against terraform, not assumed.
+        echo "ERROR: could not list the volume backups of deployment ${self.triggers.deployment_id}, so none were reaped: $SNAP_IDS" >&2
         exit 1
       }
 
