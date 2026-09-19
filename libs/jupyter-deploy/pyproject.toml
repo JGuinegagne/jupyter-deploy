@@ -38,6 +38,7 @@ aws = [
     "boto3-stubs>=1.38.23",
     "mypy-boto3-ec2>=1.40.4",
     "mypy-boto3-ecr>=1.38.0",
+    "mypy-boto3-efs>=1.38.0",
     "mypy-boto3-eks>=1.38.0",
     "mypy-boto3-elbv2>=1.38.0",
     "mypy-boto3-inspector2>=1.38.0",

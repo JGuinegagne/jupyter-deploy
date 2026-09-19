@@ -980,6 +980,7 @@ aws = [
     { name = "mypy-boto3-dynamodb" },
     { name = "mypy-boto3-ec2" },
     { name = "mypy-boto3-ecr" },
+    { name = "mypy-boto3-efs" },
     { name = "mypy-boto3-eks" },
     { name = "mypy-boto3-elbv2" },
     { name = "mypy-boto3-inspector2" },
@@ -1019,6 +1020,7 @@ requires-dist = [
     { name = "mypy-boto3-dynamodb", marker = "extra == 'aws'", specifier = ">=1.38.0" },
     { name = "mypy-boto3-ec2", marker = "extra == 'aws'", specifier = ">=1.40.4" },
     { name = "mypy-boto3-ecr", marker = "extra == 'aws'", specifier = ">=1.38.0" },
+    { name = "mypy-boto3-efs", marker = "extra == 'aws'", specifier = ">=1.38.0" },
     { name = "mypy-boto3-eks", marker = "extra == 'aws'", specifier = ">=1.38.0" },
     { name = "mypy-boto3-elbv2", marker = "extra == 'aws'", specifier = ">=1.38.0" },
     { name = "mypy-boto3-inspector2", marker = "extra == 'aws'", specifier = ">=1.38.0" },
@@ -1174,6 +1176,7 @@ dependencies = [
     { name = "mypy-boto3-dynamodb" },
     { name = "mypy-boto3-ec2" },
     { name = "mypy-boto3-ecr" },
+    { name = "mypy-boto3-efs" },
     { name = "mypy-boto3-eks" },
     { name = "mypy-boto3-elbv2" },
     { name = "mypy-boto3-inspector2" },
@@ -1205,6 +1208,7 @@ requires-dist = [
     { name = "mypy-boto3-dynamodb" },
     { name = "mypy-boto3-ec2" },
     { name = "mypy-boto3-ecr" },
+    { name = "mypy-boto3-efs" },
     { name = "mypy-boto3-eks" },
     { name = "mypy-boto3-elbv2" },
     { name = "mypy-boto3-inspector2" },
@@ -1239,6 +1243,7 @@ dependencies = [
     { name = "mypy-boto3-dynamodb" },
     { name = "mypy-boto3-ec2" },
     { name = "mypy-boto3-ecr" },
+    { name = "mypy-boto3-efs" },
     { name = "mypy-boto3-eks" },
     { name = "mypy-boto3-elbv2" },
     { name = "mypy-boto3-inspector2" },
@@ -1270,6 +1275,7 @@ requires-dist = [
     { name = "mypy-boto3-dynamodb" },
     { name = "mypy-boto3-ec2" },
     { name = "mypy-boto3-ecr" },
+    { name = "mypy-boto3-efs" },
     { name = "mypy-boto3-eks" },
     { name = "mypy-boto3-elbv2" },
     { name = "mypy-boto3-inspector2" },
@@ -1753,6 +1759,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e9/f1/704db62d36b42b8bf5b43a913c1d9ee0a85e9e45c28ce7604e6a28dc8d30/mypy_boto3_ecr-1.43.73.tar.gz", hash = "sha256:d8ec39f4be668aa9e8835c4f36ccc6fe832ee2d24e7de3e261dc69186462c90a", size = 36968, upload-time = "2026-08-17T21:16:49.275Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2f/50/ac66c5303b061257d5a8f4fe43886ec9707ab67a74fbea80ccfb7c744ec1/mypy_boto3_ecr-1.43.73-py3-none-any.whl", hash = "sha256:d30467573e922cb07762849c1c91d66d981ce8f6fb192c48dc8331ee5496ce87", size = 43091, upload-time = "2026-08-17T21:16:46.297Z" },
+]
+
+[[package]]
+name = "mypy-boto3-efs"
+version = "1.43.23"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7a/98/e87664cca5d6de560c265f6aa87d999196a6046e637b622206ad947c2abe/mypy_boto3_efs-1.43.23.tar.gz", hash = "sha256:d752a93d1c4621defa83f2388d7c0c439e64c0611056c6ac82f3145ec88b6cce", size = 21863, upload-time = "2026-06-04T21:04:31.251Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b3/5c/5b35b416c6cddddd0ca3c22a17a50a9d0a060d27546c9c529f36ee92925f/mypy_boto3_efs-1.43.23-py3-none-any.whl", hash = "sha256:555ce57e1de00cf668784d38fc381620bf39f6929cee4848e92f4458a13066c2", size = 30300, upload-time = "2026-06-04T21:04:28.317Z" },
 ]
 
 [[package]]
