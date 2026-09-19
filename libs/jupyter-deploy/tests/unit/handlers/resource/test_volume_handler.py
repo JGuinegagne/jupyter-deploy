@@ -550,10 +550,10 @@ class TestLiveStateGrouping(unittest.TestCase):
 
         run: Mock = Mock(side_effect=fake_run)
         with patch.object(handler, "_run", run):
-            live = handler._live_state([ebs_a, ebs_b, efs])
+            live = handler._live_state([ebs_a, ebs_b, efs], "volume.status")
 
         # Two EBS volumes share a kind, so the command runs twice in total, not three times.
-        self.assertEqual([c.args[0] for c in run.call_args_list], ["volume.live-state", "volume.live-state"])
+        self.assertEqual([c.args[0] for c in run.call_args_list], ["volume.status", "volume.status"])
         self.assertEqual(
             sorted(c.kwargs["volume_type"] for c in run.call_args_list),
             ["ebs", "efs"],
@@ -568,7 +568,7 @@ class TestLiveStateGrouping(unittest.TestCase):
         run: Mock = Mock(return_value={"volumes": []})
 
         with patch.object(handler, "_run", run):
-            handler._live_state([efs])
+            handler._live_state([efs], "volume.status")
 
         self.assertEqual(run.call_args.kwargs["volume_ids"], "fs-123")
         self.assertEqual(run.call_args.kwargs["volume_type"], "efs")
@@ -584,7 +584,7 @@ class TestLiveStateGrouping(unittest.TestCase):
         run: Mock = Mock(side_effect=AssertionError)
 
         with patch.object(handler, "_run", run):
-            self.assertEqual(handler._live_state([_HOME]), {})
+            self.assertEqual(handler._live_state([_HOME], "volume.status"), {})
 
         run.assert_not_called()
 

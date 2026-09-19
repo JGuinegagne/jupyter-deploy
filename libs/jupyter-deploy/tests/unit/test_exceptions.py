@@ -412,9 +412,15 @@ class TestResourcePollTimeoutError(unittest.TestCase):
         self.assertIn("snap-1", str(error))
         self.assertIn("pending", str(error))
 
-    def test_says_nothing_was_lost(self) -> None:
-        """The message has to say so: a timeout on a backup reads as data loss otherwise."""
-        self.assertIn("nothing has been lost", str(ResourcePollTimeoutError("volume backup", "snap-1", "pending")))
+    def test_says_it_stopped_waiting_rather_than_failed(self) -> None:
+        """Wording matters: a timeout on a backup reads as data loss unless it says otherwise.
+
+        The generic message stops at "stopped waiting"; the reassurance that the operation continues is
+        the raise site's, since only it knows what carries on and what the user can check.
+        """
+        message = str(ResourcePollTimeoutError("volume backup", "snap-1", "pending"))
+        self.assertIn("Stopped waiting", message)
+        self.assertNotIn("failed", message)
 
     def test_is_catchable_as_both_jupyter_deploy_and_timeout(self) -> None:
         """JupyterDeployError so the CLI renders it; TimeoutError so existing callers still catch it."""

@@ -8,7 +8,8 @@ from jupyter_deploy import manifest_validation
 from jupyter_deploy.handlers import base_project_handler
 from jupyter_deploy.manifest import (
     VOLUME_READINESS_COMMAND,
-    VOLUME_STATE_COMMAND,
+    VOLUME_SHOW_COMMAND,
+    VOLUME_STATUS_COMMAND,
     JupyterDeployManifestV1,
 )
 
@@ -45,11 +46,13 @@ class TestManifest(unittest.TestCase):
     ]
     EXPECTED_PROXY_COMMANDS = ["proxy.connect-info"]
     # `jd volume`. Two of these are well-known names rather than free choices: core looks up
-    # VOLUME_STATE_COMMAND for live state and VOLUME_READINESS_COMMAND for the restore-safety gate, and
+    # VOLUME_SHOW_COMMAND / VOLUME_STATUS_COMMAND for live state and VOLUME_READINESS_COMMAND for the
+    # restore-safety gate, and
     # in both cases DECLARING the command is the opt-in. So a rename here is a silent opt-out, which is
     # what test_volume_wellknown_commands_are_expected pins.
     EXPECTED_VOLUME_COMMANDS = [
-        "volume.live-state",
+        "volume.show",
+        "volume.status",
         "volume.backups",
         "volume.backup",
         "volume.delete-backup",
@@ -150,7 +153,8 @@ class TestManifest(unittest.TestCase):
         the restore-safety check, and nothing fails. Asserted against the constants so the template and
         core cannot drift apart.
         """
-        self.assertIn(VOLUME_STATE_COMMAND, self.EXPECTED_VOLUME_COMMANDS)
+        self.assertIn(VOLUME_SHOW_COMMAND, self.EXPECTED_VOLUME_COMMANDS)
+        self.assertIn(VOLUME_STATUS_COMMAND, self.EXPECTED_VOLUME_COMMANDS)
         self.assertIn(VOLUME_READINESS_COMMAND, self.EXPECTED_VOLUME_COMMANDS)
 
     def test_all_expected_access_commands_declared(self) -> None:

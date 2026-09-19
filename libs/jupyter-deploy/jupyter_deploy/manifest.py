@@ -41,7 +41,12 @@ VOLUME_READINESS_COMMAND = "volume.validate-backups-ready"
 # that omits it reports every volume from its declaration alone. ONE command for every storage class the
 # template mounts -- it receives the class as a cli parameter and branches on it, so adding a class is a
 # manifest change and not a Python one.
-VOLUME_STATE_COMMAND = "volume.live-state"
+# One key per CLI verb, NOT one shared "live state" command. `jd volume show` and `jd volume status`
+# happen to answer from a single AWS call in the aws-ec2 templates, but core must not encode that: a
+# provider whose detail and state come from different APIs has to be able to declare them separately.
+# Templates where they coincide repeat the sequence, until the manifest grows command aliases.
+VOLUME_SHOW_COMMAND = "volume.show"
+VOLUME_STATUS_COMMAND = "volume.status"
 
 
 class JupyterDeployTemplateV1(BaseModel):

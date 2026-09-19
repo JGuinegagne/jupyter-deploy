@@ -92,8 +92,11 @@ def wait_snapshot_completed(
                 "volume backup",
                 snapshot_id,
                 f"{state} ({progress} done after {timeout_seconds}s)",
-                hint="Run 'jd volume show' to see when it reports 'completed'. The previous backup was "
-                "kept, so there is still one to restore from.",
+                # Says only what this layer knows: the snapshot's own fate. Whether an older backup
+                # survived is the caller's ordering, not ours -- `backup_volume` happens to delete the
+                # superseded one only after a successful wait, but nothing here can assert that.
+                hint="The snapshot is still being created and nothing has been lost. Run 'jd volume show' "
+                "to see when it reports 'completed'.",
             )
 
         time.sleep(poll_interval_seconds)

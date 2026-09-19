@@ -152,8 +152,11 @@ class TestWaitSnapshotCompleted(unittest.TestCase):
         # which read as "the backup failed" when the snapshot is in fact still being created.
         self.assertIsInstance(context.exception, JupyterDeployError)
         self.assertIsInstance(context.exception, TimeoutError)
-        self.assertIn("nothing has been lost", message)
-        self.assertIn("jd volume show", str(context.exception.hint))
+        # The hint carries what the message does not: the snapshot continues, and the previous backup is
+        # still there. Without that a timeout on a backup reads as "the backup failed".
+        hint = str(context.exception.hint)
+        self.assertIn("nothing has been lost", hint)
+        self.assertIn("jd volume show", hint)
 
     @patch("time.sleep")
     @patch("time.monotonic")

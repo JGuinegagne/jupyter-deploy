@@ -55,7 +55,7 @@ volumes:
   # Every field below references a values: entry or a path -- no terraform identifiers appear here, so a
   # differently-backed template declares new values: entries rather than new fields.
   # `type` is the storage class, and it is what the live-state command branches on. The command itself is
-  # not named here: declaring `volume.live-state` at all is what opts this template into reporting live state.
+  # not named here: declaring `volume.show` / `volume.status` is what opts this template into reporting live state.
   static:
   - name: home
     type: ebs
@@ -492,8 +492,12 @@ commands:
   - result-name: proxy.connect-info.expires_at
     source: result
     source-key: '[2].ExpiresAt'
-- cmd: volume.live-state
-  # One listing command for every storage kind this template mounts: the caller says which kind it
+- cmd: volume.show
+  # Backs `jd volume show`. Declared separately from volume.status below, which is byte-identical
+  # HERE only because one DescribeVolumes answers both questions on AWS -- core asks for the two by
+  # different keys so a provider whose detail and state come from different APIs can diverge them.
+  #
+  # One sequence for every storage kind this template mounts: the caller says which kind it
   # is asking about (the `type` its volumes: entry declares) and the matching branch answers, so the
   # CLI never learns that a block volume and a file system are two different APIs.
   flags:
@@ -532,7 +536,53 @@ commands:
       source: result
       source-key: '[1].FileSystems'
   results:
-  - result-name: volume.live-state.volumes
+  - result-name: volume.show.volumes
+    source: result
+    source-key: '[2].Value'
+- cmd: volume.status
+  # Backs `jd volume status`, which reduces this to a single word. Same sequence as volume.show above:
+  # see the note there for why the duplication is deliberate rather than an oversight.
+  #
+  # One sequence for every storage kind this template mounts: the caller says which kind it
+  # is asking about (the `type` its volumes: entry declares) and the matching branch answers, so the
+  # CLI never learns that a block volume and a file system are two different APIs.
+  flags:
+  - name: is-efs
+    conditions:
+    - left:
+        source: cli
+        source-key: volume_type
+      operator: equals
+      right:
+        source: literal
+        value: efs
+  sequence:
+  - api-name: aws.ec2.describe-volumes        # [0] block volumes: discovered by tag
+    when: "!is-efs"
+    # Tag keys are declared HERE, not in the CLI: this template owns its tagging convention, and
+    # DeploymentId is the same key every other resource of the deployment carries.
+    arguments:
+    - api-attribute: filter_DeploymentId
+      source: output
+      source-key: deployment_id
+  - api-name: aws.efs.describe-file-systems   # [1] file systems: asked for by id
+    when: is-efs
+    arguments:
+    # EFS has no tag filter on DescribeFileSystems, so the ids come from the caller, which already
+    # knows them from the template's inventory.
+    - api-attribute: file_system_ids
+      source: cli
+      source-key: volume_ids
+  - api-name: core.coalesce-str               # [2] whichever branch ran
+    arguments:
+    - api-attribute: value_1
+      source: result
+      source-key: '[0].Volumes'
+    - api-attribute: value_2
+      source: result
+      source-key: '[1].FileSystems'
+  results:
+  - result-name: volume.status.volumes
     source: result
     source-key: '[2].Value'
 - cmd: volume.backups

@@ -22,7 +22,8 @@ from jupyter_deploy.handlers.payloads import ResolvedVolume, VolumeBackupResult,
 from jupyter_deploy.handlers.resource.resource_utils import collect_results, resolve_node
 from jupyter_deploy.manifest import (
     VOLUME_READINESS_COMMAND,
-    VOLUME_STATE_COMMAND,
+    VOLUME_SHOW_COMMAND,
+    VOLUME_STATUS_COMMAND,
     JupyterDeployDynamicVolumeV1,
     JupyterDeployStaticVolumeV1,
 )
@@ -210,7 +211,7 @@ class VolumeHandler(BaseProjectHandler):
         runner.run_command_sequence(command, cli_paramdefs=paramdefs)
         return collect_results(runner, command)
 
-    def _live_state(self, volumes: list[ResolvedVolume]) -> dict[str, dict[str, Any]]:
+    def _live_state(self, volumes: list[ResolvedVolume], command: str) -> dict[str, dict[str, Any]]:
         """Live provider state per volume id: zone, capacity, type, encryption, state.
 
         The manifest inventory says which volumes exist and what they are called; this says what they
@@ -224,7 +225,7 @@ class VolumeHandler(BaseProjectHandler):
         from its declaration alone. That is the whole opt-out; it is deliberately template-wide rather than
         per group, because the command already branches per class.
         """
-        if not self.project_manifest.has_command(VOLUME_STATE_COMMAND):
+        if not self.project_manifest.has_command(command):
             return {}
 
         by_class: dict[str, list[str]] = {}
@@ -236,7 +237,7 @@ class VolumeHandler(BaseProjectHandler):
             # Both are passed to every state command; its manifest declaration decides what to use. The
             # cli-param name stays `volume_type`: it is the manifest's own `source-key`, and the condition
             # that branches on it is written in the template, not here.
-            results = self._run(VOLUME_STATE_COMMAND, volume_type=volume_class, volume_ids=",".join(volume_ids))
+            results = self._run(command, volume_type=volume_class, volume_ids=",".join(volume_ids))
             described = results.get("volumes", [])
             if not isinstance(described, list):
                 continue
@@ -310,7 +311,7 @@ class VolumeHandler(BaseProjectHandler):
         the call would be pointless and because the provider reports what to say instead.
         """
         volume = self._find(self._resolve_name(name))
-        live = self._live_state([volume]).get(volume.volume_id, {})
+        live = self._live_state([volume], VOLUME_SHOW_COMMAND).get(volume.volume_id, {})
         backup = self._latest_backup(self._describe_backups(), volume.name) if volume.backup_eligible else None
 
         return VolumeDetail(
@@ -347,7 +348,7 @@ class VolumeHandler(BaseProjectHandler):
         it as `backup_state` / `backup_timestamp`.
         """
         volume = self._find(self._resolve_name(name))
-        live = self._live_state([volume]).get(volume.volume_id, {})
+        live = self._live_state([volume], VOLUME_STATUS_COMMAND).get(volume.volume_id, {})
         return str(live.get("state") or "unknown")
 
     def backup_volume(self, name: str | None = None) -> VolumeBackupResult:
