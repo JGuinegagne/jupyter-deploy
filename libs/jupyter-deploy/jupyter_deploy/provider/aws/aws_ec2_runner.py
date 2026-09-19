@@ -171,7 +171,7 @@ class AwsEc2Runner(InstructionRunner):
 
         since = [parsed for parsed in (str_utils.parse_timestamp(entry.strip()) for entry in raw.split(",")) if parsed]
 
-        self.display_manager.info("Verifying the backups predate the last shutdown")
+        self.display_manager.info("Verifying the backups postdate the last shutdown")
         ec2_instance.verify_instance_stopped_since(self.client, instance_id=instance_id, since=since)
 
         return {}

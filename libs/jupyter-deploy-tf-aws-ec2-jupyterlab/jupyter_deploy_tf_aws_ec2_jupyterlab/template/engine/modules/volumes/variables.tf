@@ -62,8 +62,10 @@ variable "ebs_snapshot_ids" {
   description = <<-EOT
     Map of volume name -> EBS snapshot id to create that volume from.
 
-    Key "home" is the jupyter data volume; other keys match the "name" of an additional_ebs_mounts
-    entry. An absent key means an empty volume.
+    Keys are mount PATHS, not the "name" field of an additional_ebs_mounts entry: "home" is the jupyter
+    data volume, and every additional EBS mount is "home/<mount_point>". An absent key means an empty
+    volume, so a key that matches nothing silently restores nothing -- which is why the module refuses
+    a key it does not recognize at plan time.
   EOT
   type        = map(string)
 }

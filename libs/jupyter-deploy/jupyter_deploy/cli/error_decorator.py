@@ -53,6 +53,7 @@ from jupyter_deploy.exceptions import (
     ReadManifestError,
     ResourceNameRequiredError,
     ResourceNotFoundError,
+    ResourcePollTimeoutError,
     SupervisedExecutionError,
     ToolRequiredError,
     UnreachableHostError,
@@ -291,6 +292,13 @@ def handle_cli_errors(console: Console) -> Generator[None, None, None]:
         console.print(f":x: {e}", style="bold red", highlight=False)
         console.line()
         console.print(":bulb: Run [bold cyan]jd cluster login[/].")
+        raise typer.Exit(code=1) from None
+
+    except ResourcePollTimeoutError as e:
+        console.print(f":hourglass: {e}", style="bold yellow", highlight=False)
+        if e.hint:
+            console.line()
+            console.print(f":bulb: {e.hint}")
         raise typer.Exit(code=1) from None
 
     except ResourceNotFoundError as e:

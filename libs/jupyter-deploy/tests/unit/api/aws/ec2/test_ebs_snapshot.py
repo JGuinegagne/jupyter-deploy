@@ -10,7 +10,7 @@ from jupyter_deploy.api.aws.ec2.ebs_snapshot import (
     describe_snapshots_by_tags,
     wait_snapshot_completed,
 )
-from jupyter_deploy.exceptions import ResourceNotFoundError
+from jupyter_deploy.exceptions import JupyterDeployError, ResourceNotFoundError, ResourcePollTimeoutError
 
 
 def _not_found_error(client_error: type[Exception]) -> Exception:
@@ -142,12 +142,18 @@ class TestWaitSnapshotCompleted(unittest.TestCase):
         mock_ec2_client.describe_snapshots.return_value = {"Snapshots": [{"State": "pending", "Progress": "42%"}]}
 
         # Execute & Verify
-        with self.assertRaises(TimeoutError) as context:
+        with self.assertRaises(ResourcePollTimeoutError) as context:
             wait_snapshot_completed(mock_ec2_client, snapshot_id="snap-1", timeout_seconds=900)
 
         message = str(context.exception)
         self.assertIn("900s", message)
         self.assertIn("42%", message)
+        # Typed, so the CLI renders it instead of letting a bare TimeoutError escape as a traceback --
+        # which read as "the backup failed" when the snapshot is in fact still being created.
+        self.assertIsInstance(context.exception, JupyterDeployError)
+        self.assertIsInstance(context.exception, TimeoutError)
+        self.assertIn("nothing has been lost", message)
+        self.assertIn("jd volume show", str(context.exception.hint))
 
     @patch("time.sleep")
     @patch("time.monotonic")

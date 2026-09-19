@@ -33,6 +33,7 @@ from jupyter_deploy.exceptions import (
     ProxyStartError,
     ReadConfigurationError,
     ReadManifestError,
+    ResourcePollTimeoutError,
     SupervisedExecutionError,
     ToolRequiredError,
     UnreachableHostError,
@@ -398,6 +399,28 @@ class TestImageErrors(unittest.TestCase):
         self.assertEqual(error.tag, "v99")
         self.assertIn("v99", str(error))
         self.assertIn("jupyterlab", str(error))
+
+
+class TestResourcePollTimeoutError(unittest.TestCase):
+    """ "Stopped watching", never "failed" -- the provider carries on after this is raised."""
+
+    def test_carries_the_state_and_hint(self) -> None:
+        error = ResourcePollTimeoutError("volume backup", "snap-1", "pending (42% done)", hint="Run 'jd volume show'.")
+        self.assertEqual(error.resource_kind, "volume backup")
+        self.assertEqual(error.resource_name, "snap-1")
+        self.assertEqual(error.state, "pending (42% done)")
+        self.assertIn("snap-1", str(error))
+        self.assertIn("pending", str(error))
+
+    def test_says_nothing_was_lost(self) -> None:
+        """The message has to say so: a timeout on a backup reads as data loss otherwise."""
+        self.assertIn("nothing has been lost", str(ResourcePollTimeoutError("volume backup", "snap-1", "pending")))
+
+    def test_is_catchable_as_both_jupyter_deploy_and_timeout(self) -> None:
+        """JupyterDeployError so the CLI renders it; TimeoutError so existing callers still catch it."""
+        error = ResourcePollTimeoutError("volume backup", "snap-1", "pending")
+        self.assertIsInstance(error, JupyterDeployError)
+        self.assertIsInstance(error, TimeoutError)
 
 
 class TestVolumeErrors(unittest.TestCase):

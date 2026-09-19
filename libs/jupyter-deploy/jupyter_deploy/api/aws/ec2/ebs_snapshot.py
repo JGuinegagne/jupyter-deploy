@@ -5,7 +5,7 @@ import time
 from mypy_boto3_ec2.client import EC2Client
 from mypy_boto3_ec2.type_defs import FilterTypeDef, SnapshotResponseTypeDef, SnapshotTypeDef, TagTypeDef
 
-from jupyter_deploy.exceptions import ResourceNotFoundError
+from jupyter_deploy.exceptions import ResourceNotFoundError, ResourcePollTimeoutError
 
 # Tag recording which volume identity a backup belongs to. The CLI both WRITES and READS this key, so
 # unlike the tags a template stamps on its own resources it cannot drift: it never leaves this codebase.
@@ -59,7 +59,8 @@ def wait_snapshot_completed(
 
     Raises:
         ResourceNotFoundError: If the snapshot disappears while waiting.
-        TimeoutError: If it does not complete within timeout_seconds.
+        ResourcePollTimeoutError: If it does not complete within timeout_seconds. The snapshot keeps
+            being created; the caller then leaves the superseded backup in place.
         RuntimeError: If it enters the `error` state.
     """
     deadline = time.monotonic() + timeout_seconds
@@ -84,10 +85,15 @@ def wait_snapshot_completed(
             raise RuntimeError(f"Snapshot {snapshot_id} entered the 'error' state and cannot be used.")
 
         if time.monotonic() >= deadline:
+            # The snapshot keeps going without us: EBS fixes its CONTENT at the moment it was requested,
+            # so waiting only buys the right to delete the superseded backup, which the caller skips.
             progress = snapshot.get("Progress", "unknown")
-            raise TimeoutError(
-                f"Snapshot {snapshot_id} did not complete within {timeout_seconds}s (state: {state}, "
-                f"progress: {progress})."
+            raise ResourcePollTimeoutError(
+                "volume backup",
+                snapshot_id,
+                f"{state} ({progress} done after {timeout_seconds}s)",
+                hint="Run 'jd volume show' to see when it reports 'completed'. The previous backup was "
+                "kept, so there is still one to restore from.",
             )
 
         time.sleep(poll_interval_seconds)

@@ -284,10 +284,10 @@ class ConfigHandler(BaseProjectHandler):
         terraform recreates the volume from it, reports success, and the work done since is gone. The
         check is only meaningful here, before the variable is written.
 
-        Scoped to this flag on purpose. A user who changes a zone WITHOUT asking for a restore gets no
-        check from here -- the engine's plan-time precondition is what stands between them and an empty
-        volume, and it only fires while the backups variable is still unset. That is a known footgun,
-        accepted deliberately rather than paid for by validating on every `jd config`.
+        Scoped to this flag on purpose, and nothing else covers the gap: a user who changes a zone
+        WITHOUT asking for a restore gets no check at all, and the volumes are replaced empty. That is a
+        known gap, stated in the `availability_zone` variable description, and accepted rather than
+        paid for by giving every `jd config` a provider call.
 
         Raises:
             BackupsNotReadyError: If the backups cannot be shown to hold the volumes' current contents,
