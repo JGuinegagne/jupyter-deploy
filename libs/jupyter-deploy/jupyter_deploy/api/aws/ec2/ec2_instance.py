@@ -210,9 +210,20 @@ def verify_instance_stopped_since(
     ordered against the flush that happened in that same second, and only one of those answers is safe.
 
     Raises:
-        IncompatibleHostStateError: If the host has run since any of `since`, or its stop time is unknown.
+        IncompatibleHostStateError: If the host has run since any of `since`, its stop time is unknown, or
+            `since` is empty -- an empty list is "nothing could be checked", never "checked and clean".
         ValueError: If the instance cannot be found.
     """
+    if not since:
+        # A gate that cannot tell "nothing to check" from "verified" is one refactor away from passing a
+        # restore it never examined. The caller drops unparseable instants, so an empty list here means
+        # every timestamp it had was unusable -- the opposite of proof.
+        raise IncompatibleHostStateError(
+            "No backup timestamps were supplied, so it cannot be established that the volumes have not "
+            "been written to since they were captured.",
+            hint="Take a fresh backup while the host is stopped, then retry.",
+        )
+
     stop_time = get_instance_stop_time(ec2_client, instance_id=instance_id)
 
     if stop_time is None:

@@ -16,6 +16,7 @@ import re
 from jupyter_deploy.enum import ConditionOperator, InstructionArgumentSource
 from jupyter_deploy.exceptions import InvalidCommandGrammarError
 from jupyter_deploy.manifest import (
+    VOLUME_READINESS_COMMAND,
     JupyterDeployCommandV1,
     JupyterDeployConditionOperandV1,
     JupyterDeployManifestV1,
@@ -141,10 +142,36 @@ def validate_command(command: JupyterDeployCommandV1) -> None:
         raise InvalidCommandGrammarError(violations)
 
 
+def collect_volume_violations(manifest: JupyterDeployManifestV1) -> list[str]:
+    """Violations in the `volumes:` declaration that only the whole manifest can see.
+
+    Omitting the readiness command is a legitimate opt-out for storage where restoring is always safe.
+    It is NOT safe in one combination: a volume declaring a `backups-map` is one `jd config
+    --restore-volumes` away from being REPLACED from a backup, and without the command nothing
+    establishes that the backup still holds what the volume holds. The restore then succeeds and the
+    session's work is simply gone -- the failure this whole feature exists to prevent, reintroduced by
+    an omission rather than by a bug.
+    """
+    if not manifest.volumes or manifest.supports_volume_readiness():
+        return []
+
+    declaring = [v.name for v in manifest.volumes.static if v.backups_map]
+    declaring += [d.group for d in manifest.volumes.dynamic if d.backups_map]
+    if not declaring:
+        return []
+
+    return [
+        f"volumes: {', '.join(declaring)} declare a backups-map, so `jd config --restore-volumes` can "
+        f"replace them from a backup, but the template declares no '{VOLUME_READINESS_COMMAND}' command "
+        "to establish that the backups are still current"
+    ]
+
+
 def validate_manifest(manifest: JupyterDeployManifestV1) -> None:
     """Raise InvalidCommandGrammarError listing every violation across all commands."""
     violations: list[str] = []
     for command in manifest.commands or []:
         violations.extend(collect_command_violations(command))
+    violations.extend(collect_volume_violations(manifest))
     if violations:
         raise InvalidCommandGrammarError(violations)

@@ -371,6 +371,7 @@ class TestVolumeHandlerBackup(unittest.TestCase):
         with (
             patch.object(handler, "_inventory", Mock(return_value=[_HOME])),
             patch.object(handler, "_describe_backups", Mock(return_value=[_HOME_BACKUP])),
+            patch.object(handler, "_ids_named_by_backups_map", Mock(return_value=set())),
             patch.object(handler, "_run", Mock(side_effect=fake_run)),
         ):
             result = handler.backup_volume("home")
@@ -552,7 +553,7 @@ class TestLiveStateGrouping(unittest.TestCase):
             live = handler._live_state([ebs_a, ebs_b, efs])
 
         # Two EBS volumes share a kind, so the command runs twice in total, not three times.
-        self.assertEqual([c.args[0] for c in run.call_args_list], ["volume.list", "volume.list"])
+        self.assertEqual([c.args[0] for c in run.call_args_list], ["volume.live-state", "volume.live-state"])
         self.assertEqual(
             sorted(c.kwargs["volume_type"] for c in run.call_args_list),
             ["ebs", "efs"],
@@ -693,3 +694,108 @@ class TestValidateBackupsReady(unittest.TestCase):
             patch.object(handler, "_run", Mock(side_effect=AssertionError)),
         ):
             handler.validate_backups_ready()  # does not raise
+
+
+class TestRestoreSourceMustBeUsable(unittest.TestCase):
+    """A snapshot that cannot seed a volume must never be resolvable as a restore source."""
+
+    _ERRORED_NEWER = {
+        "backup_id": "snap-errored",
+        "volume_id": "vol-home",
+        "state": "error",
+        "created_at": "2026-09-17T10:00:00+00:00",
+        "volume_name": "home",
+    }
+    _PENDING_NEWER = {
+        "backup_id": "snap-pending",
+        "volume_id": "vol-home",
+        "state": "pending",
+        "created_at": "2026-09-17T11:00:00+00:00",
+        "volume_name": "home",
+    }
+
+    def test_resolve_skips_an_errored_snapshot_for_the_older_good_one(self) -> None:
+        """The newest is not the answer: restoring from `error` destroys the volume, then fails."""
+        handler = _build_handler()
+        with (
+            patch.object(handler, "_inventory", Mock(return_value=[_HOME])),
+            patch.object(handler, "_describe_backups", Mock(return_value=[_HOME_BACKUP, self._ERRORED_NEWER])),
+        ):
+            _, resolved = handler.resolve_backup_ids()
+
+        self.assertEqual(resolved, {"home": "snap-home"})
+
+    def test_resolve_skips_a_pending_snapshot(self) -> None:
+        """Same shape via the wait timing out: `pending` is the newest and cannot be restored from."""
+        handler = _build_handler()
+        with (
+            patch.object(handler, "_inventory", Mock(return_value=[_HOME])),
+            patch.object(handler, "_describe_backups", Mock(return_value=[_HOME_BACKUP, self._PENDING_NEWER])),
+        ):
+            _, resolved = handler.resolve_backup_ids()
+
+        self.assertEqual(resolved, {"home": "snap-home"})
+
+    def test_resolve_refuses_when_only_an_unusable_snapshot_exists(self) -> None:
+        """Better to refuse than to resolve an id the apply cannot use."""
+        handler = _build_handler()
+        with (
+            patch.object(handler, "_inventory", Mock(return_value=[_HOME])),
+            patch.object(handler, "_describe_backups", Mock(return_value=[self._ERRORED_NEWER])),
+            self.assertRaises(BackupsNotReadyError),
+        ):
+            handler.resolve_backup_ids()
+
+    def test_show_still_reports_the_errored_backup(self) -> None:
+        """`show` must NOT hide it: an errored backup is what the user needs to see."""
+        handler = _build_handler()
+        with (
+            patch.object(handler, "_inventory", Mock(return_value=[_HOME])),
+            patch.object(handler, "_describe_backups", Mock(return_value=[_HOME_BACKUP, self._ERRORED_NEWER])),
+            patch.object(handler, "_live_state", Mock(return_value={})),
+        ):
+            detail = handler.show_volume("home")
+
+        self.assertEqual(detail.backup_id, "snap-errored")
+        self.assertEqual(detail.backup_state, "error")
+
+
+class TestSupersedeRespectsTheBackupsMap(unittest.TestCase):
+    """Deleting a snapshot the live configuration was built from is deleting a dependency."""
+
+    @staticmethod
+    def _handler_with_map(pinned: set[str]) -> VolumeHandler:
+        handler = _build_handler()
+        handler._ids_named_by_backups_map = Mock(return_value=pinned)  # type: ignore[method-assign]
+        return handler
+
+    def _run_backup(self, handler: VolumeHandler) -> Any:
+        def fake_run(cmd_name: str, **_: str) -> dict[str, Any]:
+            if cmd_name == "volume.backup":
+                return {"backup_id": "snap-new", "state": "completed"}
+            return {}
+
+        with (
+            patch.object(handler, "_inventory", Mock(return_value=[_HOME])),
+            patch.object(handler, "_describe_backups", Mock(return_value=[_HOME_BACKUP])),
+            patch.object(handler, "_run", Mock(side_effect=fake_run)) as run,
+        ):
+            result = handler.backup_volume("home")
+        return result, run
+
+    def test_a_pinned_snapshot_is_not_deleted(self) -> None:
+        """`ebs_snapshot_ids` still names snap-home, so the next replacement needs it to exist."""
+        handler = self._handler_with_map({"snap-home"})
+
+        result, run = self._run_backup(handler)
+
+        self.assertEqual(result.superseded_backup_ids, [])
+        self.assertNotIn("volume.delete-backup", [c.args[0] for c in run.call_args_list])
+
+    def test_an_unpinned_snapshot_is_still_deleted(self) -> None:
+        handler = self._handler_with_map({"snap-something-else"})
+
+        result, run = self._run_backup(handler)
+
+        self.assertEqual(result.superseded_backup_ids, ["snap-home"])
+        self.assertIn("volume.delete-backup", [c.args[0] for c in run.call_args_list])

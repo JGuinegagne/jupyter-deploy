@@ -687,10 +687,15 @@ class TestVerifyInstanceStoppedSince(unittest.TestCase):
 
         self.assertIn("fresh backup", ctx.exception.hint or "")
 
-    def test_no_instants_passes(self) -> None:
-        """A caller with nothing to compare has nothing to lose.
+    def test_no_instants_refuses_rather_than_passing_vacuously(self) -> None:
+        """A gate that cannot tell "nothing to check" from "verified" is one refactor from passing.
 
-        `validate_backups_ready` reaches this only after `resolve_backup_ids` has already raised for a
-        volume with no backup, so an empty set here cannot mean "no backups exist".
+        The caller drops unparseable instants before reaching here, so an empty list means every
+        timestamp it had was unusable -- the opposite of proof. Today's only caller happens to guard this
+        upstream; the gate no longer relies on that.
         """
-        verify_instance_stopped_since(self._client(self._STOPPED), "i-1", [])  # no raise
+        with self.assertRaises(IncompatibleHostStateError) as ctx:
+            verify_instance_stopped_since(self._client(self._STOPPED), "i-1", [])
+
+        self.assertIn("No backup timestamps", str(ctx.exception))
+        self.assertIn("fresh backup", str(ctx.exception.hint or ""))

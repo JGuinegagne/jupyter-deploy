@@ -2,7 +2,7 @@ import unittest
 
 from jupyter_deploy import manifest_validation
 from jupyter_deploy.exceptions import InvalidCommandGrammarError
-from jupyter_deploy.manifest import JupyterDeployCommandV1, JupyterDeployManifestV1
+from jupyter_deploy.manifest import VOLUME_READINESS_COMMAND, JupyterDeployCommandV1, JupyterDeployManifestV1
 
 
 def _valid_pool_status() -> JupyterDeployCommandV1:
@@ -309,3 +309,71 @@ class TestRejections(unittest.TestCase):
         )
         with self.assertRaises(InvalidCommandGrammarError):
             manifest_validation.validate_manifest(manifest)
+
+
+class TestVolumeReadinessDeclaration(unittest.TestCase):
+    """Omitting the readiness command is an opt-out everywhere except one combination."""
+
+    @staticmethod
+    def _manifest(volumes: dict, commands: list | None = None) -> JupyterDeployManifestV1:
+        return JupyterDeployManifestV1(
+            **{  # type: ignore[arg-type]
+                "schema_version": 1,
+                "template": {"name": "t", "engine": "terraform", "version": "1.0.0"},
+                "volumes": volumes,
+                "commands": commands or [],
+            }
+        )
+
+    _WITH_MAP = {"static": [{"name": "home", "volume-id-value": "v", "backups-map": "ids"}]}
+
+    def test_a_backups_map_without_the_readiness_command_is_refused(self) -> None:
+        """`--restore-volumes` can replace this volume, and nothing would check the backup is current."""
+        manifest = self._manifest(self._WITH_MAP)
+
+        violations = manifest_validation.collect_volume_violations(manifest)
+
+        self.assertEqual(len(violations), 1)
+        self.assertIn("home", violations[0])
+        self.assertIn(VOLUME_READINESS_COMMAND, violations[0])
+
+    def test_declaring_the_command_satisfies_it(self) -> None:
+        manifest = self._manifest(self._WITH_MAP, [{"cmd": VOLUME_READINESS_COMMAND, "sequence": []}])
+
+        self.assertEqual(manifest_validation.collect_volume_violations(manifest), [])
+
+    def test_no_backups_map_needs_no_command(self) -> None:
+        """A kind with no backup mechanism is never restored from, so there is nothing to check."""
+        manifest = self._manifest({"static": [{"name": "home", "volume-id-value": "v"}]})
+
+        self.assertEqual(manifest_validation.collect_volume_violations(manifest), [])
+
+    def test_a_template_with_no_volumes_is_unaffected(self) -> None:
+        manifest = JupyterDeployManifestV1(
+            **{  # type: ignore[arg-type]
+                "schema_version": 1,
+                "template": {"name": "t", "engine": "terraform", "version": "1.0.0"},
+            }
+        )
+
+        self.assertEqual(manifest_validation.collect_volume_violations(manifest), [])
+
+    def test_a_dynamic_group_is_reported_by_group_name(self) -> None:
+        manifest = self._manifest(
+            {
+                "dynamic": [
+                    {
+                        "group": "extra-ebs",
+                        "inventory-value": "inv",
+                        "name-path": ".name",
+                        "volume-id-path": ".id",
+                        "backups-map": "ids",
+                    }
+                ]
+            }
+        )
+
+        violations = manifest_validation.collect_volume_violations(manifest)
+
+        self.assertEqual(len(violations), 1)
+        self.assertIn("extra-ebs", violations[0])

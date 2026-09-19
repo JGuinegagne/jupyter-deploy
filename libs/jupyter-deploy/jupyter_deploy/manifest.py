@@ -41,7 +41,7 @@ VOLUME_READINESS_COMMAND = "volume.validate-backups-ready"
 # that omits it reports every volume from its declaration alone. ONE command for every storage class the
 # template mounts -- it receives the class as a cli parameter and branches on it, so adding a class is a
 # manifest change and not a Python one.
-VOLUME_STATE_COMMAND = "volume.list"
+VOLUME_STATE_COMMAND = "volume.live-state"
 
 
 class JupyterDeployTemplateV1(BaseModel):

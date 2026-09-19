@@ -16,6 +16,7 @@ from jupyter_deploy.exceptions import (
 )
 from jupyter_deploy.manifest import (
     VOLUME_READINESS_COMMAND,
+    VOLUME_STATE_COMMAND,
     InvalidServiceError,
     JupyterDeployComponentDefinitionV1,
     JupyterDeployFlagV1,
@@ -735,7 +736,9 @@ class TestJupyterDeployManifestV1VolumeReadiness(unittest.TestCase):
 
     def test_omitting_it_opts_out(self) -> None:
         """A template whose storage is always safe to restore is checked for nothing, not guessed at."""
-        manifest = self._manifest([{"cmd": "volume.list", "sequence": [{"api-name": "aws.ec2.describe-volumes"}]}])
+        manifest = self._manifest(
+            [{"cmd": VOLUME_STATE_COMMAND, "sequence": [{"api-name": "aws.ec2.describe-volumes"}]}]
+        )
         self.assertFalse(manifest.supports_volume_readiness())
 
     def test_a_template_with_no_commands_opts_out(self) -> None:

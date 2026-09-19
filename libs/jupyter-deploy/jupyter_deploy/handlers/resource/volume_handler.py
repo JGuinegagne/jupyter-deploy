@@ -29,6 +29,10 @@ from jupyter_deploy.manifest import (
 from jupyter_deploy.provider import manifest_command_runner as cmd_runner
 from jupyter_deploy.provider.resolved_clidefs import ResolvedCliParameter, StrResolvedCliParameter
 
+# The one EBS snapshot state a volume can be created from. `pending` and `error` are the states that
+# make an unusable snapshot look like the newest backup.
+_BACKUP_STATE_COMPLETED = "completed"
+
 
 class VolumeHandler(BaseProjectHandler):
     """Handler class to interact with the deployment's storage volumes and their backups."""
@@ -76,6 +80,32 @@ class VolumeHandler(BaseProjectHandler):
             f"Volume information is not available: output '{value_def.source_key}' has no value yet.",
             hint="Deploy the project with 'jd up' first — a volume has no id until it exists.",
         )
+
+    def _ids_named_by_backups_map(self, backups_map: str) -> set[str]:
+        """Backup ids the template's backups-map variable currently names, across every volume.
+
+        Read so that `jd volume backup` never deletes a snapshot the live configuration declares a volume
+        was created from: that is deleting a dependency, not tidying. `snapshot_id` is ForceNew, so the
+        next replacement of that volume would fail with `InvalidSnapshot.NotFound` having already
+        destroyed it -- which happened in the E2E suite before its fixture learned to re-resolve the map.
+
+        Best-effort by design: a map that cannot be read yields an empty set, so the supersede behaves as
+        it did before rather than refusing to run.
+        """
+        if not backups_map:
+            return set()
+        try:
+            value_def = self.project_manifest.get_declared_value(backups_map)
+        except NotImplementedError:
+            return set()
+        if value_def.get_source_type() != ValueSource.TEMPLATE_VARIABLE:
+            return set()
+
+        variable = self._variable_handler.get_template_variables().get(value_def.source_key)
+        value = None if variable is None else getattr(variable, "value", None)
+        if not isinstance(value, dict):
+            return set()
+        return {str(backup_id) for backup_id in value.values() if backup_id}
 
     @staticmethod
     def _parse_json(raw: str) -> Any:
@@ -226,15 +256,26 @@ class VolumeHandler(BaseProjectHandler):
         return backups if isinstance(backups, list) else []
 
     @staticmethod
-    def _latest_backup(backups: list[dict[str, Any]], volume_name: str) -> dict[str, Any] | None:
+    def _latest_backup(
+        backups: list[dict[str, Any]], volume_name: str, completed_only: bool = False
+    ) -> dict[str, Any] | None:
         """The most recent backup for one volume identity.
 
         Normally zero or one candidate; sorting covers the transient window inside backup_volume(),
         between creating the replacement and deleting the one it supersedes.
+
+        `completed_only` is for callers that intend to RESTORE from the result. A snapshot that is
+        `pending` or `error` has the newest timestamp but cannot seed a volume, and restoring is
+        destructive before it is validated, e.g. an `aws_ebs_volume` has no `create_before_destroy`,
+        so the live volume is gone before `CreateVolume` rejects the snapshot, with the last good
+        backup sitting right there. Callers that merely DISPLAY a backup pass False on purpose:
+        an errored backup is exactly what a user needs to see.
         """
         if not volume_name:
             return None
         matching = [b for b in backups if b.get("volume_name") == volume_name]
+        if completed_only:
+            matching = [b for b in matching if str(b.get("state", "")) == _BACKUP_STATE_COMPLETED]
         if not matching:
             return None
         return sorted(matching, key=lambda b: str(b.get("created_at", "")), reverse=True)[0]
@@ -350,9 +391,21 @@ class VolumeHandler(BaseProjectHandler):
         results = self._run("volume.backup", volume_id=volume.volume_id, volume_name=volume.name)
         backup_id = str(results.get("backup_id", ""))
 
+        # A snapshot the backups map still names is NOT deleted: the live configuration says a volume was
+        # created from it, so removing it turns the next replacement of that volume into an
+        # `InvalidSnapshot.NotFound` after the old volume is already gone. Costs at most one extra
+        # snapshot per volume, and `jd config --restore-volumes` releases it by repointing the map.
+        pinned = self._ids_named_by_backups_map(volume.backups_map)
+
         deleted = []
         for superseded_id in superseded:
             if superseded_id == backup_id:
+                continue
+            if superseded_id in pinned:
+                self.display_manager.info(
+                    f"Keeping backup {superseded_id}: the project's variables still declare a volume "
+                    "was created from it."
+                )
                 continue
             self._run("volume.delete-backup", backup_id=superseded_id)
             deleted.append(superseded_id)
@@ -469,7 +522,7 @@ class VolumeHandler(BaseProjectHandler):
         missing: list[str] = []
 
         for volume in eligible:
-            backup = self._latest_backup(backups, volume.name)
+            backup = self._latest_backup(backups, volume.name, completed_only=True)
             if backup is None or not backup.get("backup_id"):
                 missing.append(volume.name)
             else:
