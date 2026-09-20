@@ -62,10 +62,8 @@ class TestDeploymentBundleConsistency(unittest.TestCase):
     Neither is visible to `terraform validate`.
 
     The download side is discovered from the document's ``for … in ${join(" ", local.<list>)}`` loops
-    rather than from a hardcoded set of list names. That is the difference between asserting the
-    invariant and asserting today's shape: an earlier draft named base's two lists directly, and
-    adding a third loop (as the jupyterlab template does for its ``auth-sidecar/`` sources) would have
-    reported the new loop's files as never-fetched. A new loop is now picked up for free.
+    rather than from a hardcoded set of list names, so a template that adds a loop is covered without
+    editing this test. Naming the lists directly would report a new loop's files as never-fetched.
     """
 
     SERVICES_TF_PATH: Path = ENGINE_PATH / "services.tf"
