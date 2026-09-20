@@ -102,6 +102,7 @@ testpaths = [
 markers = [
     "e2e: End-to-end tests using playwright (deselect with '-m \"not e2e\"')",
     "cli: Non-mutating CLI tests for release validation (select with '-m cli')",
+    "gpu: Mutating tests that provision a GPU instance (deselect with '-m \"not gpu\"')",
 ]
 
 [tool.coverage.run]

@@ -1,4 +1,4 @@
-"""Apply #1 of the mutating pass: CPU + uv -> GPU + pixi + external volumes.
+"""Apply #1 of the mutating pass: CPU + uv -> GPU + pixi + external volumes + log retention.
 
 **This file and ``test_mutating_cpu_uv.py`` mutate ONE deployment in place, in order.** That is
 the design, not an accident of history. The alternative — one deployment per configuration, an
@@ -8,22 +8,20 @@ transition, not the end state:
   - terraform replacing the instance under a persisted data volume,
   - the volume reattaching and remounting at boot,
   - the package-manager environment rebuilding from scratch,
-  - the app returning on the SAME pinned cert (so every client's pin still validates).
+  - the app returning on the same domain, with its ACME cert intact.
 
 A separate deployment per configuration exercises none of that: one deployed straight onto a GPU
 with pixi never performs the swap. It is also not what a user does — a user changes their mind
 about their instance and runs `jd config && jd up`.
 
-Consequence: ``-k test_mutating_cpu_uv`` alone is NOT a valid entry point. The ``ORDER_*``
-constants encode the dependency; do not "optimize" these into two independent runs.
+This apply also provisions the external mounts and seeds the flag files that
+``test_mutating_cpu_uv.py`` asserts survived its own replacement, so run the pass in order — the
+``ORDER_*`` constants in ``constants.py`` encode it.
 
-Folded into this one apply, rather than paying an apply each: provisioning the external volumes,
-raising the log retention, switching the instance type, and switching the package manager.
-
-Dropped deliberately: the per-volume file/directory operation matrices for EBS and EFS. They
-exercise the same mount machinery ``test_home_volume.py`` already covers for the home volume, once
-per volume type. ``test_mutating_cpu_uv.py`` keeps a write probe and a `df` check per volume, which
-is what actually distinguishes a real mount from a fallback directory on the root volume.
+Not covered here: per-volume file/directory operation matrices. ``test_home_volume.py`` exercises
+the same mount machinery against the home volume, and ``test_mutating_cpu_uv.py`` adds a write probe
+and a `df` check per external volume — which is what distinguishes a real mount from a directory
+that fell back to the root volume.
 """
 
 from pathlib import Path
@@ -31,9 +29,8 @@ from pathlib import Path
 import pytest
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
 from pytest_jupyter_deploy.files import verify_dir_exists_on_server, verify_file_exists_on_server
-from pytest_jupyter_deploy.local_proxy import LocalProxyApplication
-from pytest_jupyter_deploy.local_proxy.requests import cert_fingerprint, served_cert_pem
 from pytest_jupyter_deploy.notebook import delete_notebook, run_notebook_in_jupyterlab, upload_notebook
+from pytest_jupyter_deploy.oauth2_proxy.github import GitHubOAuth2ProxyApplication
 from pytest_jupyter_deploy.plugin import skip_if_testvars_not_set
 
 from .constants import EBS_FLAG, EBS_MOUNT, EFS_FLAG, EFS_MOUNT, HOME_FLAG, ORDER_MUTATING_GPU_PIXI
@@ -48,9 +45,10 @@ _GPU_APPLY_TIMEOUT_SECONDS = 3600
 @skip_if_testvars_not_set(["JD_E2E_GPU_INSTANCE", "JD_E2E_LARGER_LOG_RETENTION_DAYS"])
 def test_switch_to_gpu_pixi_with_external_volumes(
     e2e_deployment: EndToEndDeployment,
-    client_proxy_app: LocalProxyApplication,
+    github_oauth_app: GitHubOAuth2ProxyApplication,
     gpu_instance_type: str,
     larger_log_retention_days: int,
+    logged_user: str,
 ) -> None:
     """One apply changes instance type, package manager, volumes and log retention together.
 
@@ -59,18 +57,21 @@ def test_switch_to_gpu_pixi_with_external_volumes(
     pin is everything that must be TRUE ACROSS that replacement:
 
     - the instance id changes (the GPU DLAMI forces a replacement — this is the swap happening),
+    - the deployment id does NOT (it suffixes every SSM document name, so a swap that regenerated
+      it would break every `jd host`/`jd server` command at once),
     - the home-volume flag file is still there (the data volume reattached and remounted),
-    - the served cert is byte-identical (key and cert live on the data volume, so a replacement
-      must not regenerate them — otherwise every client's pinned PEM goes stale and the app
-      becomes unreachable through the proxy while looking perfectly healthy),
-    - the app answers through the proxy again,
-    - the external volumes are mounted and writable.
+    - the app answers over HTTPS again,
+    - the external volumes are mounted.
+
+    Note on the log-retention choice: raising the *volume size* would be the more obvious config
+    change, but AWS EBS enforces a 6-hour cooldown between volume modifications, which would make
+    this test unrunnable twice in a day. ``log_files_retention_days`` is the innocuous stand-in.
     """
     e2e_deployment.ensure_server_running()
+    e2e_deployment.ensure_authorized([logged_user], "", [])
 
     instance_id_before = e2e_deployment.cli.get_str_output("instance_id")
-    bundle_before = e2e_deployment.cli.get_connect_bundle()
-    fingerprint_before = cert_fingerprint(served_cert_pem(bundle_before["host"], bundle_before["port"]))
+    deployment_id_before = e2e_deployment.cli.get_str_output("deployment_id")
     e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "touch", HOME_FLAG])
 
     # Set one variable through variables.yaml and the rest through injected CLI flags, so both
@@ -90,34 +91,24 @@ def test_switch_to_gpu_pixi_with_external_volumes(
         timeout_seconds=_GPU_APPLY_TIMEOUT_SECONDS,
     )
 
-    e2e_deployment.ensure_server_running(wait_after_restart=True)
+    # After an instance replacement the SSM agent needs to re-register before any `server exec`
+    # works; ensure_server_running waits for that rather than failing on a transient.
+    e2e_deployment.ensure_server_running()
+    e2e_deployment.ensure_authorized([logged_user], "", [])
 
     instance_id_after = e2e_deployment.cli.get_str_output("instance_id")
     assert instance_id_after != instance_id_before, (
         f"Expected the GPU switch to replace the instance, but it is still {instance_id_after}. "
         "If terraform did not replace it, nothing below is actually testing a swap."
     )
+    assert e2e_deployment.cli.get_str_output("deployment_id") == deployment_id_before, (
+        "The deployment id changed across the swap; every SSM document name would change with it"
+    )
 
     verify_file_exists_on_server(e2e_deployment, HOME_FLAG)
 
-    bundle_after = e2e_deployment.cli.get_connect_bundle()
-    assert cert_fingerprint(served_cert_pem(bundle_after["host"], bundle_after["port"])) == fingerprint_before, (
-        "The replacement instance serves a different cert; every pinned client would now fail "
-        "verification even though the app itself is healthy"
-    )
-
-    # The proxy the fixture started at setup is pinned to the OLD instance's IP and its port is
-    # gone once the instance is replaced, so the browser must be re-pointed at a FRESH proxy —
-    # `attach()` re-reads the bound port rather than reusing the stale setup-time URL. Verifying
-    # the app before stopping the proxy, and re-attaching first, is the whole point: a test that
-    # navigated to the pre-apply URL would report "Problem loading page" and look like an app
-    # failure when the app is fine.
-    e2e_deployment.cli.start_proxy(replace=True)
-    try:
-        client_proxy_app.attach()
-        client_proxy_app.verify_jupyterlab_accessible()
-    finally:
-        e2e_deployment.cli.stop_proxy_if_running()
+    github_oauth_app.ensure_authenticated()
+    github_oauth_app.verify_jupyterlab_accessible()
 
     verify_dir_exists_on_server(e2e_deployment, "/home/jovyan/external-ebs1")
     verify_dir_exists_on_server(e2e_deployment, "/home/jovyan/external-efs1")
@@ -126,6 +117,13 @@ def test_switch_to_gpu_pixi_with_external_volumes(
     e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "touch", EBS_FLAG])
     e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "touch", EFS_FLAG])
 
+    # `jd history` must have captured the terraform output of the apply that just ran: after a long
+    # `jd up` it is the user's only window into what actually happened, and it has regressed silently
+    # before. Asserted here, on a real multi-resource apply, rather than against a no-op one.
+    history_result = e2e_deployment.cli.run_command(["jupyter-deploy", "history", "show", "-l", "50"])
+    assert "Apply complete!" in history_result.stdout, "Expected 'Apply complete!' in history logs"
+    assert "Outputs:" in history_result.stdout, "Expected 'Outputs:' section in history logs"
+
 
 @pytest.mark.order(ORDER_MUTATING_GPU_PIXI + 1)
 @pytest.mark.mutating
@@ -133,8 +131,9 @@ def test_switch_to_gpu_pixi_with_external_volumes(
 @skip_if_testvars_not_set(["JD_E2E_GPU_INSTANCE"])
 def test_run_gpu_notebook(
     e2e_deployment: EndToEndDeployment,
-    client_proxy_app: LocalProxyApplication,
+    github_oauth_app: GitHubOAuth2ProxyApplication,
     gpu_instance_type: str,
+    logged_user: str,
 ) -> None:
     """A notebook on the GPU instance sees the GPU through the driver stack.
 
@@ -153,13 +152,15 @@ def test_run_gpu_notebook(
     )
 
     e2e_deployment.ensure_server_running()
-    client_proxy_app.verify_jupyterlab_accessible()
+    e2e_deployment.ensure_authorized([logged_user], "", [])
+    github_oauth_app.ensure_authenticated()
+    github_oauth_app.verify_jupyterlab_accessible()
 
     gpu_notebook = Path(__file__).parent / "notebooks" / "gpu_check.ipynb"
     server_path = upload_notebook(e2e_deployment, gpu_notebook, "e2e-test/gpu_check.ipynb")
 
     # torch via pixi takes ~90s; allow for network variability and poll less aggressively.
-    run_notebook_in_jupyterlab(client_proxy_app.page, server_path, timeout_ms=300000, poll_interval_ms=5000)
+    run_notebook_in_jupyterlab(github_oauth_app.page, server_path, timeout_ms=300000, poll_interval_ms=5000)
     delete_notebook(e2e_deployment, server_path)
 
     result = e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "pixi", "list"])
@@ -177,7 +178,8 @@ def test_run_gpu_notebook(
 @pytest.mark.gpu
 def test_pixi_install_and_persist(
     e2e_deployment: EndToEndDeployment,
-    client_proxy_app: LocalProxyApplication,
+    github_oauth_app: GitHubOAuth2ProxyApplication,
+    logged_user: str,
 ) -> None:
     """Packages a user installs from a notebook survive a server restart.
 
@@ -189,17 +191,19 @@ def test_pixi_install_and_persist(
     assert actual_package_manager == "pixi", f"Expected pixi, got '{actual_package_manager}'"
 
     e2e_deployment.ensure_server_running()
-    client_proxy_app.verify_jupyterlab_accessible()
+    e2e_deployment.ensure_authorized([logged_user], "", [])
+    github_oauth_app.ensure_authenticated()
+    github_oauth_app.verify_jupyterlab_accessible()
 
     notebook_path = Path(__file__).parent / "notebooks" / "pixi_install_libraries.ipynb"
     server_path = upload_notebook(e2e_deployment, notebook_path, "e2e-test/pixi_install_libraries.ipynb")
-    run_notebook_in_jupyterlab(client_proxy_app.page, server_path, timeout_ms=120000)
+    run_notebook_in_jupyterlab(github_oauth_app.page, server_path, timeout_ms=120000)
     delete_notebook(e2e_deployment, server_path)
 
     e2e_deployment.cli.run_command(["jupyter-deploy", "server", "restart"])
-    e2e_deployment.ensure_server_running(wait_after_restart=True)
+    e2e_deployment.ensure_server_running()
 
-    result = e2e_deployment.cli.run_exec_with_retry(["jupyter-deploy", "server", "exec", "--", "pixi", "list"])
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "pixi", "list"])
     assert "pytest" in result.stdout, f"Expected pytest to survive the server restart: {result.stdout}"
     assert "conda-build" in result.stdout, f"Expected conda-build to survive the server restart: {result.stdout}"
 
@@ -209,7 +213,8 @@ def test_pixi_install_and_persist(
 @pytest.mark.gpu
 def test_pixi_environment_recovery(
     e2e_deployment: EndToEndDeployment,
-    client_proxy_app: LocalProxyApplication,
+    github_oauth_app: GitHubOAuth2ProxyApplication,
+    logged_user: str,
 ) -> None:
     """A broken environment auto-recovers on restart, back to the base env.
 
@@ -226,11 +231,13 @@ def test_pixi_environment_recovery(
     # deleting files, which exercises a different (and unrealistic) failure.
     e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "pixi", "remove", "--pypi", "jupyterlab"])
     e2e_deployment.cli.run_command(["jupyter-deploy", "server", "restart"])
-    e2e_deployment.ensure_server_running(wait_after_restart=True)
+    e2e_deployment.ensure_server_running()
+    e2e_deployment.ensure_authorized([logged_user], "", [])
 
-    client_proxy_app.verify_jupyterlab_accessible()
+    github_oauth_app.ensure_authenticated()
+    github_oauth_app.verify_jupyterlab_accessible()
 
-    result = e2e_deployment.cli.run_exec_with_retry(["jupyter-deploy", "server", "exec", "--", "pixi", "list"])
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "server", "exec", "--", "pixi", "list"])
     assert "jupyterlab" in result.stdout, f"Expected jupyterlab to be reinstalled by recovery: {result.stdout}"
     assert "pytest" not in result.stdout, f"Expected pytest to be gone after recovery: {result.stdout}"
     assert "conda-build" not in result.stdout, f"Expected conda-build to be gone after recovery: {result.stdout}"
