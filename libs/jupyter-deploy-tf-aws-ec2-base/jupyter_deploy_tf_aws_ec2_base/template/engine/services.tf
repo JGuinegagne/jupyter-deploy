@@ -583,20 +583,37 @@ resource "null_resource" "reconcile_auth_allowlist" {
         echo "Reconciled $description."
       }
 
-      # Org first: an allowlisted team means nothing without an org, so applying the org before the
-      # teams keeps every intermediate state coherent. Its two forms differ because `org` takes a bare
-      # name rather than an action: `org <name>` to set, `org remove` to clear.
-      %{if local.allowed_github_org != ""~}
-      run_auth_update "the allowlisted organization" "sh /usr/local/bin/update-auth.sh org ${local.allowed_github_org}"
-      %{else~}
-      run_auth_update "the allowlisted organization (cleared)" "sh /usr/local/bin/update-auth.sh org remove"
-      %{endif~}
-
+      # GRANTS BEFORE REVOKES, which is why the section order differs by branch rather than being
+      # shared. update-auth.sh refuses any single operation that would leave the file with no users
+      # AND no org (oauth2-proxy reads empty allowlists as "no restriction"), and it judges that on
+      # the file as it stands, not on the end state terraform is driving towards. So whichever
+      # section is being emptied has to go LAST, after the one that is being filled:
+      #
+      #   org set   -> org, teams, users   (a trailing empty `users set` is fine: the org is in place)
+      #   org clear -> users, teams, org   (`users` is non-empty here, guaranteed by
+      #                                     local.github_auth_valid, so clearing the org is safe)
+      #
+      # Ordering them the same way in both branches fails one direction or the other: org-first
+      # breaks org-only -> users-only, users-first breaks users-only -> org-only.
+      #
+      # `org` takes a bare name rather than an action: `org <name>` to set, `org remove` to clear.
+      #
       # `set` with an empty list is how a cleared variable is expressed: the caller knows the list the
       # section should end up with, never the names currently in it, so it cannot phrase this as a
       # `remove`. update-auth.sh accepts that form for exactly this path.
+      #
+      # Either order leaves the allowlist briefly holding the UNION of the old and new values, since
+      # the sections are three separate writes. Not avoidable without an atomic multi-section update,
+      # and it only widens access for the seconds between two SSM round-trips.
+      %{if local.allowed_github_org != ""~}
+      run_auth_update "the allowlisted organization" "sh /usr/local/bin/update-auth.sh org ${local.allowed_github_org}"
       run_auth_update "the allowlisted teams" "sh /usr/local/bin/update-auth.sh teams set ${local.allowed_github_teams}"
       run_auth_update "the allowlisted users" "sh /usr/local/bin/update-auth.sh users set ${local.allowed_github_usernames}"
+      %{else~}
+      run_auth_update "the allowlisted users" "sh /usr/local/bin/update-auth.sh users set ${local.allowed_github_usernames}"
+      run_auth_update "the allowlisted teams" "sh /usr/local/bin/update-auth.sh teams set ${local.allowed_github_teams}"
+      run_auth_update "the allowlisted organization (cleared)" "sh /usr/local/bin/update-auth.sh org remove"
+      %{endif~}
     DOC
   }
 

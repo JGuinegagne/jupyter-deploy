@@ -19,6 +19,11 @@ That direction used to be broken in two separate ways, and both are pinned here:
 simply re-seeds the file from cloud-init on every run): that fix is correct on (1) and still wrong
 on (2).
 
+3. **It applied the sections in a fixed order.** The reconcile writes one section per SSM call, and
+   ``update-auth.sh`` refuses any single call that would leave no users and no org. A fixed order
+   therefore fails one direction of change or the other, whichever empties a section first --
+   covered by ``test_swapping_org_auth_for_user_auth_in_one_apply``.
+
 Uses ``safe_user`` as the probe rather than the logged-in user: granting and revoking access for
 somebody who is not driving the browser cannot lock the suite out of its own deployment.
 """
@@ -218,4 +223,65 @@ def test_team_variable_changes_reach_the_instance(
     assert safe_team.lower() in live_teams, (
         f"{safe_team!r} is in oauth_allowed_teams but not on the instance ({live_teams}). "
         "The teams section of the allowlist did not reconcile."
+    )
+
+
+@pytest.mark.order(ORDER_MUTATING_AUTH_VARIABLES + 4)
+@pytest.mark.mutating
+@skip_if_testvars_not_set(["JD_E2E_ORG", "JD_E2E_USER"])
+def test_swapping_org_auth_for_user_auth_in_one_apply(
+    e2e_deployment: EndToEndDeployment,
+    logged_org: str,
+    logged_user: str,
+) -> None:
+    """Dropping the org and adding the users in ONE apply reconciles, instead of refusing.
+
+    The reconcile drives ``update-auth.sh`` once per section, and the script refuses any single
+    operation that would leave the file with no users AND no org. It judges that on the file as it
+    stands, so the section being emptied has to be written after the section being filled -- which
+    means the order has to depend on the direction of the change, not be fixed.
+
+    This is the transition that exposes it: from org-only auth to user-only auth, an `org remove`
+    applied before `users set` sees an empty user list and fails the whole apply, even though the
+    end state is one the plan accepted.
+
+    Driven through ``variables.yaml`` rather than `jd config` flags because neither edit is
+    expressible as one: a list cannot be emptied by repeating its flag, and `--oauth-allowed-org ""`
+    does not round-trip (it reaches the tfvars as an escaped, ANSI-contaminated literal that fails
+    the plan). The reverse direction is covered by the tests above, which end on an org plus a
+    non-empty user list.
+    """
+    e2e_deployment.ensure_server_running()
+
+    # Get to org-only auth: the org carries access, the user list is empty. Safe for the suite's own
+    # access because the browser user is a member of this org. Both edits go in one apply, which the
+    # reconcile handles in the `org set` order -- org first, so the empty `users set` has an org
+    # behind it.
+    e2e_deployment.update_required_value("oauth_allowed_org", logged_org)
+    e2e_deployment.update_required_value("oauth_allowed_usernames", [])
+    # `ensure_deployed_with([])` rather than `ensure_deployed()`: the latter short-circuits on an
+    # already-deployed project, so it would never apply the values just written.
+    e2e_deployment.ensure_deployed_with([])
+
+    assert e2e_deployment.get_allowlisted_org() == logged_org, (
+        "Setup did not reach org-only auth; the swap below would not be testing the failing order"
+    )
+    assert not e2e_deployment.get_allowlisted_users(), (
+        f"Expected no allowlisted users before the swap, got {e2e_deployment.get_allowlisted_users()}"
+    )
+
+    # The swap, in one apply: org cleared and users filled together. The teams list has to go with
+    # the org -- `local.teams_have_org` refuses a plan that keeps teams without one, and a previous
+    # test in this module may have left one allowlisted.
+    e2e_deployment.update_required_value("oauth_allowed_org", "")
+    e2e_deployment.update_required_value("oauth_allowed_teams", [])
+    e2e_deployment.update_required_value("oauth_allowed_usernames", [logged_user])
+    e2e_deployment.ensure_deployed_with([])
+
+    live_users = [name.lower() for name in e2e_deployment.get_allowlisted_users()]
+    assert logged_user.lower() in live_users, (
+        f"{logged_user!r} is in oauth_allowed_usernames but not on the instance ({live_users})"
+    )
+    assert not e2e_deployment.get_allowlisted_org(), (
+        f"The org should have been cleared, but is still {e2e_deployment.get_allowlisted_org()!r}"
     )
