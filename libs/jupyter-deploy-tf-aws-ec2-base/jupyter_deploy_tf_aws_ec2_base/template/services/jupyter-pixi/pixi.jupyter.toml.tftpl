@@ -11,7 +11,7 @@ platforms = [
     "linux-64",
 %{ endif ~}
 ]
-version = "0.5.3"
+version = "0.6.0"
 
 [tasks]
 
@@ -20,8 +20,4 @@ python = ">=3.12"
 
 [pypi-dependencies]
 jupyterlab = ">=4.6"
-# Floor of 0.3.0, not the old 0.1.0a0: only 0.3.x accepts the ydoc-4 RTC frontends
-# (jupyter-collaboration-ui / jupyter-docprovider 3.x) that JupyterLab 4.6 requires.
-# Pinning the floor keeps the pair deterministic instead of relying on the resolver
-# preferring the newest — see jupyter-deploy#303.
 jupyter-server-documents = ">=0.3.0"
