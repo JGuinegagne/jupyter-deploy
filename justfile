@@ -1079,6 +1079,9 @@ test-e2e-cli-eks project_dir test_filter="" options="":
 # Quote options containing [] values (zsh treats brackets as glob patterns)
 # Example: just env-setup-base sandbox-e2e sandbox-ci 4 user=botuser,safe-user=realuser
 # Example: just env-setup-base "" sandbox-ci 4 'user=botuser,safe-user=realuser'
+# Note: availability-zone is read from the project; alt-availability-zone must be supplied, and must
+# be a zone the default VPC has a subnet in (the template selects its subnet by zone).
+# Example: just env-setup-base sandbox-e2e sandbox-ci 1 alt-availability-zone=us-west-2b
 env-setup-base project_dir ci_dir="sandbox-ci" oauth_app_num="1" options="":
     uv run python scripts/env_setup_base.py "{{project_dir}}" {{ci_dir}} {{oauth_app_num}} "{{options}}"
 

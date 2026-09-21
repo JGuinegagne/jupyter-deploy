@@ -305,7 +305,6 @@ resource "null_resource" "reap_volume_backups" {
 
       if [ -n "$FAILED" ]; then
         echo "ERROR: volume backups left behind:$FAILED" >&2
-        echo "Grant ec2:DeleteSnapshot to the identity running jd, then re-run 'jd down'." >&2
         exit 1
       fi
     DOC

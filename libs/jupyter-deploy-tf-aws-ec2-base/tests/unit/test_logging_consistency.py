@@ -14,7 +14,7 @@ import re
 import unittest
 from pathlib import Path
 
-from jupyter_deploy_tf_aws_ec2_jupyterlab.template import TEMPLATE_PATH
+from jupyter_deploy_tf_aws_ec2_base.template import TEMPLATE_PATH
 
 SERVICES_PATH: Path = TEMPLATE_PATH / "services"
 
@@ -24,8 +24,8 @@ class TestLoggingConsistency(unittest.TestCase):
 
     Each container that logs via the ``fluentd`` driver carries a ``tag: "docker.<name>"``; fluent-bit
     routes each tag to a file with a matching ``Match docker.<name>``. A tag with no matching output
-    silently drops that container's logs (the bug caught on PR #353's auth-sidecar); a Match with no
-    tag is a dead rule that will drop the next renamed service. This guards both directions.
+    silently drops that container's logs; a Match with no tag is a dead rule that will drop the next
+    renamed service. This guards both directions.
     """
 
     COMPOSE_PATH: Path = SERVICES_PATH / "docker-compose.yml.tftpl"
