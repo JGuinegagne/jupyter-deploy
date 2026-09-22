@@ -114,6 +114,37 @@ class TestRootPyprojectPackageLists(unittest.TestCase):
                     self.assertIn(entry, declared_packages(), f"mypy {key} names unknown package {entry}")
 
 
+class TestReleaseInstallExtras(unittest.TestCase):
+    """The post-publish check installs `<pkg><INSTALL_EXTRAS>==<version>`, so that literal has to
+    name every extra the package declares -- an unlisted extra is published untested.
+    """
+
+    # release workflow -> the package it publishes
+    WORKFLOWS = {
+        "release-cli.yml": "libs/jupyter-deploy",
+        "release-plugin.yml": "libs/pytest-jupyter-deploy",
+        "release-proxy.yml": "libs/jupyter-deploy-client-proxy",
+        "release-base.yml": "libs/jupyter-deploy-tf-aws-ec2-base",
+        "release-jupyterlab.yml": "libs/jupyter-deploy-tf-aws-ec2-jupyterlab",
+        "release-eks-oidc.yml": "libs/jupyter-deploy-tf-aws-eks-oidc",
+    }
+
+    def test_install_extras_matches_declared_extras(self) -> None:
+        for workflow, package in self.WORKFLOWS.items():
+            with open(REPO_ROOT / package / "pyproject.toml", "rb") as f:
+                declared = set(tomllib.load(f).get("project", {}).get("optional-dependencies", {}))
+
+            content = (REPO_ROOT / ".github" / "workflows" / workflow).read_text()
+            match = re.search(r'^\s*INSTALL_EXTRAS:\s*"\[([^\]]*)\]"', content, re.MULTILINE)
+            declared_in_workflow = {e.strip() for e in match.group(1).split(",") if e.strip()} if match else set()
+
+            self.assertEqual(declared, declared_in_workflow, f"{workflow} INSTALL_EXTRAS is stale")
+
+    def test_workflows_cover_every_publishable_package(self) -> None:
+        workflows = {path.name for path in (REPO_ROOT / ".github" / "workflows").glob("release-*.yml")}
+        self.assertEqual(workflows, set(self.WORKFLOWS))
+
+
 class TestReadmePackageList(unittest.TestCase):
     def test_readme_links_every_package(self) -> None:
         readme = (REPO_ROOT / "README.md").read_text()
