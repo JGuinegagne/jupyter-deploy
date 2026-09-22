@@ -28,8 +28,7 @@ members = [
     "libs/jupyter-deploy-tf-aws-ec2-jupyterlab",
     "libs/jupyter-deploy-tf-aws-eks-oidc",
     "libs/jupyter-infra-tf-aws-iam-ci",
-    "libs/pytest-jupyter-deploy",
-    "images/uvbase"
+    "libs/pytest-jupyter-deploy"
 ]
 
 [tool.ruff]
@@ -117,6 +116,7 @@ files = [
     "libs/jupyter-infra-tf-aws-iam-ci",
     "libs/pytest-jupyter-deploy",
     "scripts",
+    "tests",
 ]
 # Template test directories excluded: identical module paths (tests/unit/, tests/e2e/)
 # across template packages cause "Duplicate module" errors. Each template package
