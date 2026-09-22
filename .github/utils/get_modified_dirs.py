@@ -2,12 +2,16 @@ import json
 import subprocess
 import sys
 
-# Update this for any new packages/libs we want checked
+# Update this for any new packages/libs we want checked.
+# Kept in sync with the declared workspace packages by tests/unit/test_package_declarations.py.
 LIB_PATHS = [
     "libs/jupyter-deploy",
+    "libs/jupyter-deploy-client-proxy",
     "libs/jupyter-deploy-tf-aws-ec2-base",
+    "libs/jupyter-deploy-tf-aws-ec2-jupyterlab",
+    "libs/jupyter-deploy-tf-aws-eks-oidc",
+    "libs/jupyter-infra-tf-aws-iam-ci",
     "libs/pytest-jupyter-deploy",
-    "images/uvbase",
 ]
 
 
@@ -28,7 +32,14 @@ def get_file_diff(base_ref: str) -> list:
 
 
 def get_updated_pkgs(file_diff: list) -> list:
-    """Return list of packages with updated/new files."""
+    """Return the directories to lint and test: every touched package, plus the root when needed.
+
+    A package directory and the workspace root are NOT interchangeable targets. Syncing at the root
+    installs every member and every extra, so an import that a package uses but never declares still
+    resolves; syncing inside the package installs only what that package declares, which is what the
+    release workflows do. Linting the root alone therefore cannot catch a missing dependency
+    declaration -- the package has to be checked on its own.
+    """
     lib_dirs = set()
     root_changed = False
 
@@ -36,21 +47,17 @@ def get_updated_pkgs(file_diff: list) -> list:
         if not file:
             continue
 
-        lib_match = False
         for lib_path in LIB_PATHS:
             if file.startswith(f"{lib_path}/"):
                 lib_dirs.add(lib_path)
-                lib_match = True
                 break
-
-        if not lib_match:
+        else:
             root_changed = True
-            break
 
     if root_changed or not lib_dirs:
-        return ["."]
+        return ["."] + sorted(lib_dirs)
 
-    return list(lib_dirs)
+    return sorted(lib_dirs)
 
 
 def main():
