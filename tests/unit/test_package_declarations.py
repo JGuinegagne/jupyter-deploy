@@ -31,6 +31,22 @@ def root_config() -> dict:
         return tomllib.load(f)
 
 
+def declared_dependency_names(package: str) -> set[str]:
+    """Return every distribution a package declares, runtime plus dependency groups.
+
+    Runtime counts: the plugin depends on `pytest` as a real dependency, not a dev tool.
+    """
+    with open(REPO_ROOT / package / "pyproject.toml", "rb") as f:
+        config = tomllib.load(f)
+
+    specs = list(config.get("project", {}).get("dependencies", []))
+    for group in config.get("dependency-groups", {}).values():
+        specs.extend(group)
+
+    # Strip everything after the distribution name: version specifier, extras, marker.
+    return {re.split(r"[<>=!~\[;\s]", str(spec))[0].strip().lower() for spec in specs}
+
+
 def lib_paths() -> list[str]:
     """Import LIB_PATHS from the CI change detector, which is not an importable package."""
     spec = importlib.util.spec_from_file_location("get_modified_dirs", MODIFIED_DIRS_SCRIPT)
@@ -44,6 +60,16 @@ class TestDeclaredPackages(unittest.TestCase):
     def test_every_package_dir_has_a_readme(self) -> None:
         for package in sorted(declared_packages()):
             self.assertTrue((REPO_ROOT / package / "README.md").is_file(), f"{package} has no README.md")
+
+    def test_every_package_declares_its_own_lint_and_test_tooling(self) -> None:
+        """`lint.yml` and `test.yml` run these from inside the package directory, where only that
+        package's own dependencies are installed. A package that leans on the root dev group for one
+        of them passes locally and then fails in CI with `Failed to spawn`.
+        """
+        required = {"mypy", "pytest", "pytest-cov", "ruff", "yamllint"}
+        for package in sorted(declared_packages()):
+            missing = required - declared_dependency_names(package)
+            self.assertEqual(set(), missing, f"{package} does not declare {sorted(missing)}")
 
     def test_packages_are_discovered(self) -> None:
         # A sanity floor: if the glob silently matched nothing, every assertion below would pass.
