@@ -17,11 +17,7 @@ LIB_PATHS = [
 
 def get_file_diff(base_ref: str) -> list:
     """Return list of files changed in the current branch compared to base_ref."""
-    if base_ref:
-        cmd = ["git", "diff", "--name-only", base_ref]
-    else:
-        # If no base branch ref (i.e. pushing to main), return everything
-        cmd = ["git", "ls-files"]
+    cmd = ["git", "diff", "--name-only", base_ref]
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
@@ -62,6 +58,13 @@ def get_updated_pkgs(file_diff: list) -> list:
 
 def main():
     base_ref = sys.argv[1] if len(sys.argv) > 1 else None
+
+    if not base_ref:
+        # Push to main. The merge commit's tree is the one the PR already ran the full per-package
+        # matrix against, so re-deriving it from `git ls-files` would fan out over every package to
+        # re-check what was just checked. Root only.
+        print(json.dumps(["."]))
+        return
 
     file_diff = get_file_diff(base_ref)
 

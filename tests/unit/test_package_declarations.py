@@ -31,6 +31,22 @@ def root_config() -> dict:
         return tomllib.load(f)
 
 
+def declared_dependency_names(package: str) -> set[str]:
+    """Return every distribution a package declares, runtime plus dependency groups.
+
+    Runtime counts: the plugin depends on `pytest` as a real dependency, not a dev tool.
+    """
+    with open(REPO_ROOT / package / "pyproject.toml", "rb") as f:
+        config = tomllib.load(f)
+
+    specs = list(config.get("project", {}).get("dependencies", []))
+    for group in config.get("dependency-groups", {}).values():
+        specs.extend(group)
+
+    # Strip everything after the distribution name: version specifier, extras, marker.
+    return {re.split(r"[<>=!~\[;\s]", str(spec))[0].strip().lower() for spec in specs}
+
+
 def lib_paths() -> list[str]:
     """Import LIB_PATHS from the CI change detector, which is not an importable package."""
     spec = importlib.util.spec_from_file_location("get_modified_dirs", MODIFIED_DIRS_SCRIPT)
@@ -44,6 +60,16 @@ class TestDeclaredPackages(unittest.TestCase):
     def test_every_package_dir_has_a_readme(self) -> None:
         for package in sorted(declared_packages()):
             self.assertTrue((REPO_ROOT / package / "README.md").is_file(), f"{package} has no README.md")
+
+    def test_every_package_declares_its_own_lint_and_test_tooling(self) -> None:
+        """`lint.yml` and `test.yml` run these from inside the package directory, where only that
+        package's own dependencies are installed. A package that leans on the root dev group for one
+        of them passes locally and then fails in CI with `Failed to spawn`.
+        """
+        required = {"mypy", "pytest", "pytest-cov", "ruff", "yamllint"}
+        for package in sorted(declared_packages()):
+            missing = required - declared_dependency_names(package)
+            self.assertEqual(set(), missing, f"{package} does not declare {sorted(missing)}")
 
     def test_packages_are_discovered(self) -> None:
         # A sanity floor: if the glob silently matched nothing, every assertion below would pass.
@@ -86,6 +112,37 @@ class TestRootPyprojectPackageLists(unittest.TestCase):
             for entry in mypy[key]:
                 if re.fullmatch(r"libs/[^/]+", entry):
                     self.assertIn(entry, declared_packages(), f"mypy {key} names unknown package {entry}")
+
+
+class TestReleaseInstallExtras(unittest.TestCase):
+    """The post-publish check installs `<pkg><INSTALL_EXTRAS>==<version>`, so that literal has to
+    name every extra the package declares -- an unlisted extra is published untested.
+    """
+
+    # release workflow -> the package it publishes
+    WORKFLOWS = {
+        "release-cli.yml": "libs/jupyter-deploy",
+        "release-plugin.yml": "libs/pytest-jupyter-deploy",
+        "release-proxy.yml": "libs/jupyter-deploy-client-proxy",
+        "release-base.yml": "libs/jupyter-deploy-tf-aws-ec2-base",
+        "release-jupyterlab.yml": "libs/jupyter-deploy-tf-aws-ec2-jupyterlab",
+        "release-eks-oidc.yml": "libs/jupyter-deploy-tf-aws-eks-oidc",
+    }
+
+    def test_install_extras_matches_declared_extras(self) -> None:
+        for workflow, package in self.WORKFLOWS.items():
+            with open(REPO_ROOT / package / "pyproject.toml", "rb") as f:
+                declared = set(tomllib.load(f).get("project", {}).get("optional-dependencies", {}))
+
+            content = (REPO_ROOT / ".github" / "workflows" / workflow).read_text()
+            match = re.search(r'^\s*INSTALL_EXTRAS:\s*"\[([^\]]*)\]"', content, re.MULTILINE)
+            declared_in_workflow = {e.strip() for e in match.group(1).split(",") if e.strip()} if match else set()
+
+            self.assertEqual(declared, declared_in_workflow, f"{workflow} INSTALL_EXTRAS is stale")
+
+    def test_workflows_cover_every_publishable_package(self) -> None:
+        workflows = {path.name for path in (REPO_ROOT / ".github" / "workflows").glob("release-*.yml")}
+        self.assertEqual(workflows, set(self.WORKFLOWS))
 
 
 class TestReadmePackageList(unittest.TestCase):
