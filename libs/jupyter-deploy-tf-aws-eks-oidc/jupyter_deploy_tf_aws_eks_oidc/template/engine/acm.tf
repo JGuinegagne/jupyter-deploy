@@ -47,13 +47,19 @@ resource "aws_route53_record" "acm_validation" {
 # Blocks the apply until ACM reports ISSUED. Silently hanging DNS validation is the
 # likeliest failure mode here (wrong zone, a records-write the caller cannot make),
 # and failing the apply is far cheaper than discovering it when the chart tries to
-# attach the certificate to a listener. The default 75m timeout is cut to 15m —
-# Route53 propagation plus ACM polling is normally a few minutes.
+# attach the certificate to a listener.
+#
+# The default 75m timeout is cut to 30m, NOT lower: AWS documents that a certificate
+# "might continue to display a status of Pending validation for up to 30 minutes" after
+# the validation records are written. A shorter deadline turns a slow-but-healthy
+# issuance into an apply failure whose output is indistinguishable from a real hang,
+# costing a full `jd config && jd up` for a certificate that lands minutes later.
+# Refer to: https://docs.aws.amazon.com/acm/latest/userguide/dns-validation.html
 resource "aws_acm_certificate_validation" "public" {
   certificate_arn         = aws_acm_certificate.public.arn
   validation_record_fqdns = [for record in aws_route53_record.acm_validation : record.fqdn]
 
   timeouts {
-    create = "15m"
+    create = "30m"
   }
 }
