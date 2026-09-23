@@ -284,9 +284,9 @@ def test_platform_layers_gated_by_platform_barrier() -> None:
 
     That barrier is what every service release orders itself against, so on destroy the
     whole platform outlives them (see platform.tf). A platform layer left out of it can
-    be torn down while the services that sit on it are still uninstalling — e.g. the
-    load balancer controller owns deletion of the NLB it created, so losing it early
-    orphans the load balancer and the VPC destroy then fails on the dangling ENIs.
+    be torn down while the services that sit on it are still uninstalling — e.g. losing
+    Karpenter early takes the nodes with it, so the operator dies mid-uninstall and the
+    workspace CR finalizers never clear.
     Reachability may be transitive (helm_release.karpenter arrives via
     helm_release.karpenter_nodepools).
     """
