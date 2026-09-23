@@ -15,10 +15,15 @@ on:
         description: "Fresh workflow to run at the release tag, e.g. e2e-base-fresh.yml"
         required: true
         type: string
-      oauth-app-num:
-        description: "OAuth app slot passed to the fresh workflow"
+      slot:
+        description: "Slot value passed to the fresh workflow (an OAuth app number, or an ECR repo for jupyterlab)"
         required: true
         type: string
+      slot-input:
+        description: "Name of the fresh workflow's slot input — jupyterlab has no OAuth app, it keys on ecr-slot"
+        required: false
+        type: string
+        default: "oauth-app-num"
     outputs:
       # Transitional (#396): false for release tags whose fresh workflow predates the dispatch inputs.
       supported:
@@ -84,7 +89,8 @@ jobs:
       VERSION: ${{ needs.resolve.outputs.version }}
       TAG: ${{ needs.resolve.outputs.tag }}
       SHA: ${{ needs.resolve.outputs.sha }}
-      SLOT: ${{ inputs.oauth-app-num }}
+      SLOT: ${{ inputs.slot }}
+      SLOT_INPUT: ${{ inputs.slot-input }}
     steps:
       - name: Dispatch the fresh workflow at the release tag
         id: dispatch
@@ -95,7 +101,7 @@ jobs:
           # return_run_details (sent by gh's own workflow run) makes github.com answer 200 with the run id, not 204.
           RESPONSE=$(gh api -X POST "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW/dispatches" \
             -f ref="$TAG" -F return_run_details=true \
-            -f "inputs[oauth-app-num]=$SLOT" \
+            -f "inputs[$SLOT_INPUT]=$SLOT" \
             -f "inputs[install-mode]=pypi" \
             -f "inputs[install-variant]=canary" \
             -f "inputs[pkg-version]=$VERSION")
