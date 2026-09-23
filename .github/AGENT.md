@@ -22,8 +22,14 @@
 | `e2e-eks-oidc-release.yml` | `workflow_call` | EKS template release E2E gate — calls fresh workflow with Test PyPI install |
 | `e2e-eks-oidc-canary.yml` | `schedule` / `workflow_dispatch` | Weekly canary: runs the released version's fresh workflow at its release tag via `e2e-canary-dispatch.yml`; falls back to main's fresh workflow until a release carries the dispatch inputs |
 | `e2e-eks-oidc-job.yml` | `workflow_call` | Reusable EKS E2E job (called by the above) |
-| `e2e-build-image.yml` | `workflow_call` | Reusable build-and-push E2E image to ECR (`TEMPLATE` build-arg selects base vs eks-oidc for pypi-mode installs) |
-| `e2e-canary-dispatch.yml` | `workflow_call` | Reusable canary scheduler: resolves the template's version on PyPI, dispatches its fresh workflow at tag `<pkg>==<version>` in canary mode, waits and mirrors the result |
+| `release-jupyterlab.yml` | `workflow_dispatch` | Release `jupyter-deploy-tf-aws-ec2-jupyterlab` to PyPI (with E2E gate) |
+| `e2e-jupyterlab-fresh.yml` | `workflow_dispatch` / `workflow_call` | Deploy the jupyterlab template from scratch (in-container) + full E2E chain; same `install-mode` / `install-variant` / `pkg-version` dispatch inputs as base, but keyed on `ecr-slot` instead of an OAuth app |
+| `e2e-jupyterlab-release.yml` | `workflow_call` | jupyterlab template release E2E gate — calls fresh workflow with Test PyPI install (ECR slot 8) |
+| `e2e-jupyterlab-canary.yml` | `schedule` / `workflow_dispatch` | Weekly canary (Sunday 06:00 UTC, ECR slot 9): runs the released version's fresh workflow at its release tag via `e2e-canary-dispatch.yml`; falls back to main's fresh workflow until a release carries the dispatch inputs |
+| `e2e-jupyterlab-job.yml` | `workflow_call` | Reusable jupyterlab E2E job (called by the above) |
+| `e2e-reap-stale.yml` | `schedule` / `workflow_dispatch` | Daily (08:00 UTC): destroys any jupyterlab E2E deployment older than 12h, which is what makes the fresh workflow's "teardown only when every test passed" safe |
+| `e2e-build-image.yml` | `workflow_call` | Reusable build-and-push E2E image to ECR (`TEMPLATE` build-arg selects base / eks-oidc / jupyterlab for pypi-mode installs) |
+| `e2e-canary-dispatch.yml` | `workflow_call` | Reusable canary scheduler: resolves the template's version on PyPI, dispatches its fresh workflow at tag `<pkg>==<version>` in canary mode, waits and mirrors the result. `slot` is the value, `slot-input` the input name to send it as (`oauth-app-num`, or `ecr-slot` for jupyterlab) |
 
 ## OAuth app slots
 
@@ -34,6 +40,9 @@ release gates use dedicated app slots to avoid contention:
 |----------|-----------------|--------------|--------|
 | base | 1 | 2 | 3 |
 | eks-oidc | 4 | 5 | 6 |
+
+jupyterlab has no OAuth app or cert quota; its slots are **ECR repos** only (7 = PR/dispatch,
+8 = release, 9 = canary) and every run fresh-deploys.
 
 ## Release-mode vs canary-mode deploys
 
@@ -48,8 +57,8 @@ mode determines what actually gets deployed:
   the `pytest-jupyter-deploy` harness from the checkout, since the tests import their fixtures from it.
   Renders `.github/e2e-<template>/pyproject.canary.toml`.
 
-The E2E image is **template-shared** (one `.github/e2e-shared/Dockerfile`, used by both
-base and eks-oidc). The `TEMPLATE` build-arg on `e2e-build-image.yml` / the Dockerfile
+The E2E image is **template-shared** (one `.github/e2e-shared/Dockerfile`, used by base,
+eks-oidc and jupyterlab). The `TEMPLATE` build-arg on `e2e-build-image.yml` / the Dockerfile
 selects the per-template `.github/e2e-<template>/` pyproject dir.
 
 EKS fresh deploys diverge from base: base wraps deploy inside the `test_deployment` pytest
@@ -76,9 +85,14 @@ Each wrapper has its own concurrency group (`e2e-canary-<template>`), distinct f
 the waiting canary until it times out.
 
 Release tags created before the dispatch inputs existed cannot run in canary mode, so `resolve` reports
-`supported=false` and the `canary-from-main` job runs main's fresh workflow as before. Once both templates
-have released with the inputs, delete the `canary-from-main` jobs in both wrappers and the `supported`
-output and probe in `e2e-canary-dispatch.yml`.
+`supported=false` and the `canary-from-main` job runs main's fresh workflow as before. Once all three
+templates have released with the inputs, delete the `canary-from-main` jobs in every wrapper and the
+`supported` output and probe in `e2e-canary-dispatch.yml`.
+
+The slot input's *name* differs per template, so `e2e-canary-dispatch.yml` takes `slot-input`: base and
+eks-oidc send `oauth-app-num`, jupyterlab sends `ecr-slot` (it has no OAuth app). The canary keeps
+jupyterlab's teardown-on-full-pass behaviour, so a canary that fails mid-suite leaves its deployment up
+until `e2e-reap-stale.yml` destroys it — that is deliberate, and is why the reaper must keep running.
 
 ## Release ordering & gotchas
 
@@ -108,7 +122,7 @@ Lessons from coordinated plugin/CLI/template releases — read before releasing:
     `plugin → proxy → CLI → templates` order). The gate itself tests the PUBLISHED template
     (from Test PyPI). Unlike
   base/eks there's no OAuth app, subdomain, cert quota, or restorable app slot: the template
-  is AWS-creds-only, so canary can fresh-deploy every run (canary is not wired yet). The
+  is AWS-creds-only, so `e2e-jupyterlab-canary.yml` fresh-deploys every run. The
   fresh workflow also runs on `workflow_dispatch` for transport-level proxy changes.
   - **ECR:** all six original repos are claimed (base 1/2/3, eks 4/5/6 — canary pins **#3**
     and **#6**), so jupyterlab gets its **own trio, repos 7-9**, added to the CI template
