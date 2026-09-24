@@ -4,6 +4,7 @@
 [![CI](https://github.com/jupyter-infra/jupyter-deploy/actions/workflows/ci.yml/badge.svg)](https://github.com/jupyter-infra/jupyter-deploy/actions/workflows/ci.yml)
 [![ec2-base-e2e](https://img.shields.io/github/actions/workflow/status/jupyter-infra/jupyter-deploy/e2e-base-canary.yml?label=ec2-base-e2e)](https://github.com/jupyter-infra/jupyter-deploy/actions/workflows/e2e-base-canary.yml)
 [![eks-oidc-e2e](https://img.shields.io/github/actions/workflow/status/jupyter-infra/jupyter-deploy/e2e-eks-oidc-canary.yml?label=eks-oidc-e2e)](https://github.com/jupyter-infra/jupyter-deploy/actions/workflows/e2e-eks-oidc-canary.yml)
+[![ec2-jupyterlab-e2e](https://img.shields.io/github/actions/workflow/status/jupyter-infra/jupyter-deploy/e2e-jupyterlab-canary.yml?label=ec2-jupyterlab-e2e)](https://github.com/jupyter-infra/jupyter-deploy/actions/workflows/e2e-jupyterlab-canary.yml)
 [![PyPI - jupyter-deploy](https://img.shields.io/pypi/v/jupyter-deploy?label=cli)](https://pypi.org/project/jupyter-deploy/)
 [![PyPI - ec2-base](https://img.shields.io/pypi/v/jupyter-deploy-tf-aws-ec2-base?label=ec2-base)](https://pypi.org/project/jupyter-deploy-tf-aws-ec2-base/)
 [![PyPI - eks-oidc](https://img.shields.io/pypi/v/jupyter-deploy-tf-aws-eks-oidc?label=eks-oidc)](https://pypi.org/project/jupyter-deploy-tf-aws-eks-oidc/)

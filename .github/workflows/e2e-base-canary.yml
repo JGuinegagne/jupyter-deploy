@@ -27,7 +27,7 @@ jobs:
     with:
       package: jupyter-deploy-tf-aws-ec2-base
       workflow-file: e2e-base-fresh.yml
-      oauth-app-num: "3"
+      slot: "3"
 
   # Release tags created before #396 cannot be dispatched in canary mode, so main's fresh workflow
   # runs as before. Delete this job once a release of this template carries the dispatch inputs.
