@@ -297,13 +297,18 @@ jobs:
 
   # --- Cleanup: stop host (deployment stays in S3 for auditability) ---
 
+  # `always()` so the host is stopped whatever the tests did -- but not when `validate` rejected the
+  # inputs. Without the validate guard a bad dispatch still restores the project from S3 and stops
+  # the host, i.e. a typo in a form field touches infrastructure. `needs` lists validate for the
+  # sole purpose of making its result readable here.
   cleanup:
     name: "Cleanup: stop host"
     needs:
+      - validate
       - test-non-mutating
       - test-gpu
       - test-mutating
-    if: always()
+    if: always() && needs.validate.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: e2e
