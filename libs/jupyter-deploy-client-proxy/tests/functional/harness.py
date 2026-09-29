@@ -5,8 +5,10 @@ deployed Traefik+JupyterLab; a `cat <bundle.json>` (or a small counter script) s
 for `jd proxy connect-info`. Not a test module.
 """
 
+import asyncio
 import json
 import os
+import shlex
 import ssl
 import sys
 import tempfile
@@ -54,6 +56,19 @@ class SelfSignedOrigin:
                 else:
                     break
             return ws
+        if request.path == "/slow-stream":
+            # Streams `chunks` bodies with `delay` between them, so a test can hold one response
+            # open across more than an idle window and assert the proxy counts streaming progress
+            # as activity rather than reaping the transfer mid-flight.
+            chunks = int(request.query.get("chunks", 5))
+            delay = float(request.query.get("delay", 0.1))
+            streamed = web.StreamResponse()
+            await streamed.prepare(request)
+            for _ in range(chunks):
+                await streamed.write(b"x" * 16)
+                await asyncio.sleep(delay)
+            await streamed.write_eof()
+            return streamed
         if request.path == "/multi-set-cookie":
             # Emit two Set-Cookie lines (as Jupyter does: `_xsrf` + `username-*`) so a test can
             # assert the proxy relays repeated response headers instead of collapsing them.
@@ -99,6 +114,28 @@ def write_bundle_argv(
     with open(path, "w") as f:
         json.dump(_bundle_dict(host, port, ca_pem, headers, ttl_seconds), f)
     return ["cat", path]
+
+
+def write_expiring_then_failing_argv(
+    dir_path: str, host: str, port: int, ca_pem: str, headers: dict[str, str], ttl_seconds: int = 1
+) -> list[str]:
+    """Write a token command that serves one short-lived bundle, then fails permanently.
+
+    What expired cloud credentials look like to the proxy: it starts fine, and can never refresh.
+    The second call exits 1 rather than EX_TEMPFAIL, so the failure is classified non-retryable and
+    the proxy shuts down instead of retrying.
+
+    A marker file carries the "already called once" state, so the command stays a shell one-liner
+    over the bundle :func:`write_bundle_argv` already writes.
+    """
+    bundle_path = write_bundle_argv(dir_path, host, port, ca_pem, headers, ttl_seconds=ttl_seconds)[-1]
+    marker = shlex.quote(os.path.join(dir_path, "token-called"))
+    return [
+        "sh",
+        "-c",
+        f"if [ -f {marker} ]; then echo 'credentials expired' >&2; exit 1; fi; "
+        f"touch {marker}; exec cat {shlex.quote(bundle_path)}",
+    ]
 
 
 def write_counter_emitter_argv(dir_path: str, host: str, port: int, ca_pem: str, ttl_seconds: int = 2) -> list[str]:

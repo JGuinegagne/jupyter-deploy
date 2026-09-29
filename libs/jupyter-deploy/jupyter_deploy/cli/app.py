@@ -781,6 +781,14 @@ def open(
         bool,
         typer.Option("--detached", "-d", help="Run the local proxy in the background."),
     ] = False,
+    idle_timeout_seconds: Annotated[
+        float | None,
+        typer.Option(
+            "--proxy-idle-timeout-seconds",
+            min=0,
+            help="Detached mode only: max idle time before stopping the proxy (0 = never, default = 2 hours).",
+        ),
+    ] = None,
 ) -> None:
     """Open the app in your web browser.
 
@@ -803,7 +811,12 @@ def open(
         browser_failed = False
 
         try:
-            url = handler.open(name=server_name, scope=scope or None, detached=detached)
+            url = handler.open(
+                name=server_name,
+                scope=scope or None,
+                detached=detached,
+                idle_timeout_seconds=idle_timeout_seconds,
+            )
             console.print(f"\nOpening app at: {url}", style="green", soft_wrap=True)
         except UrlNotAvailableError as e:
             # URL not available - show helpful message but don't fail (project not deployed)
