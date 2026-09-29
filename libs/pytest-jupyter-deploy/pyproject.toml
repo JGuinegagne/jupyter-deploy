@@ -1,6 +1,6 @@
 [project]
 name = "pytest-jupyter-deploy"
-version = "0.3.1"
+version = "0.3.2"
 description = "Pytest plugin for E2E testing of jupyter-deploy templates"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -8,7 +8,8 @@ license = { file = "LICENSE" }
 authors = [
     { name = "Jonathan Guinegagne", email = "jggg@amazon.com" },
     { name = "Michael Chin", email = "chnmch@amazon.com" },
-    { name = "Brian Granger", email = "brgrange@amazon.com" }
+    { name = "Brian Granger", email = "ellisonbg@gmail.com" },
+    { name = "Andrii Ieroshenko", email = "aieroshe@amazon.com" }
 ]
 classifiers = [
     "Framework :: Pytest",
