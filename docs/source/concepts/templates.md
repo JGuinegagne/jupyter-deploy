@@ -24,10 +24,10 @@ You can install templates from several sources:
 - **PyPI (recommended)** — the published packages, with version pinning:
 
   ```bash
-  pip install jupyter-deploy-tf-aws-ec2-base
+  pip install jupyter-deploy-tf-aws-ec2-jupyterlab
   
   # pin a version
-  pip install "jupyter-deploy-tf-aws-ec2-base==0.6.5"
+  pip install "jupyter-deploy-tf-aws-ec2-jupyterlab==0.1.1"
   ```
 
 - **GitHub** — install a branch or tag directly from the repository, for pre-release
@@ -53,12 +53,28 @@ along with a feature comparison.
 
 `jd init` selects a template from four coordinates — engine (`-E`), provider (`-P`),
 infrastructure (`-I`), and template name (`-T`). It defaults to
-`terraform` / `aws` / `ec2` / `base`.
+`terraform` / `aws` / `ec2` / `jupyterlab`.
 
-Running `jd init <PROJECT-DIR>` with no flags therefore selects the **AWS Base Template**,
-a single-instance JupyterLab deployment on Amazon EC2. Pass the flags to choose another,
-for example the EKS OIDC template:
+Running `jd init <PROJECT-DIR>` with no flags therefore selects the
+**AWS EC2 JupyterLab Template**, a single-user JupyterLab deployment on Amazon EC2 that needs
+only AWS credentials, and `jd init` prints which template it used. Pass the flags to choose
+another, for example the EKS OIDC template:
 
 ```bash
 jd init <PROJECT-DIR> -E terraform -P aws -I eks -T oidc
+```
+
+`--template` (`-T`) also accepts the full template name. In that case, pass it on its own:
+`jd init` exits with an error if you combine a full template name with `--provider` (`-P`) or
+`--infrastructure` (`-I`).
+
+```bash
+jd init <PROJECT-DIR> --template aws:eks:oidc
+```
+
+```{note}
+Before v0.8.0, the default template was the **AWS Base Template** (`aws:ec2:base`). To change
+your default, run `jd preferences set --default-template <TEMPLATE>`, for example
+`jd preferences set --default-template aws:ec2:base`. See
+[`jd preferences`](preferences) for details.
 ```
