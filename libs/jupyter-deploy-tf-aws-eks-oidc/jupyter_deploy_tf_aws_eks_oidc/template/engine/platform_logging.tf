@@ -14,9 +14,9 @@
 
 locals {
   # Namespaces whose pod logs Fluent Bit ships (see fluentbit-values.yaml.tftpl).
-  # Platform = router + operator; workspaces = the shared + RBAC namespaces.
+  # Platform = router + operator; workspaces = the shared + workspace namespaces.
   logging_platform_namespaces  = distinct([var.workspace_router_namespace, var.workspace_operator_namespace])
-  logging_workspace_namespaces = distinct(concat([var.workspace_shared_namespace], var.workspace_rbac_namespaces))
+  logging_workspace_namespaces = distinct(concat([var.workspace_shared_namespace], local.workspace_ns_names))
 }
 
 resource "kubernetes_service_account_v1" "fluent_bit" {

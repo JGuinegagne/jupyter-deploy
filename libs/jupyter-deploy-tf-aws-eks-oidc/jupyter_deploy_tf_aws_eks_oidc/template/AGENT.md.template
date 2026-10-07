@@ -57,19 +57,33 @@ variables (this template does not use the `jd users`/`jd teams` commands).
 
 - `oauth_allowed_teams` — list of GitHub teams allowed to sign in, each in `org:team` format
   (e.g. `my-org:data-science`). Members of these teams can authenticate via the browser.
-- `workspace_rbac_namespaces` — Kubernetes namespaces where those teams are granted
-  permissions to create and manage workspaces. Each namespace gets a Role and RoleBinding.
+- `workspace_namespaces` — the Kubernetes namespaces where workspaces run, and the teams granted
+  each. Empty (the default): every team in `oauth_allowed_teams` may create workspaces in
+  `default`. Non-empty: each entry `{name, teams, templates}` creates a namespace (or adopts
+  `default`) whose Role and RoleBinding cover only its listed teams; no namespace grants every
+  team, so list `default` explicitly to keep using it. `templates` adds `workspace_templates`
+  configs to the built-in `jupyterlab` card in that namespace.
 
 ```bash
 # allow two GitHub teams (pass each entry as a separate flag)
 jd config --oauth-allowed-teams my-org:data-science --oauth-allowed-teams my-org:ml-platform
-
-# grant those teams workspace permissions in specific namespaces
-jd config --workspace-rbac-namespaces default --workspace-rbac-namespaces research
-
-# apply the change
 jd up
 ```
+
+To isolate teams, edit `overrides:` in `variables.yaml`, then run `jd config` and `jd up`:
+
+```yaml
+overrides:
+  workspace_namespaces:
+    - name: default
+      teams: my-org:data-science,my-org:ml-platform
+    - name: ml-platform
+      teams: my-org:ml-platform
+      templates: jupyterlab-gpu
+```
+
+`jd config` refuses a change that would delete a template a live workspace still uses.
+Removing a namespace entry deletes that namespace and every workspace and volume in it.
 
 The OAuth app itself must be registered with the GitHub organization that owns these teams.
 When creating the OAuth app, log in as a member of the organization and set the
@@ -148,13 +162,13 @@ created with until that field is patched or the workspace is recreated.
 ### Charts directory
 
 `./charts/` contains local Helm charts:
-- `workspace-defaults/` — deploys the default WorkspaceTemplate (and its workspace-ingress
-  NetworkPolicies) into the shared namespace, so workspace users can create workspaces later
-- `github-rbac/` — Roles/RoleBindings granting the `oauth_allowed_teams` GitHub teams workspace
-  permissions in each `workspace_rbac_namespaces` namespace, as well as read permission into
-  the shared namespace (`jupyter-k8s-shared`).
+- `workspace-defaults/` — deploys the WorkspaceTemplates and the workspace-ingress
+  NetworkPolicy into each workspace namespace, so workspace users can create workspaces later
+- `github-rbac/` — Roles/RoleBindings granting each workspace namespace's GitHub teams workspace
+  permissions in it, as well as read permission into the shared namespace (`jupyter-k8s-shared`)
+  to every `oauth_allowed_teams` team.
 Both are deployed via `helm_release` with a local path (see `workspaces.tf`), where values are passed
-through `set = [...]` blocks. Editing a chart's templates/values takes effect on the next `jd up`.
+through `values`/`set` arguments. Editing a chart's templates/values takes effect on the next `jd up`.
 
 ### Web UI
 

@@ -238,8 +238,9 @@ variable "routing_max_memory" {
 
 variable "workspace_nodepools" {
   description = <<-EOT
-    List of workspace Karpenter NodePool definitions. Each entry creates one
-    NodePool + EC2NodeClass pair. Supports multiple pools (e.g. CPU + GPU).
+    Workspace Karpenter NodePools, one NodePool + EC2NodeClass pair per entry. Keys: name, instance_families, disk_size_gb, max_cpu, max_memory, accelerator, role, max_gpus, templates.
+
+    Supports multiple pools (e.g. CPU + GPU).
 
     Required keys per entry (all strings):
       name              - NodePool and EC2NodeClass name (e.g. "workspace-cpu")
@@ -366,13 +367,17 @@ variable "workspace_nodepools" {
 
 variable "workspace_templates" {
   description = <<-EOT
-    Named workspace template configurations. A workspace_nodepools entry adopts
-    a config by listing its name in the entry's templates key; each (entry,
-    config) pairing renders one WorkspaceTemplate card, where the config
+    Named workspace template configurations. Keys: name, gpus, cpu, memory, idle_minutes, display_name, description.
+
+    A workspace_nodepools entry adopts a config by listing its name in the
+    entry's templates key; each (entry, config) pairing renders one
+    WorkspaceTemplate card, where the config
     supplies the shape and card copy and the entry supplies placement (its
     role). A config referenced by no entry renders nothing. Entries sharing a
     role may share a config; entries with different roles need distinct
-    configs, since a WorkspaceTemplate pins one node selector.
+    configs, since a WorkspaceTemplate pins one node selector. With
+    workspace_namespaces set, a namespace offers a config only when its
+    templates key lists it.
 
     Required keys per entry (all strings):
       name         - WorkspaceTemplate name (e.g. "jupyterlab-gpu-p"); unique,
@@ -542,25 +547,74 @@ variable "node_expire_after" {
   type        = string
 }
 
-variable "workspace_rbac_namespaces" {
+variable "workspace_namespaces" {
   description = <<-EOT
-    List of Kubernetes namespaces where GitHub teams are granted workspace permissions.
+    Workspace namespaces and the GitHub teams granted each. Keys: name, teams, templates.
 
-    Each namespace gets a Role and RoleBinding allowing members of oauth_allowed_teams
-    to create, manage, and access workspaces.
+    Empty (the default) runs a single namespace: every workspace lives in "default",
+    and every team in oauth_allowed_teams may create workspaces there.
 
-    Example: ["default"]
+    Non-empty isolates teams: each entry creates a namespace (or adopts the built-in
+    "default"), and only its listed teams may create, manage and access workspaces
+    in it. No namespace grants every allowlisted team; list "default" with its teams
+    explicitly to keep using it. The first entry is the default namespace of the
+    web app and of the <jd server> commands.
+
+    Required keys per entry (all strings):
+      name      - Kubernetes namespace (e.g. "team-ml"); unique across entries
+      teams     - comma-separated GitHub teams in 'org:team' format
+                  (e.g. "my-org:ml,my-org:research"); each org must appear in
+                  oauth_allowed_teams
+    Optional keys per entry (all strings):
+      templates - comma-separated workspace_templates config names offered in this
+                  namespace, on top of the built-in "jupyterlab" template; each
+                  config must be offered by a workspace_nodepools entry
+
+    Example:
+      workspace_namespaces = [
+        { name = "default", teams = "my-org:platform" },
+        { name = "team-ml", teams = "my-org:ml,my-org:research", templates = "jupyterlab-gpu" },
+      ]
   EOT
-  type        = list(string)
+  type        = list(map(string))
 
   validation {
-    condition     = length(var.workspace_rbac_namespaces) >= 1
-    error_message = "workspace_rbac_namespaces must contain at least one namespace."
+    condition = alltrue([
+      for e in var.workspace_namespaces :
+      length(setsubtract(keys(e), ["name", "teams", "templates"])) == 0
+    ])
+    error_message = "Each workspace_namespaces entry may only set the keys name, teams and templates."
   }
 
   validation {
-    condition     = alltrue([for ns in var.workspace_rbac_namespaces : can(regex("^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$", ns))])
-    error_message = "Each namespace must be a valid Kubernetes namespace (lowercase letters, digits, hyphens; 2-63 characters)."
+    condition = alltrue([
+      for e in var.workspace_namespaces :
+      can(regex("^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$", lookup(e, "name", "")))
+    ])
+    error_message = "Each workspace_namespaces entry must set name to a valid Kubernetes namespace (lowercase letters, digits, hyphens; 2-63 characters)."
+  }
+
+  validation {
+    condition     = length(distinct([for e in var.workspace_namespaces : lookup(e, "name", "")])) == length(var.workspace_namespaces)
+    error_message = "workspace_namespaces names must be unique."
+  }
+
+  validation {
+    condition = alltrue([
+      for e in var.workspace_namespaces :
+      length([for raw in split(",", lookup(e, "teams", "")) : raw if trimspace(raw) != ""]) > 0
+    ])
+    error_message = "Each workspace_namespaces entry must list at least one team in teams."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for e in var.workspace_namespaces : [
+        for raw in split(",", lookup(e, "teams", "")) :
+        can(regex("^[^:\\s]+:[^:\\s]+$", trimspace(raw))) if trimspace(raw) != ""
+      ]
+    ]))
+    error_message = "Each team in workspace_namespaces teams must be in 'org:team' format."
   }
 }
 

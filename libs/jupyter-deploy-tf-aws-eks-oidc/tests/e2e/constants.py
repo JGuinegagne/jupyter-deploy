@@ -3,6 +3,9 @@
 # Ordered mutating GPU cases (test_workspace_gpu) run as one
 # enable_default_gpu_pool on->off window; the ordinal keeps them contiguous.
 ORDER_GPU = 10
+# Ordered mutating workspace-namespace cases: the single -> multi migration module
+# first, then test_workspace_namespaces, which applies one mapping for all its cases.
+ORDER_NAMESPACES = 20
 
 GPU_POOL_FLAG = "enable_default_gpu_pool"
 # The Karpenter NodePool the flag synthesizes.

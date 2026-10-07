@@ -253,12 +253,12 @@ The template creates several IAM roles:
 | prometheus | `monitoring` | Metrics server (scaling source for KEDA) |
 | aws-for-fluent-bit | `kube-system` | Pod log shipping to CloudWatch (optional, `enable_component_logging`) |
 | nvidia-device-plugin | `kube-system` | Registers GPU capacity on GPU pool nodes (optional; a pool entry setting `accelerator = "nvidia"` pulls it in) |
-| github-rbac (local) | Shared namespace | Namespace-scoped RBAC for the `oauth_allowed_teams` GitHub teams |
-| workspace-defaults (local) | Shared namespace | Default `WorkspaceTemplate` and workspace-ingress NetworkPolicies |
+| github-rbac (local) | Shared namespace | Namespace-scoped RBAC for the GitHub teams of each workspace namespace |
+| workspace-defaults (local) | Shared namespace | `WorkspaceTemplate`s and workspace-ingress NetworkPolicy in each workspace namespace |
 
 ### RBAC
 
-The template deploys a `github-rbac` local chart that creates namespace-scoped Role and RoleBinding resources. Each namespace in `workspace_rbac_namespaces` gets a Role granting workspace CRUD permissions, which a RoleBinding ties to the GitHub teams in `oauth_allowed_teams`. Those teams also get a read-only (`get`/`list`) Role in `workspace_shared_namespace` for discovering shared `WorkspaceTemplate` and `WorkspaceAccessStrategy` resources.
+The template deploys a `github-rbac` local chart that creates namespace-scoped Role and RoleBinding resources. Each workspace namespace gets a Role granting workspace CRUD permissions, which a RoleBinding ties to its GitHub teams: with `workspace_namespaces` empty, `default` is the only workspace namespace and binds every team in `oauth_allowed_teams`; otherwise each entry creates a namespace (or adopts `default`) bound to the entry's `teams` only. Every `oauth_allowed_teams` team also gets a read-only (`get`/`list`) Role in `workspace_shared_namespace` for discovering shared `WorkspaceTemplate` and `WorkspaceAccessStrategy` resources.
 
 ### Presets
 
@@ -289,7 +289,7 @@ The template provides two variable presets:
 | routing_max_memory | `string` | `128Gi` | Ceiling on total memory of the routing pool |
 | workspace_nodepools | `list(map(string))` | one `workspace-cpu` pool | Karpenter workspace pools, each with its own instance families and CPU/memory ceilings |
 | node_expire_after | `string` | `504h` | Maximum node lifetime before Karpenter recycles it |
-| workspace_rbac_namespaces | `list(string)` | `["default"]` | Namespaces where teams get workspace permissions |
+| workspace_namespaces | `list(map(string))` | `[]` | Workspace namespaces and the GitHub teams granted each; empty = every team in `default` |
 | admin_role_names | `list(string)` | `[]` | IAM role names to grant cluster and workspace admin (list all callers for stable state) |
 | admin_user_names | `list(string)` | `[]` | IAM user names to grant cluster and workspace admin (list all callers for stable state) |
 | cluster_log_retention_days | `number` | `30` | Days to retain EKS cluster CloudWatch logs |

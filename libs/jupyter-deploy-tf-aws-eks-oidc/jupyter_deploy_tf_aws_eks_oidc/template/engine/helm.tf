@@ -223,6 +223,20 @@ resource "helm_release" "workspace_router" {
         value = "false"
       },
     ],
+    # Workspace namespaces the web app offers: the default one, plus the rest of
+    # workspace_namespaces (also discovered by their workspaces-enabled label).
+    [
+      {
+        name  = "webApp.workspacesDefaultNamespace"
+        value = local.workspace_ns_names[0]
+      },
+    ],
+    [
+      for idx, ns in slice(local.workspace_ns_names, 1, length(local.workspace_ns_names)) : {
+        name  = "webApp.workspaceNamespaceSelection.additionalNamespaces[${idx}]"
+        value = ns
+      }
+    ],
     # Kubectl access page: cluster details injected from EKS module outputs
     [
       {

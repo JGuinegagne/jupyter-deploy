@@ -311,6 +311,8 @@ Run E2E tests: `just test-e2e-eks-oidc <project-dir> TEST-SELECTOR`
 
 **Prerequisite:** Same as base — pass `ci-dir=<ci-project>` for browser-auth tests.
 
+**IMPORTANT:** Deploy first (`just ci-e2e-eks-deploy`); pytest's 30-min deploy timeout kills `jd up`.
+
 Examples (for project-dir == sandbox-e2e, ci-dir == sandbox-ci):
 - Run all tests: `just test-e2e-eks-oidc sandbox-e2e "" mutate=true,full-deploy=true,ci-dir=sandbox-ci`
 - Run workspace tests only: `just test-e2e-eks-oidc sandbox-e2e test_workspace mutate=true,full-deploy=true,ci-dir=sandbox-ci`

@@ -1,7 +1,79 @@
 locals {
-  workspace_namespace     = "default"
   access_strategy_name    = "oauth-access-strategy"
   workspace_storage_class = "ebs-sc"
+}
+
+# ── Workspace namespaces ──────────────────────────────────────────────────────
+# Empty var.workspace_namespaces = single namespace: "default" grants every team
+# in oauth_allowed_teams. Non-empty = one namespace per entry, granted to its own
+# teams only; "default" takes part only when listed.
+locals {
+  workspace_multi_ns = length(var.workspace_namespaces) > 0
+
+  # Grouped (e...) so a duplicate name reaches the variable validation instead
+  # of crashing this comprehension with a raw "Duplicate object key" error.
+  workspace_ns_entries = { for e in var.workspace_namespaces : lookup(e, "name", "") => e... }
+
+  # Ordered: the first entry is the default namespace of the web app and the CLI.
+  workspace_ns_names = local.workspace_multi_ns ? distinct([for e in var.workspace_namespaces : lookup(e, "name", "")]) : ["default"]
+
+  # Namespaces terraform creates; the built-in "default" is only labeled.
+  workspace_ns_created = [for ns in local.workspace_ns_names : ns if ns != "default"]
+
+  # namespace => ["org:team", ...]
+  workspace_ns_teams = local.workspace_multi_ns ? {
+    for ns, es in local.workspace_ns_entries : ns => distinct([
+      for raw in split(",", lookup(es[0], "teams", "")) : trimspace(raw) if trimspace(raw) != ""
+    ])
+  } : { default = var.oauth_allowed_teams }
+
+  # namespace => workspace_templates config names offered on top of jupyterlab,
+  # which every namespace offers (listing it is a no-op). Single-ns offers every
+  # config a pool references, as before namespaces existed.
+  workspace_ns_template_requests = local.workspace_multi_ns ? {
+    for ns, es in local.workspace_ns_entries : ns => distinct([
+      for raw in split(",", lookup(es[0], "templates", "")) : trimspace(raw)
+      if trimspace(raw) != "" && trimspace(raw) != "jupyterlab"
+    ])
+  } : { default = keys(local.workspace_pool_templates) }
+
+  workspace_ns_orgs_missing = distinct([
+    for team in flatten(values(local.workspace_ns_teams)) : split(":", team)[0]
+    if !contains(local.github_orgs_unique, split(":", team)[0])
+  ])
+}
+
+# The web app discovers workspace namespaces by this label.
+resource "kubernetes_namespace_v1" "workspaces" {
+  for_each = toset(local.workspace_ns_created)
+
+  metadata {
+    name = each.key
+    labels = {
+      "app.kubernetes.io/managed-by"             = "jupyter-deploy"
+      "workspace.jupyter.org/workspaces-enabled" = "true"
+    }
+  }
+
+  # Same lifetime guards as kubernetes_namespace_v1.shared (helm.tf).
+  depends_on = [aws_eks_access_policy_association.admin_role, aws_eks_access_policy_association.admin_user, aws_eks_node_group.platform, helm_release.karpenter]
+}
+
+# Labels the built-in "default" namespace without owning it: destroy only strips
+# the label.
+resource "kubernetes_labels" "default_namespace" {
+  count = contains(local.workspace_ns_names, "default") ? 1 : 0
+
+  api_version = "v1"
+  kind        = "Namespace"
+  metadata {
+    name = "default"
+  }
+  labels = {
+    "workspace.jupyter.org/workspaces-enabled" = "true"
+  }
+
+  depends_on = [aws_eks_access_policy_association.admin_role, aws_eks_access_policy_association.admin_user, aws_eks_node_group.platform]
 }
 
 # Destroy-time hook: delete operator-managed Workspaces and WorkspaceTemplates
@@ -45,6 +117,7 @@ resource "null_resource" "destroy_workspaces" {
     helm_release.workspace_defaults,
     helm_release.github_rbac,
     kubernetes_namespace_v1.shared,
+    kubernetes_namespace_v1.workspaces,
   ]
 }
 
@@ -58,32 +131,36 @@ resource "helm_release" "github_rbac" {
   # operator alive through uninstall
   timeout = 600
 
-  set = concat(
-    [
-      for idx, ns in var.workspace_rbac_namespaces : {
-        name  = "namespaces[${idx}]"
-        value = ns
-      }
-    ],
-    [
-      for idx, org in local.github_orgs_unique : {
-        name  = "orgs[${idx}].name"
-        value = org
-      }
-    ],
-    flatten([
-      for org_index, org in local.github_orgs_unique : [
-        for team_index, t in [for t in local.oauth_teams_parsed : t.team if t.org == org] : {
-          name  = "orgs[${org_index}].teams[${team_index}]"
-          value = t
-        }
+  values = [
+    yamlencode({
+      allowedGroups = var.oauth_allowed_teams
+      namespaceGrants = [
+        for ns in local.workspace_ns_names : { name = ns, groups = local.workspace_ns_teams[ns] }
       ]
-    ]),
-  )
+    })
+  ]
+
+  lifecycle {
+    precondition {
+      # Org-level on purpose: dex may allowlist a parent team, so a mapped child
+      # team is legitimately absent from oauth_allowed_teams.
+      condition     = length(local.workspace_ns_orgs_missing) == 0
+      error_message = "workspace_namespaces teams reference GitHub orgs absent from oauth_allowed_teams, whose members can never log in: ${join(", ", local.workspace_ns_orgs_missing)}."
+    }
+  }
 
   # Ordering on the platform barrier (incl. optional logging) is inherited transitively
   # via helm_release.workspace_router, which depends_on null_resource.platform.
-  depends_on = [kubernetes_namespace_v1.shared, helm_release.workspace_router]
+  depends_on = [kubernetes_namespace_v1.shared, kubernetes_namespace_v1.workspaces, helm_release.workspace_router]
+}
+
+check "workspace_namespaces_cover_allowed_teams" {
+  assert {
+    condition = !local.workspace_multi_ns || length([
+      for t in var.oauth_allowed_teams : t if !contains(flatten(values(local.workspace_ns_teams)), t)
+    ]) == 0
+    error_message = "oauth_allowed_teams entries mapped to no workspace_namespaces entry can log in but cannot create workspaces: ${join(", ", [for t in var.oauth_allowed_teams : t if !contains(flatten(values(local.workspace_ns_teams)), t)])}."
+  }
 }
 
 # ── Workspace templates ───────────────────────────────────────────────────────
@@ -208,13 +285,111 @@ locals {
     }
   }
 
-  # Deterministic order; flag-on renders [jupyterlab, jupyterlab-gpu] exactly
-  # as before, keeping the injected helm values identical for existing GPU
-  # deployments.
-  workspace_templates_values = concat(
-    [local.jupyterlab_template_values],
-    [for name in sort(keys(local.workspace_pool_templates)) : local.workspace_pool_templates[name]],
+  # One copy of each offered template per workspace namespace, so a template
+  # never changes namespace and the shared namespace holds access strategies
+  # only. Dangling names are filtered here so evaluation reaches the
+  # precondition on helm_release.workspace_defaults.
+  workspace_templates_placed = flatten([
+    for ns in local.workspace_ns_names : concat(
+      [merge(local.jupyterlab_template_values, { namespace = ns })],
+      [
+        for name in sort(local.workspace_ns_template_requests[ns]) :
+        merge(local.workspace_pool_templates[name], { namespace = ns })
+        if contains(keys(local.workspace_pool_templates), name)
+      ],
+    )
+  ])
+  workspace_templates_placed_keys = [for t in local.workspace_templates_placed : "${t.namespace}/${t.name}"]
+
+  workspace_ns_template_dangling = flatten([
+    for ns, names in local.workspace_ns_template_requests : [
+      for name in names : "${ns}/${name}" if !contains(keys(local.workspace_pool_templates), name)
+    ]
+  ])
+}
+
+# ── In-use template guard ─────────────────────────────────────────────────────
+# A WorkspaceTemplate referenced by a live Workspace cannot be deleted: the
+# operator's template-protection finalizer holds it in Terminating. Read the live
+# references each plan and refuse a render that would drop one.
+#
+# The list reads are per namespace (the provider lists one namespace at a time),
+# over the listed namespaces plus "default", so unlisting "default" while in use
+# is caught too, and the shared namespace for the legacy copies. A dropped
+# created namespace is not read: deleting it cascades to its workspaces anyway.
+#
+# depends_on the operator release only (never workspace_defaults, which would
+# defer every plan this guards): on a first deploy or an operator upgrade the
+# reads defer to apply, where the guard still runs before workspace_defaults.
+locals {
+  workspace_guard_namespaces = toset(concat(local.workspace_ns_names, ["default", var.workspace_shared_namespace]))
+}
+
+data "kubernetes_resources" "live_workspaces" {
+  for_each = local.workspace_guard_namespaces
+
+  api_version = "workspace.jupyter.org/v1alpha1"
+  kind        = "Workspace"
+  namespace   = each.key
+
+  depends_on = [helm_release.jupyter_k8s]
+}
+
+data "kubernetes_resources" "live_workspace_templates" {
+  for_each = local.workspace_guard_namespaces
+
+  api_version = "workspace.jupyter.org/v1alpha1"
+  kind        = "WorkspaceTemplate"
+  namespace   = each.key
+
+  depends_on = [helm_release.jupyter_k8s]
+}
+
+locals {
+  # Only templates this release ships are guarded; hand-made ones are not ours to keep.
+  workspace_templates_managed_keys = flatten([
+    for ns, d in data.kubernetes_resources.live_workspace_templates : [
+      for t in d.objects : "${t.metadata.namespace}/${t.metadata.name}"
+      if try(t.metadata.annotations["meta.helm.sh/release-name"], "") == "workspace-defaults"
+    ]
+  ])
+
+  # The labels the template-protection finalizer matches on.
+  workspace_template_refs_live = [
+    for w in flatten([for ns, d in data.kubernetes_resources.live_workspaces : d.objects]) : {
+      workspace = "${w.metadata.namespace}/${w.metadata.name}"
+      template  = "${try(w.metadata.labels["workspace.jupyter.org/template-namespace"], w.metadata.namespace)}/${try(w.metadata.labels["workspace.jupyter.org/template-name"], "")}"
+    }
+    if try(w.metadata.labels["workspace.jupyter.org/template-name"], "") != ""
+  ]
+  workspace_template_refs_guarded = [
+    for r in local.workspace_template_refs_live : r if contains(local.workspace_templates_managed_keys, r.template)
+  ]
+
+  # Migration: templates used to live in the shared namespace. Keep rendering a
+  # shared copy while a live workspace references it; it drops on the first
+  # apply after those workspaces are gone.
+  workspace_templates_legacy = [
+    for name in sort(distinct([
+      for r in local.workspace_template_refs_guarded : split("/", r.template)[1]
+      if split("/", r.template)[0] == var.workspace_shared_namespace
+      ])) : merge(
+      name == "jupyterlab" ? local.jupyterlab_template_values : local.workspace_pool_templates[name],
+      { namespace = var.workspace_shared_namespace },
+    )
+    if name == "jupyterlab" || contains(keys(local.workspace_pool_templates), name)
+  ]
+
+  workspace_templates_values = concat(local.workspace_templates_placed, local.workspace_templates_legacy)
+  workspace_templates_rendered_keys = concat(
+    local.workspace_templates_placed_keys,
+    [for t in local.workspace_templates_legacy : "${t.namespace}/${t.name}"],
   )
+
+  workspace_template_refs_dropped = {
+    for r in local.workspace_template_refs_guarded : r.template => r.workspace...
+    if !contains(local.workspace_templates_rendered_keys, r.template)
+  }
 }
 
 resource "helm_release" "workspace_defaults" {
@@ -254,7 +429,7 @@ resource "helm_release" "workspace_defaults" {
     ],
     # One workspace-ingress NetworkPolicy per namespace where workspaces run.
     [
-      for idx, ns in var.workspace_rbac_namespaces : {
+      for idx, ns in local.workspace_ns_names : {
         name  = "networkPolicy.workspaceNamespaces[${idx}]"
         value = ns
       }
@@ -262,6 +437,14 @@ resource "helm_release" "workspace_defaults" {
   )
 
   lifecycle {
+    precondition {
+      condition     = length(local.workspace_template_refs_dropped) == 0
+      error_message = "this change would delete workspace templates still used by live workspaces, which the operator holds in Terminating until those workspaces are deleted: ${join("; ", [for tmpl, ws in local.workspace_template_refs_dropped : format("%s used by %s", tmpl, join(", ", ws))])}. Keep offering the templates, or delete the workspaces first."
+    }
+    precondition {
+      condition     = length(local.workspace_ns_template_dangling) == 0
+      error_message = "workspace_namespaces templates must name the built-in \"jupyterlab\" or a workspace_templates config offered by a workspace_nodepools entry: ${join(", ", local.workspace_ns_template_dangling)}."
+    }
     precondition {
       condition     = length(local.workspace_template_dangling) == 0
       error_message = "workspace_nodepools templates reference configs missing from workspace_templates: ${join(", ", distinct(local.workspace_template_dangling))}."
@@ -311,7 +494,7 @@ resource "helm_release" "workspace_defaults" {
     }
   }
 
-  depends_on = [kubernetes_namespace_v1.shared, helm_release.workspace_router, helm_release.jupyter_k8s]
+  depends_on = [kubernetes_namespace_v1.shared, kubernetes_namespace_v1.workspaces, helm_release.workspace_router, helm_release.jupyter_k8s]
 }
 
 # ── Orphan-CR detect + repair (GitHub issue #270) ────────────────────────────
@@ -362,28 +545,32 @@ resource "null_resource" "repair_access_strategy" {
   depends_on = [helm_release.workspace_router, kubernetes_namespace_v1.shared]
 }
 
-data "kubernetes_resource" "jupyterlab_template" {
+data "kubernetes_resource" "workspace_template" {
+  for_each = toset(local.workspace_templates_placed_keys)
+
   api_version = "workspace.jupyter.org/v1alpha1"
   kind        = "WorkspaceTemplate"
   metadata {
-    name      = "jupyterlab"
-    namespace = var.workspace_shared_namespace
+    name      = split("/", each.key)[1]
+    namespace = split("/", each.key)[0]
   }
 
-  depends_on = [helm_release.workspace_defaults, kubernetes_namespace_v1.shared]
+  depends_on = [helm_release.workspace_defaults, kubernetes_namespace_v1.shared, kubernetes_namespace_v1.workspaces]
 }
 
 resource "null_resource" "repair_workspace_template" {
+  for_each = toset(local.workspace_templates_placed_keys)
+
   triggers = {
-    present = data.kubernetes_resource.jupyterlab_template.object == null ? "missing" : "present"
+    present = data.kubernetes_resource.workspace_template[each.key].object == null ? "missing" : "present"
     script = templatefile("${path.module}/local-repair-cr.sh.tftpl", {
       cluster_name      = local.cluster_name
       region            = var.region
       release_name      = "workspace-defaults"
       release_namespace = var.workspace_shared_namespace
       cr_kind           = "WorkspaceTemplate"
-      cr_name           = "jupyterlab"
-      cr_namespace      = var.workspace_shared_namespace
+      cr_name           = split("/", each.key)[1]
+      cr_namespace      = split("/", each.key)[0]
     })
   }
 
@@ -393,43 +580,5 @@ resource "null_resource" "repair_workspace_template" {
     command     = self.triggers.script
   }
 
-  depends_on = [helm_release.workspace_defaults, kubernetes_namespace_v1.shared]
-}
-
-data "kubernetes_resource" "pool_workspace_template" {
-  for_each = toset(keys(local.workspace_pool_templates))
-
-  api_version = "workspace.jupyter.org/v1alpha1"
-  kind        = "WorkspaceTemplate"
-  metadata {
-    name      = each.key
-    namespace = var.workspace_shared_namespace
-  }
-
-  depends_on = [helm_release.workspace_defaults, kubernetes_namespace_v1.shared]
-}
-
-resource "null_resource" "repair_pool_workspace_template" {
-  for_each = toset(keys(local.workspace_pool_templates))
-
-  triggers = {
-    present = data.kubernetes_resource.pool_workspace_template[each.key].object == null ? "missing" : "present"
-    script = templatefile("${path.module}/local-repair-cr.sh.tftpl", {
-      cluster_name      = local.cluster_name
-      region            = var.region
-      release_name      = "workspace-defaults"
-      release_namespace = var.workspace_shared_namespace
-      cr_kind           = "WorkspaceTemplate"
-      cr_name           = each.key
-      cr_namespace      = var.workspace_shared_namespace
-    })
-  }
-
-  provisioner "local-exec" {
-    interpreter = ["/bin/bash", "-c"]
-    quiet       = true
-    command     = self.triggers.script
-  }
-
-  depends_on = [helm_release.workspace_defaults, kubernetes_namespace_v1.shared]
+  depends_on = [helm_release.workspace_defaults, kubernetes_namespace_v1.shared, kubernetes_namespace_v1.workspaces]
 }
