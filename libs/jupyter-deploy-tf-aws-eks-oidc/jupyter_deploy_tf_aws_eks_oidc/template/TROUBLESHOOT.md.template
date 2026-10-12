@@ -146,10 +146,11 @@ jd config --admin-role-names Admin --admin-role-names MyOtherRole
 jd up
 ```
 
-Workspace-level access is granted by the `github-rbac` chart to the GitHub teams in
-`oauth_allowed_teams`, scoped to the namespaces in `workspace_rbac_namespaces`. If a
-user gets `Forbidden` creating a workspace, confirm their team is in `oauth_allowed_teams`
-(in `org:team` format) and that the target namespace is in `workspace_rbac_namespaces`.
+Workspace-level access is granted by the `github-rbac` chart: to every team in
+`oauth_allowed_teams` in `default` when `workspace_namespaces` is empty, otherwise to each
+entry's `teams` in that entry's namespace only. If a user gets `Forbidden` creating a
+workspace, confirm their team is in `oauth_allowed_teams` (in `org:team` format) and, when
+`workspace_namespaces` is set, that the target namespace's entry lists their team.
 
 ## Karpenter fails to provision nodes after a version bump
 
