@@ -31,12 +31,12 @@ from pytest_jupyter_deploy.workspaces.network_probe import (
 from pytest_jupyter_deploy.workspaces.template import list_template_names
 from pytest_jupyter_deploy.workspaces.web_app import WebAppNavigator
 
-from .conftest import WORKSPACES_DIR
 from .constants import (
     NS_A,
     NS_B,
     NS_ONLY_A_TEAM,
     NS_ONLY_B_TEAM,
+    NS_ONLY_DEFAULT_TEAM,
     NS_REQUIRED_VARS,
     NS_RUNNING_TIMEOUT_S,
     NS_SMALL_TEMPLATE,
@@ -44,6 +44,7 @@ from .constants import (
     ORDER_NAMESPACES,
     ROUTER_NAMESPACE,
     WORKSPACE_STOP_PATCH,
+    WORKSPACES_DIR,
 )
 
 pytestmark = [
@@ -223,10 +224,10 @@ def test_in_use_template_cannot_be_dropped(e2e_deployment: EndToEndDeployment, m
             lambda m: [*m[:2], {**m[2], "templates": "e2e-ns-no-such-config"}],
             f"{NS_B}/e2e-ns-no-such-config",
         ),
-        (lambda m: [*m[:2], {**m[2], "teams": "e2e-ns-no-such-org:team"}], "e2e-ns-no-such-org"),
+        (lambda m: [*m[:2], {**m[2], "teams": _team("e2e-ns-unlisted")}], "e2e-ns-unlisted"),
         (lambda m: [*m[:2], {"name": NS_B, "teams": ""}], "must list at least one team"),
     ],
-    ids=["duplicate-name", "unknown-template", "unknown-org", "no-team"],
+    ids=["duplicate-name", "unknown-template", "unlisted-team", "no-team"],
 )
 @skip_if_testvars_not_set(NS_REQUIRED_VARS)
 def test_plan_time_validation(
@@ -257,7 +258,7 @@ def test_web_app_follows_mapping_change(
     default; `default` stays listed (to a team the bot is not in) so live workspaces keep
     their templates. Runs last: the module teardown restores the deployment's values.
     """
-    rbac, other = _rbac_team(), _team("e2e-ns-only-default")
+    rbac, other = _rbac_team(), _team(NS_ONLY_DEFAULT_TEAM)
     navigator = dex_oauth_web_app
 
     e2e_deployment.ensure_deployed_with_overrides(

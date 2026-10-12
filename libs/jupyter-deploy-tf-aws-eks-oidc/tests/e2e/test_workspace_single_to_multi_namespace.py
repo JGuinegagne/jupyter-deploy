@@ -16,13 +16,13 @@ from pytest_jupyter_deploy.workspaces.kubectl import (
     kubectl_poll_workspace_status,
 )
 
-from .conftest import WORKSPACES_DIR
 from .constants import (
     NS_REQUIRED_VARS,
     NS_RUNNING_TIMEOUT_S,
     ORDER_NAMESPACES,
     WORKSPACE_START_PATCH,
     WORKSPACE_STOP_PATCH,
+    WORKSPACES_DIR,
 )
 
 pytestmark = [

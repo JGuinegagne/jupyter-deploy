@@ -563,7 +563,7 @@ variable "workspace_namespaces" {
     Required keys per entry (all strings):
       name      - Kubernetes namespace (e.g. "team-ml"); unique across entries
       teams     - comma-separated GitHub teams in 'org:team' format
-                  (e.g. "my-org:ml,my-org:research"); each org must appear in
+                  (e.g. "my-org:ml,my-org:research"); each team must appear in
                   oauth_allowed_teams
     Optional keys per entry (all strings):
       templates - comma-separated workspace_templates config names offered in this

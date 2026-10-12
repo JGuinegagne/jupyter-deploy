@@ -37,9 +37,9 @@ locals {
     ])
   } : { default = keys(local.workspace_pool_templates) }
 
-  workspace_ns_orgs_missing = distinct([
-    for team in flatten(values(local.workspace_ns_teams)) : split(":", team)[0]
-    if !contains(local.github_orgs_unique, split(":", team)[0])
+  workspace_ns_teams_unlisted = distinct([
+    for team in flatten(values(local.workspace_ns_teams)) : team
+    if !contains(var.oauth_allowed_teams, team)
   ])
 }
 
@@ -142,10 +142,11 @@ resource "helm_release" "github_rbac" {
 
   lifecycle {
     precondition {
-      # Org-level on purpose: dex may allowlist a parent team, so a mapped child
-      # team is legitimately absent from oauth_allowed_teams.
-      condition     = length(local.workspace_ns_orgs_missing) == 0
-      error_message = "workspace_namespaces teams reference GitHub orgs absent from oauth_allowed_teams, whose members can never log in: ${join(", ", local.workspace_ns_orgs_missing)}."
+      # Team-level: dex keeps only the allowlisted team names in the groups claim, so
+      # a mapped team absent from oauth_allowed_teams never matches a login. Nesting
+      # does not help: allowlisting a parent team never emits its child teams.
+      condition     = length(local.workspace_ns_teams_unlisted) == 0
+      error_message = "workspace_namespaces teams absent from oauth_allowed_teams, which no login can ever carry: ${join(", ", local.workspace_ns_teams_unlisted)}."
     }
   }
 

@@ -2,7 +2,6 @@
 
 import os
 from collections.abc import Generator
-from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -17,18 +16,21 @@ from pytest_jupyter_deploy.workspaces.kubectl import (
 from pytest_jupyter_deploy.workspaces.template import get_min_idle_timeout, set_min_idle_timeout
 
 from .constants import (
+    ADMIN_WORKSPACES,
+    DEFAULT_WORKSPACE_TEMPLATE,
     GPU_NODEPOOL,
+    IMPERSONATED_USER,
     NS_A,
     NS_B,
     NS_ONLY_A_TEAM,
     NS_ONLY_B_TEAM,
+    NS_ONLY_DEFAULT_TEAM,
     NS_SMALL_TEMPLATE,
     NS_SMALL_TEMPLATE_CONFIG,
     ROUTER_NAMESPACE,
+    SEEDED_WORKSPACES,
+    WORKSPACES_DIR,
 )
-
-WORKSPACE_NAMESPACE = "default"
-WORKSPACES_DIR = Path(__file__).parent / "workspaces"
 
 
 @pytest.fixture
@@ -42,20 +44,6 @@ def gpu_pool_required(e2e_deployment: EndToEndDeployment, kubernetes_cluster_log
     e2e_deployment.ensure_deployed()
     if resource_absent("nodepools.karpenter.sh", GPU_NODEPOOL):
         pytest.skip("Deployment does not have the workspace-gpu NodePool (enable_default_gpu_pool off)")
-
-
-# Default WorkspaceTemplate this template ships (the fallback for workspaces that
-# do not name a template). Its idle-timeout floor gates test_workspace_idleshutdown.
-DEFAULT_WORKSPACE_TEMPLATE = "jupyterlab"
-
-# Synthetic user for impersonated workspaces (uses github: prefix to match Dex OIDC claims)
-IMPERSONATED_USER = "github:e2e-other-user"
-
-# Admin workspaces (created as the admin IAM identity)
-ADMIN_WORKSPACES = ["e2e-jupyterlab-admin-public"]
-
-# Workspaces created via impersonation during cluster seeding
-SEEDED_WORKSPACES = ["e2e-jupyterlab-other-public", "e2e-jupyterlab-other-private"]
 
 
 def _get_impersonation_group() -> str | None:
@@ -210,13 +198,16 @@ def _namespace_entry(name: str, teams: list[str], templates: list[str] | None = 
 
 
 @pytest.fixture(scope="module")
-def namespace_base_values(e2e_deployment: EndToEndDeployment) -> dict[str, Any]:
+def namespace_base_values(e2e_deployment: EndToEndDeployment, restored_namespace_mapping: None) -> dict[str, Any]:
     """The base workspace_namespaces mapping, plus the template and pool values it needs.
 
     - default:  every team in oauth_allowed_teams, keeping the cards the empty mapping
                 gives it, so its live workspaces keep their templates
     - e2e-ns-a: JD_E2E_RBAC_TEAM + a synthetic "only-a" team, also offering e2e-cpu-small
     - e2e-ns-b: JD_E2E_RBAC_TEAM + a synthetic "only-b" team
+
+    Also allowlists the synthetic teams (incl. the #409 case's "only-default") in variables.yaml,
+    after restored_namespace_mapping has snapshotted the deployment's own allowlist.
     """
     e2e_deployment.ensure_deployed()
     org, rbac_team = os.environ["JD_E2E_ORG"], f"{os.environ['JD_E2E_ORG']}:{os.environ['JD_E2E_RBAC_TEAM']}"
@@ -242,6 +233,8 @@ def namespace_base_values(e2e_deployment: EndToEndDeployment) -> dict[str, Any]:
     cpu_pool["templates"] = ",".join(dict.fromkeys([*cpu_offered, NS_SMALL_TEMPLATE]))
 
     allowed_teams = e2e_deployment.get_list_str_variable_value("oauth_allowed_teams")
+    synthetic = [f"{org}:{t}" for t in (NS_ONLY_A_TEAM, NS_ONLY_B_TEAM, NS_ONLY_DEFAULT_TEAM)]
+    e2e_deployment.update_required_value("oauth_allowed_teams", [*allowed_teams, *synthetic])
     return {
         "workspace_templates": [*templates, NS_SMALL_TEMPLATE_CONFIG],
         "workspace_nodepools": pools_with_small,
@@ -255,10 +248,12 @@ def namespace_base_values(e2e_deployment: EndToEndDeployment) -> dict[str, Any]:
 
 @pytest.fixture(scope="module")
 def restored_namespace_mapping(e2e_deployment: EndToEndDeployment) -> Generator[None, None, None]:
-    """Snapshot the mapping variables; after the module, restore them and redeploy."""
+    """Snapshot the mapping variables and the allowlist; after the module, restore them and redeploy."""
     e2e_deployment.ensure_deployed()
     snapshot = {key: e2e_deployment.read_override_value(key) for key in _NAMESPACE_MAPPING_VARIABLES}
+    allowed_teams = e2e_deployment.get_list_str_variable_value("oauth_allowed_teams")
     yield
+    e2e_deployment.update_required_value("oauth_allowed_teams", allowed_teams)
     reset_args: list[str] = []
     for key, value in snapshot.items():
         if value is None:
