@@ -1,4 +1,4 @@
-# -- Namespace where the WorkspaceTemplate are created.
+# -- Shared namespace holding the WorkspaceAccessStrategy every template references.
 sharedNamespace: jupyter-k8s-shared
 
 # -- Name of the WorkspaceAccessStrategy to reference in the WorkspaceTemplate.
@@ -10,6 +10,8 @@ accessStrategy:
 # A values-file list replaces this default wholesale (helm list semantics), so
 # terraform always injects the full list; the entry here serves standalone
 # renders and unit tests. Per-entry fields:
+#   namespace                                                - workspace namespace the
+#     template lands in; workspaces use the templates of their own namespace
 #   name/isDefault/displayName/description/imageUri/appType - identity + card copy
 #   accessType/ownershipType/storageClassName               - workspace defaults
 #   defaultResources/resourceBounds                          - per-resource-key
@@ -19,6 +21,7 @@ accessStrategy:
 #   readinessProbe/idleShutdown                              - probe + idle policy
 workspaceTemplates:
   - name: jupyterlab
+    namespace: default
     isDefault: "true"
     displayName: JupyterLab
     description: "JupyterLab workspace with persistent EBS storage"
