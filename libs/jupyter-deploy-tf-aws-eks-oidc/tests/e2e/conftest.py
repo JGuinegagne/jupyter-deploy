@@ -151,7 +151,7 @@ def eks_domain(getting_started_url: str) -> str:
 
 @pytest.fixture(scope="session")
 def shared_namespace(e2e_deployment: EndToEndDeployment) -> str:
-    """Return the shared namespace where templates + access strategies live."""
+    """Return the shared namespace where the access strategies live."""
     e2e_deployment.ensure_deployed()
     result = e2e_deployment.cli.run_command(
         ["jupyter-deploy", "show", "--output", "workspace_shared_namespace", "--text"]
@@ -159,8 +159,16 @@ def shared_namespace(e2e_deployment: EndToEndDeployment) -> str:
     return result.stdout.strip()
 
 
+@pytest.fixture(scope="session")
+def default_workspace_namespace(e2e_deployment: EndToEndDeployment) -> str:
+    """Return the default workspace namespace, which holds its own copy of the templates."""
+    e2e_deployment.ensure_deployed()
+    result = e2e_deployment.cli.run_command(["jupyter-deploy", "show", "--output", "server_default_scope", "--text"])
+    return result.stdout.strip()
+
+
 @pytest.fixture(scope="module")
-def relaxed_idle_floor(kubernetes_cluster_login: None, shared_namespace: str) -> Generator[None, None, None]:
+def relaxed_idle_floor(kubernetes_cluster_login: None, default_workspace_namespace: str) -> Generator[None, None, None]:
     """Lower the default template's idle-timeout floor to 1 minute for a test.
 
     The floor (spec.idleShutdownOverrides.minIdleTimeoutInMinutes) is an
@@ -171,9 +179,9 @@ def relaxed_idle_floor(kubernetes_cluster_login: None, shared_namespace: str) ->
     dependent on the deployment having been created with a low floor. Pairs with the
     fast_idle_operator fixture, which speeds up the operator poll interval the same way.
     """
-    original = get_min_idle_timeout(DEFAULT_WORKSPACE_TEMPLATE, shared_namespace)
-    set_min_idle_timeout(DEFAULT_WORKSPACE_TEMPLATE, shared_namespace, 1)
+    original = get_min_idle_timeout(DEFAULT_WORKSPACE_TEMPLATE, default_workspace_namespace)
+    set_min_idle_timeout(DEFAULT_WORKSPACE_TEMPLATE, default_workspace_namespace, 1)
     try:
         yield
     finally:
-        set_min_idle_timeout(DEFAULT_WORKSPACE_TEMPLATE, shared_namespace, original)
+        set_min_idle_timeout(DEFAULT_WORKSPACE_TEMPLATE, default_workspace_namespace, original)
