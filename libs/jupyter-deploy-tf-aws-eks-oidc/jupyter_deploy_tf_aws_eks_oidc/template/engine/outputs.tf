@@ -138,7 +138,7 @@ output "workspace_patch_stop" {
 
 output "server_default_scope" {
   description = "Default Kubernetes namespace for workspace resources."
-  value       = var.workspace_rbac_namespaces[0]
+  value       = local.workspace_ns_names[0]
 }
 
 output "acm_certificate_arn" {
