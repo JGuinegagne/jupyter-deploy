@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 import pytest
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
-from pytest_jupyter_deploy.kubernetes.kubectl import resource_absent
+from pytest_jupyter_deploy.kubernetes.kubectl import resource_absent, run_kubectl
 from pytest_jupyter_deploy.plugin import handle_browser_context_args
 from pytest_jupyter_deploy.workspaces.kubectl import (
     kubectl_apply_workspace,
@@ -16,7 +16,16 @@ from pytest_jupyter_deploy.workspaces.kubectl import (
 )
 from pytest_jupyter_deploy.workspaces.template import get_min_idle_timeout, set_min_idle_timeout
 
-from .constants import GPU_NODEPOOL
+from .constants import (
+    GPU_NODEPOOL,
+    NS_A,
+    NS_B,
+    NS_ONLY_A_TEAM,
+    NS_ONLY_B_TEAM,
+    NS_SMALL_TEMPLATE,
+    NS_SMALL_TEMPLATE_CONFIG,
+    ROUTER_NAMESPACE,
+)
 
 WORKSPACE_NAMESPACE = "default"
 WORKSPACES_DIR = Path(__file__).parent / "workspaces"
@@ -185,3 +194,86 @@ def relaxed_idle_floor(kubernetes_cluster_login: None, default_workspace_namespa
         yield
     finally:
         set_min_idle_timeout(DEFAULT_WORKSPACE_TEMPLATE, default_workspace_namespace, original)
+
+
+# ── Workspace namespaces ──────────────────────────────────────────────────────
+
+# The variables the workspace-namespace modules rewrite.
+_NAMESPACE_MAPPING_VARIABLES = ["workspace_namespaces", "workspace_templates", "workspace_nodepools"]
+
+
+def _namespace_entry(name: str, teams: list[str], templates: list[str] | None = None) -> dict[str, str]:
+    entry = {"name": name, "teams": ",".join(dict.fromkeys(teams))}
+    if templates:
+        entry["templates"] = ",".join(templates)
+    return entry
+
+
+@pytest.fixture(scope="module")
+def namespace_base_values(e2e_deployment: EndToEndDeployment) -> dict[str, Any]:
+    """The base workspace_namespaces mapping, plus the template and pool values it needs.
+
+    - default:  every team in oauth_allowed_teams, keeping the cards the empty mapping
+                gives it, so its live workspaces keep their templates
+    - e2e-ns-a: JD_E2E_RBAC_TEAM + a synthetic "only-a" team, also offering e2e-cpu-small
+    - e2e-ns-b: JD_E2E_RBAC_TEAM + a synthetic "only-b" team
+    """
+    e2e_deployment.ensure_deployed()
+    org, rbac_team = os.environ["JD_E2E_ORG"], f"{os.environ['JD_E2E_ORG']}:{os.environ['JD_E2E_RBAC_TEAM']}"
+    templates = [
+        t
+        for t in e2e_deployment.get_list_of_maps_variable_value("workspace_templates")
+        if t["name"] != NS_SMALL_TEMPLATE
+    ]
+    pools = e2e_deployment.get_list_of_maps_variable_value("workspace_nodepools")
+
+    # default keeps every card the pools offer, including the built-in GPU card the flag injects.
+    offered = [t for p in pools for t in p.get("templates", "").split(",") if t]
+    gpu_flag = e2e_deployment.cli.run_command(
+        ["jupyter-deploy", "show", "--variable", "enable_default_gpu_pool", "--text"]
+    ).stdout.strip()
+    if gpu_flag.lower() == "true":
+        offered.append("jupyterlab-gpu")
+
+    # A config renders only where a pool offers it, so the first CPU pool offers the small one.
+    pools_with_small = [dict(p) for p in pools]
+    cpu_pool = next(p for p in pools_with_small if not p.get("accelerator"))
+    cpu_offered = [t for t in cpu_pool.get("templates", "").split(",") if t]
+    cpu_pool["templates"] = ",".join(dict.fromkeys([*cpu_offered, NS_SMALL_TEMPLATE]))
+
+    allowed_teams = e2e_deployment.get_list_str_variable_value("oauth_allowed_teams")
+    return {
+        "workspace_templates": [*templates, NS_SMALL_TEMPLATE_CONFIG],
+        "workspace_nodepools": pools_with_small,
+        "workspace_namespaces": [
+            _namespace_entry("default", allowed_teams, list(dict.fromkeys(offered))),
+            _namespace_entry(NS_A, [rbac_team, f"{org}:{NS_ONLY_A_TEAM}"], [NS_SMALL_TEMPLATE]),
+            _namespace_entry(NS_B, [rbac_team, f"{org}:{NS_ONLY_B_TEAM}"]),
+        ],
+    }
+
+
+@pytest.fixture(scope="module")
+def restored_namespace_mapping(e2e_deployment: EndToEndDeployment) -> Generator[None, None, None]:
+    """Snapshot the mapping variables; after the module, restore them and redeploy."""
+    e2e_deployment.ensure_deployed()
+    snapshot = {key: e2e_deployment.read_override_value(key) for key in _NAMESPACE_MAPPING_VARIABLES}
+    yield
+    reset_args: list[str] = []
+    for key, value in snapshot.items():
+        if value is None:
+            reset_args += ["--reset-variable", key]
+        else:
+            e2e_deployment.update_override_value(key, value)
+    e2e_deployment.ensure_deployed_with(reset_args)
+
+
+@pytest.fixture
+def fresh_dex(e2e_deployment: EndToEndDeployment) -> None:
+    """Restart dex so it serves the applied allowlist; requested before the browser login.
+
+    Remove once the pinned router chart rolls dex on config changes:
+    https://github.com/jupyter-infra/jupyter-k8s-aws/issues/100
+    """
+    e2e_deployment.cli.run_command(["jupyter-deploy", "component", "restart", "--name", "dex"])
+    run_kubectl("rollout", "status", "deployment/dex", "-n", ROUTER_NAMESPACE, "--timeout=300s", check=True)
