@@ -41,6 +41,13 @@ locals {
     for team in flatten(values(local.workspace_ns_teams)) : team
     if !contains(var.oauth_allowed_teams, team)
   ])
+
+  # Created names a template release installs into: Terraform would own (and on
+  # removal delete) a platform namespace. The kube-*/jupyter-k8s-* prefixes are a
+  # variable validation; this check needs local.release_namespaces.
+  workspace_ns_reserved = [
+    for ns in local.workspace_ns_created : ns if contains(values(local.release_namespaces), ns)
+  ]
 }
 
 # The web app discovers workspace namespaces by this label.
@@ -124,7 +131,7 @@ resource "null_resource" "destroy_workspaces" {
 resource "helm_release" "github_rbac" {
   name             = "github-rbac"
   chart            = "${path.module}/../charts/github-rbac"
-  namespace        = var.workspace_shared_namespace
+  namespace        = local.release_namespaces.shared
   create_namespace = false
   # Headroom over the 5-min provider default. No longer strictly necessary now
   # that destroy_workspaces clears the CRs and the addon/node ordering keeps the
@@ -147,6 +154,10 @@ resource "helm_release" "github_rbac" {
       # does not help: allowlisting a parent team never emits its child teams.
       condition     = length(local.workspace_ns_teams_unlisted) == 0
       error_message = "workspace_namespaces teams absent from oauth_allowed_teams, which no login can ever carry: ${join(", ", local.workspace_ns_teams_unlisted)}."
+    }
+    precondition {
+      condition     = length(local.workspace_ns_reserved) == 0
+      error_message = "workspace_namespaces must not name a namespace a platform component installs into (${join(", ", sort(distinct(values(local.release_namespaces))))}): ${join(", ", local.workspace_ns_reserved)}."
     }
   }
 
@@ -322,8 +333,8 @@ locals {
 # over the listed namespaces plus "default", so unlisting "default" while in use
 # is caught too, and the shared namespace: no template renders there, so a
 # workspace still using one there refuses the plan (redeploy the template instead
-# of upgrading it in place). A dropped created namespace is not read: deleting it
-# cascades to its workspaces anyway.
+# of upgrading it in place). A dropped created namespace is covered by the
+# namespace guard below instead: deleting it would delete its workspaces.
 #
 # depends_on the operator release only (never workspace_defaults, which would
 # defer every plan this guards): on a first deploy or an operator upgrade the
@@ -350,6 +361,56 @@ data "kubernetes_resources" "live_workspace_templates" {
   namespace   = each.key
 
   depends_on = [helm_release.jupyter_k8s]
+}
+
+# ── In-use namespace guard ────────────────────────────────────────────────────
+# Dropping an entry deletes its namespace, cascading to every Workspace, PVC and
+# EBS volume in it. Refuse while a dropped namespace still holds Workspaces.
+#
+# The dropped names come from a live read (the namespaces this deployment
+# created, by label), so the Workspace reads cannot for_each over them: a
+# deferred read (first deploy, operator upgrade) would make the keys unknown.
+# A fixed count of reads is always known; each takes the i-th dropped name, or
+# the shared namespace as an idle filler. A change dropping more namespaces than
+# the count is refused outright.
+locals {
+  workspace_ns_drop_limit = 5
+}
+
+data "kubernetes_resources" "owned_workspace_namespaces" {
+  api_version    = "v1"
+  kind           = "Namespace"
+  label_selector = "app.kubernetes.io/managed-by=jupyter-deploy,workspace.jupyter.org/workspaces-enabled=true"
+
+  depends_on = [helm_release.jupyter_k8s]
+}
+
+locals {
+  workspace_ns_dropped = sort([
+    for n in data.kubernetes_resources.owned_workspace_namespaces.objects : n.metadata.name
+    if !contains(local.workspace_ns_created, n.metadata.name)
+  ])
+}
+
+data "kubernetes_resources" "dropped_namespace_workspaces" {
+  count = local.workspace_ns_drop_limit
+
+  api_version = "workspace.jupyter.org/v1alpha1"
+  kind        = "Workspace"
+  namespace   = try(local.workspace_ns_dropped[count.index], var.workspace_shared_namespace)
+
+  depends_on = [helm_release.jupyter_k8s]
+}
+
+locals {
+  # namespace => ["<ns>/<workspace>", ...], for the dropped namespaces only.
+  workspace_ns_dropped_in_use = {
+    for idx in range(min(length(local.workspace_ns_dropped), local.workspace_ns_drop_limit)) :
+    local.workspace_ns_dropped[idx] => [
+      for w in data.kubernetes_resources.dropped_namespace_workspaces[idx].objects : "${local.workspace_ns_dropped[idx]}/${w.metadata.name}"
+    ]
+    if length(data.kubernetes_resources.dropped_namespace_workspaces[idx].objects) > 0
+  }
 }
 
 locals {
@@ -382,7 +443,7 @@ locals {
 resource "helm_release" "workspace_defaults" {
   name             = "workspace-defaults"
   chart            = "${path.module}/../charts/workspace-defaults"
-  namespace        = var.workspace_shared_namespace
+  namespace        = local.release_namespaces.shared
   create_namespace = false
   # Ships the WorkspaceTemplates (operator-finalized). Install waits on
   # the operator reconciling them. Uninstall is ~seconds now that destroy_workspaces
@@ -424,6 +485,14 @@ resource "helm_release" "workspace_defaults" {
   )
 
   lifecycle {
+    precondition {
+      condition     = length(local.workspace_ns_dropped) <= local.workspace_ns_drop_limit
+      error_message = "this change drops ${length(local.workspace_ns_dropped)} workspace namespaces (${join(", ", local.workspace_ns_dropped)}); drop at most ${local.workspace_ns_drop_limit} per change, so that each one is checked for live workspaces."
+    }
+    precondition {
+      condition     = length(local.workspace_ns_dropped_in_use) == 0
+      error_message = "removing a workspace namespace deletes its workspaces and their data: ${join("; ", [for ns, ws in local.workspace_ns_dropped_in_use : format("%s holds %s", ns, join(", ", ws))])}. Delete the workspaces first, or keep the entry."
+    }
     precondition {
       condition     = length(local.workspace_template_refs_dropped) == 0
       error_message = "this change would delete workspace templates still used by live workspaces, which the operator holds in Terminating until those workspaces are deleted: ${join("; ", [for tmpl, ws in local.workspace_template_refs_dropped : format("%s used by %s", tmpl, join(", ", ws))])}. Keep offering the templates, or delete the workspaces first."

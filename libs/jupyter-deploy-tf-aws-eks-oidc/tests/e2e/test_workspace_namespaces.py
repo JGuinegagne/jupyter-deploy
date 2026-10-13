@@ -216,6 +216,23 @@ def test_in_use_template_cannot_be_dropped(e2e_deployment: EndToEndDeployment, m
 
 
 @pytest.mark.order(ORDER_NAMESPACES + 7)
+@skip_if_testvars_not_set(NS_REQUIRED_VARS)
+def test_in_use_namespace_cannot_be_dropped(e2e_deployment: EndToEndDeployment, mapped: dict[str, Any]) -> None:
+    """Dropping e2e-ns-b while it holds a workspace fails `jd config`, naming both."""
+    name = "e2e-ns-drop-guard"
+    try:
+        kubectl_apply_workspace(name, WORKSPACES_DIR, as_user=_user(), as_groups=_group(_rbac_team()))
+
+        dropped = [e for e in mapped["workspace_namespaces"] if e["name"] != NS_B]
+        e2e_deployment.update_override_value("workspace_namespaces", dropped)
+        error = e2e_deployment.cli.run_command_expecting_failure(["jupyter-deploy", "config"])
+        assert f"{NS_B} holds {NS_B}/{name}" in error, error
+    finally:
+        e2e_deployment.update_override_value("workspace_namespaces", mapped["workspace_namespaces"])
+        kubectl_delete_workspace(name, namespace=NS_B)
+
+
+@pytest.mark.order(ORDER_NAMESPACES + 8)
 @pytest.mark.parametrize(
     ("mutate", "message"),
     [
@@ -226,8 +243,10 @@ def test_in_use_template_cannot_be_dropped(e2e_deployment: EndToEndDeployment, m
         ),
         (lambda m: [*m[:2], {**m[2], "teams": _team("e2e-ns-unlisted")}], "e2e-ns-unlisted"),
         (lambda m: [*m[:2], {"name": NS_B, "teams": ""}], "must list at least one team"),
+        (lambda m: [*m, {"name": "kube-e2e", "teams": m[2]["teams"]}], 'must not start with "kube-"'),
+        (lambda m: [*m, {"name": "keda", "teams": m[2]["teams"]}], "must not name a namespace a platform component"),
     ],
-    ids=["duplicate-name", "unknown-template", "unlisted-team", "no-team"],
+    ids=["duplicate-name", "unknown-template", "unlisted-team", "no-team", "reserved-prefix", "platform-namespace"],
 )
 @skip_if_testvars_not_set(NS_REQUIRED_VARS)
 def test_plan_time_validation(
@@ -241,7 +260,7 @@ def test_plan_time_validation(
         e2e_deployment.update_override_value("workspace_namespaces", mapped["workspace_namespaces"])
 
 
-@pytest.mark.order(ORDER_NAMESPACES + 8)
+@pytest.mark.order(ORDER_NAMESPACES + 9)
 @skip_if_testvars_not_set(NS_REQUIRED_VARS)
 def test_web_app_follows_mapping_change(
     e2e_deployment: EndToEndDeployment,

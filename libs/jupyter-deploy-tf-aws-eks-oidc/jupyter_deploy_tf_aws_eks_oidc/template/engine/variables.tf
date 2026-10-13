@@ -560,8 +560,15 @@ variable "workspace_namespaces" {
     to keep using it. The first entry is the default namespace of the web app and
     of the <jd server> commands.
 
+    Removing or renaming a namespace deletes all resources in it, including workspaces.
+    In order to prevent accidental data loss, a guard prevents removing a namespace with
+    an active workspace.
+
     Required keys per entry (all strings):
-      name      - Kubernetes namespace (e.g. "team-ml"); unique across entries
+      name      - Kubernetes namespace (e.g. "team-ml"); unique across entries; must not
+                  start with "kube-" or "jupyter-k8s-", nor name a namespace a platform
+                  component uses ("karpenter", "keda", "monitoring", or the
+                  workspace_*_namespace values)
       teams     - comma-separated GitHub teams in 'org:team' format
                   (e.g. "my-org:ml,my-org:research"); each team must appear in
                   oauth_allowed_teams
@@ -592,6 +599,14 @@ variable "workspace_namespaces" {
       can(regex("^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$", lookup(e, "name", "")))
     ])
     error_message = "Each workspace_namespaces entry must set name to a valid Kubernetes namespace (lowercase letters, digits, hyphens; 2-63 characters)."
+  }
+
+  validation {
+    condition = alltrue([
+      for e in var.workspace_namespaces :
+      !startswith(lookup(e, "name", ""), "kube-") && !startswith(lookup(e, "name", ""), "jupyter-k8s-")
+    ])
+    error_message = "workspace_namespaces names must not start with \"kube-\" or \"jupyter-k8s-\", which are reserved for the cluster and the platform."
   }
 
   validation {
