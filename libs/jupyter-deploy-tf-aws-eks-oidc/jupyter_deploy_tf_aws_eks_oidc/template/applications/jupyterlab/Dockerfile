@@ -14,7 +14,7 @@ RUN test -n "$CLAUDE_CODE_VERSION" && test -n "$CODEX_VERSION" && \
     npm cache clean --force
 
 FROM ghcr.io/astral-sh/uv:python3.13-trixie-slim
-ARG CODEX_MODEL
+ARG CODEX_PROFILE_PREFIX
 
 USER root
 
@@ -42,7 +42,20 @@ RUN ln -s /opt/ai-clis/bin/claude /usr/local/bin/claude && \
     ln -s /opt/ai-clis/bin/codex /usr/local/bin/codex
 COPY claude-managed-settings.json /etc/claude-code/managed-settings.json
 COPY codex-config.toml /etc/codex/config.toml
-RUN test -n "$CODEX_MODEL" && sed -i "s|@CODEX_MODEL@|${CODEX_MODEL}|" /etc/codex/config.toml
+# Codex's model: the one this Codex release recommends for the inference profile prefix, so it
+# follows the pinned version. Bedrock offers the OpenAI models under "us." and "global." only:
+# for those a missing model is a broken build, elsewhere Codex keeps no model (and no access).
+COPY pick-codex-model.py /tmp/pick-codex-model.py
+RUN test -n "$CODEX_PROFILE_PREFIX" && \
+    model="$(codex debug models | python3 /tmp/pick-codex-model.py "$CODEX_PROFILE_PREFIX")" && \
+    if [ -n "$model" ]; then \
+      sed -i "s|@CODEX_MODEL@|${model}|" /etc/codex/config.toml; \
+    elif [ "$CODEX_PROFILE_PREFIX" = "us" ] || [ "$CODEX_PROFILE_PREFIX" = "global" ]; then \
+      echo "codex debug models lists no ${CODEX_PROFILE_PREFIX}. model" >&2; exit 1; \
+    else \
+      sed -i "/@CODEX_MODEL@/d" /etc/codex/config.toml; \
+    fi && \
+    rm /tmp/pick-codex-model.py
 
 COPY jupyter-start.sh /usr/local/bin/
 COPY jupyter-reset.sh /usr/local/bin/

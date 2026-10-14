@@ -14,10 +14,16 @@ module "app_jupyterlab" {
   source_dir           = "${path.module}/../applications/jupyterlab"
   image_name           = var.workspace_app_jupyterlab_image_name
   image_build          = var.workspace_app_jupyterlab_image_build
-  build_bucket_name    = module.build_artifacts_bucket.bucket_name
-  build_bucket_arn     = module.build_artifacts_bucket.bucket_arn
-  region               = var.region
-  combined_tags        = local.combined_tags
+  build_args = {
+    CLAUDE_CODE_VERSION = var.workspace_app_claude_code_version
+    CODEX_VERSION       = var.workspace_app_codex_version
+    # Codex's model is the one its release recommends for this prefix.
+    CODEX_PROFILE_PREFIX = local.workspace_bedrock_profile_prefix
+  }
+  build_bucket_name = module.build_artifacts_bucket.bucket_name
+  build_bucket_arn  = module.build_artifacts_bucket.bucket_arn
+  region            = var.region
+  combined_tags     = local.combined_tags
 
   # CodeBuild fails with ACCESS_DENIED on logs:CreateLogStream if the IAM role
   # policy hasn't propagated yet. EKS cluster creation takes ~10min, which is
