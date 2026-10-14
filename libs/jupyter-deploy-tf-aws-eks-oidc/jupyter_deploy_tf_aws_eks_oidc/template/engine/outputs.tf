@@ -141,6 +141,11 @@ output "server_default_scope" {
   value       = local.workspace_ns_names[0]
 }
 
+output "workspace_bedrock_roles" {
+  description = "JSON-encoded map of workspace namespace to the IAM role ARN granting its workspaces Bedrock; namespaces without Bedrock are absent."
+  value       = jsonencode({ for ns in local.workspace_bedrock_namespaces : ns => module.workspace_bedrock_role[ns].role_arn })
+}
+
 output "acm_certificate_arn" {
   description = "ARN of the ACM certificate for the deployment domain."
   # Read through the validation resource, not the certificate: this way anything
