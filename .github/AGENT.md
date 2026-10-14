@@ -144,9 +144,12 @@ Lessons from coordinated plugin/CLI/template releases — read before releasing:
     E2E workflows can resolve `ecr_repository_url_7..9`.
 
 - **The proxy and CLI gates each fresh-deploy jupyterlab too.** The proxy gate
-  (`e2e-proxy-release.yml`) tests the candidate against the PUBLISHED CLI + template, so it can't
-  cover a proxy change that needs an unreleased CLI; dispatch `e2e-jupyterlab-fresh.yml` in
-  workspace mode for that. The CLI gate's `jupyterlab-functional-test` deploys with the CLI under
+  (`e2e-proxy-release.yml`) tests the candidate against the PUBLISHED CLI + template, and it can't
+  be skipped. **A proxy release must work with the published CLI:** the gate enforces it, and users
+  who upgrade the proxy run it against an older CLI (the CLI only pins
+  `jupyter-deploy-client-proxy>=0.1.1`). Dispatching `e2e-jupyterlab-fresh.yml` in workspace mode
+  tests a proxy change that needs an unreleased CLI, but can't release it: a breaking proxy change
+  needs a coordinated plan. The CLI gate's `jupyterlab-functional-test` deploys with the CLI under
   test and the workspace template. Both select the `proxy` marker (proxy, open, auth, application, undeployed-project
   files), so a new non-mutating proxy-path test file needs `pytestmark = pytest.mark.proxy` to be
   gated. Don't mark jupyterlab tests `cli`: a `cli` test name may live in one template suite only
