@@ -216,8 +216,23 @@ kubectl get workspace <workspace-name> -n <namespace> -o jsonpath='{.spec.servic
 - **AccessDeniedException naming a model or inference profile**: the model is outside
   `workspace_bedrock_model_patterns`, or its inference profile is outside
   `workspace_bedrock_inference_scope` (Codex outside the US needs `global`).
+- **Codex's model reads `unset: ...`**: the deployment gives Codex no model to use; the
+  placeholder names the variable to change.
 - **AccessDeniedException on a model the patterns allow**: the model was never enabled in the
   account; see below.
+
+## Workspaces are rejected with "multiple service accounts found with default label"
+
+The operator assigns each new workspace the service account labeled
+`workspace.jupyter.org/default-service-account=true` in its namespace, and refuses to choose
+when two carry the label. The template labels its own `workspace` service account; `jd config`
+refuses when another one already has the label, but a label added afterwards shows up only
+here. Remove the label from the other service account:
+
+```bash
+kubectl get serviceaccounts -n <namespace> -l workspace.jupyter.org/default-service-account=true
+kubectl label serviceaccount <name> -n <namespace> workspace.jupyter.org/default-service-account-
+```
 
 ## Enable the Bedrock models in a new account
 

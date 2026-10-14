@@ -128,7 +128,7 @@ The engine directory has three tiers — keep them separate:
 
 1. **Core infra** (`modules/`, `main.tf`, `iam.tf`, `eks_addons.tf`, `platform.tf`): VPC, IAM roles, EKS cluster, MNG, security groups. Use `modules/` for reusable resources. These must exist before a kubeconfig is available.
 2. **Platform components** (`platform_*.tf`): Helm charts deployed onto the cluster once a working MNG is available — one file per component, named `platform_<component>.tf` (e.g. `platform_karpenter.tf`, `platform_keda.tf`, `platform_logging.tf`). Never put Helm releases in `modules/`.
-3. **App/charts** (`helm.tf`, `workspaces.tf`): consumer charts and workspace-specific resources (operator, router, workspace-defaults).
+3. **App/charts** (`helm.tf`, `workspaces.tf`, `workspace_*.tf`): consumer charts and workspace-specific resources (operator, router, workspace-defaults). A workspace feature that needs both AWS and in-cluster resources (e.g. `workspace_bedrock.tf`: IAM role + service account) keeps them together in its own `workspace_<feature>.tf`, not split into `iam.tf`.
 
 All variables MUST be defined in `variables.tf`. Default values MUST be in `presets/defaults-all.tfvars`. No `variable` blocks elsewhere.
 
