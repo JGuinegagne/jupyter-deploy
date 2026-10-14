@@ -201,6 +201,10 @@ def coding_agents_workspace(
     enabled = e2e_deployment.get_bool_variable_value("workspace_bedrock_enabled")
     namespaces = e2e_deployment.get_list_of_maps_variable_value("workspace_namespaces")
     opted_out = any(e["name"] == WORKSPACE_NAMESPACE and e.get("bedrock") == "false" for e in namespaces)
+    # Not a mutating case, though this branch redeploys and does not restore: Bedrock in the
+    # default namespace is the template's default, so this only puts back the configuration
+    # the tests are written against. CI deployments never take it; it catches a local project
+    # whose owner turned Bedrock off, which would otherwise fail every case below.
     if not enabled or opted_out:
         overrides: dict[str, Any] = {"workspace_bedrock_enabled": True}
         if opted_out:
