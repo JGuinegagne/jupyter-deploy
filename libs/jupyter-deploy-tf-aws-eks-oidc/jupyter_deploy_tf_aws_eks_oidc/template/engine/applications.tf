@@ -17,8 +17,10 @@ module "app_jupyterlab" {
   build_args = {
     CLAUDE_CODE_VERSION = var.workspace_app_claude_code_version
     CODEX_VERSION       = var.workspace_app_codex_version
-    # Codex's model is the one its release recommends for this prefix.
+    # Codex's model is the best one its release offers for this prefix among the
+    # allowed models; empty patterns mean Codex has no model to use.
     CODEX_PROFILE_PREFIX = local.workspace_bedrock_profile_prefix
+    CODEX_MODEL_PATTERNS = local.workspace_bedrock_codex_allowed ? join(",", var.workspace_bedrock_model_patterns) : ""
   }
   build_bucket_name = module.build_artifacts_bucket.bucket_name
   build_bucket_arn  = module.build_artifacts_bucket.bucket_arn

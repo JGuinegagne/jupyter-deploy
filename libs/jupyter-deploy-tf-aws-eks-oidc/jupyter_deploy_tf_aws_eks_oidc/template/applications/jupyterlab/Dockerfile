@@ -15,6 +15,7 @@ RUN test -n "$CLAUDE_CODE_VERSION" && test -n "$CODEX_VERSION" && \
 
 FROM ghcr.io/astral-sh/uv:python3.13-trixie-slim
 ARG CODEX_PROFILE_PREFIX
+ARG CODEX_MODEL_PATTERNS
 
 USER root
 
@@ -42,18 +43,23 @@ RUN ln -s /opt/ai-clis/bin/claude /usr/local/bin/claude && \
     ln -s /opt/ai-clis/bin/codex /usr/local/bin/codex
 COPY claude-managed-settings.json /etc/claude-code/managed-settings.json
 COPY codex-config.toml /etc/codex/config.toml
-# Codex's model: the one this Codex release recommends for the inference profile prefix, so it
-# follows the pinned version. Bedrock offers the OpenAI models under "us." and "global." only:
-# for those a missing model is a broken build, elsewhere Codex keeps no model (and no access).
+# Codex's model: the best one this Codex release offers for the inference profile prefix among
+# the models IAM allows, so it follows the pinned version. Where Codex has no model to use, an
+# explicit placeholder makes its error name the fix: without a model line it would fall back to
+# a built-in default that IAM denies. With a usable prefix and allowed models, finding no model
+# fails the build.
 COPY pick-codex-model.py /tmp/pick-codex-model.py
-RUN test -n "$CODEX_PROFILE_PREFIX" && \
-    model="$(codex debug models | python3 /tmp/pick-codex-model.py "$CODEX_PROFILE_PREFIX")" && \
-    if [ -n "$model" ]; then \
-      sed -i "s|@CODEX_MODEL@|${model}|" /etc/codex/config.toml; \
-    elif [ "$CODEX_PROFILE_PREFIX" = "us" ] || [ "$CODEX_PROFILE_PREFIX" = "global" ]; then \
-      echo "codex debug models lists no ${CODEX_PROFILE_PREFIX}. model" >&2; exit 1; \
+RUN unset_model() { sed -i "s|@CODEX_MODEL@|unset: $1|" /etc/codex/config.toml; } && \
+    if [ -z "$CODEX_MODEL_PATTERNS" ]; then \
+      unset_model "no openai model allowed by workspace_bedrock_model_patterns"; \
+    elif [ "$CODEX_PROFILE_PREFIX" != "us" ] && [ "$CODEX_PROFILE_PREFIX" != "global" ]; then \
+      unset_model "no ${CODEX_PROFILE_PREFIX:-geographic} OpenAI inference profiles, set workspace_bedrock_inference_scope to global"; \
     else \
-      sed -i "/@CODEX_MODEL@/d" /etc/codex/config.toml; \
+      model="$(codex debug models | python3 /tmp/pick-codex-model.py "$CODEX_PROFILE_PREFIX" "$CODEX_MODEL_PATTERNS")" && \
+      if [ -z "$model" ]; then \
+        echo "codex debug models lists no ${CODEX_PROFILE_PREFIX}. model allowed by ${CODEX_MODEL_PATTERNS}" >&2; exit 1; \
+      fi && \
+      sed -i "s|@CODEX_MODEL@|${model}|" /etc/codex/config.toml; \
     fi && \
     rm /tmp/pick-codex-model.py
 

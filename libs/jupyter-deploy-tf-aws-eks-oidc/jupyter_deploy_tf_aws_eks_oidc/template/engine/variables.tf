@@ -1031,11 +1031,12 @@ variable "workspace_app_jupyterlab_image_name" {
   description = <<-EOT
     The ECR repository name for the JupyterLab workspace image.
 
-    Changing this value creates a new ECR repository. Use the convention
-    'jupyterlab-v<version>' so that version upgrades produce a new repo
-    while keeping previous images available for running workspaces.
+    Changing this value creates a new ECR repository. The default,
+    'jupyterlab-v<template version>', follows each template release, so an
+    upgrade builds into a new repo while previous images stay available for
+    running workspaces.
 
-    Example: jupyterlab-v1.0.0
+    Example: jupyterlab-v0.4.0
   EOT
   type        = string
 }
@@ -1134,8 +1135,9 @@ variable "workspace_bedrock_model_patterns" {
     Bedrock model IDs workspaces may invoke, as IAM wildcard patterns without the
     inference profile prefix (e.g. "anthropic.claude-sonnet-*").
 
-    Covers both Claude Code (anthropic.*) and Codex (openai.*) models. Each CLI picks
-    its default model per release; the patterns must keep it allowed.
+    Covers both Claude Code (anthropic.*) and Codex (openai.*) models. Claude Code picks
+    its default model per release, which the patterns must keep allowed; Codex uses the
+    best model its release offers among the allowed ones.
 
     Example: ["anthropic.claude-*", "openai.gpt-*"]
   EOT
