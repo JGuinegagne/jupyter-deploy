@@ -111,6 +111,36 @@ owners may need to approve the OAuth app for it to access team membership; see G
 
 {{ aws-inspector-scanning }}
 
+### Coding agents (Claude Code, Codex) on Amazon Bedrock
+
+The JupyterLab image ships `claude` and `codex`. With `workspace_bedrock_enabled: true` (the
+default), workspaces get AWS credentials through EKS Pod Identity and both CLIs call Amazon
+Bedrock with no setup. The variables:
+- `workspace_bedrock_enabled` turns the credentials on for every workspace namespace; an entry of
+  `workspace_namespaces` opts its namespace out with `bedrock: "false"`
+- `workspace_bedrock_model_patterns` lists the models workspaces may invoke (IAM wildcards)
+- `workspace_bedrock_inference_scope` is `geo` (requests stay in the region's geography) or `global`;
+  Codex has no geographic profile outside the US, so it needs `global` there
+- `workspace_app_claude_code_version` and `workspace_app_codex_version` pin the CLIs in the image;
+  each CLI's default model follows its version (Codex's is the one its release recommends for the
+  inference profile prefix, set at image build time)
+
+Verify from a workspace, headless (no first-run dialogs):
+
+```bash
+jd server exec --name <workspace-name> --scope <namespace> -- "claude -p 'Reply with OK'"
+jd server exec --name <workspace-name> --scope <namespace> -- "codex exec --skip-git-repo-check 'Reply with OK'"
+```
+
+IMPORTANT: in an account that never used a model, the first invocation enables it, through an AWS
+Marketplace subscription that the workspace roles cannot start, and accepts the model provider's
+EULA. Anthropic models also need a one-time first-time-use form with the deployer's company details.
+These are the deployer's decisions: point the user to TROUBLESHOOT.md, and never invoke a model,
+accept an agreement or submit the form on their behalf.
+
+Credentials reach a workspace at creation: a workspace older than its namespace's Bedrock
+configuration must be recreated, not restarted.
+
 ### View the full terraform logs
 
 {{ history-logs-instructions }}
@@ -158,6 +188,12 @@ tag variable (e.g. `workspace_app_jupyterlab_image_build`): the rebuild otherwis
 tag, which nodes with a cached layer do not re-pull. A new tag reaches NEW workspaces only —
 `Workspace.spec.image` is pinned at creation time, so existing workspaces keep the image they were
 created with until that field is patched or the workspace is recreated.
+
+The JupyterLab image installs the coding agent CLIs at the versions passed as Docker build args
+(`workspace_app_claude_code_version`, `workspace_app_codex_version`), with their system configs in
+`jupyterlab/claude-managed-settings.json` and `jupyterlab/codex-config.toml` (copied under `/etc`,
+since `/home/jovyan` is the data volume). Codex's model is rendered into its config at build time
+from the installed release's own catalog (`codex debug models`, see `pick-codex-model.py`).
 
 ### Charts directory
 

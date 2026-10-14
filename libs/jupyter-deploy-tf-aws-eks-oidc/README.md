@@ -245,6 +245,7 @@ The template creates several IAM roles:
 - **Node roles** — One per node group, with managed policies for ECR pull, EKS worker nodes, and CNI
 - **Pod identity associations** — external-dns uses EKS Pod Identity for Route 53 access
 - **Admin access entries** — The template always authorizes the caller's IAM principal. Roles in `admin_role_names` and users in `admin_user_names` get cluster admin and workspace admin permissions. For stable state across caller switches, list every role/user that may run `jd config` or `jd up`
+- **Workspace Bedrock roles** — One per workspace namespace with Bedrock access, bound to the namespace's `workspace` service account through EKS Pod Identity, so Claude Code and Codex work in workspaces with no setup
 
 ### Helm charts
 
@@ -319,6 +320,11 @@ The template provides two variable presets:
 | workspace_app_jupyterlab_app_type | `string` | `jupyterlab` | Application type identifier for the workspace template |
 | workspace_app_jupyterlab_image_name | `string` | See preset | ECR repository name for the JupyterLab image |
 | workspace_app_jupyterlab_image_build | `string` | `v1` | Build tag (increment to trigger rebuild) |
+| workspace_app_claude_code_version | `string` | See preset | Claude Code version installed in the JupyterLab image |
+| workspace_app_codex_version | `string` | See preset | Codex CLI version installed in the JupyterLab image |
+| workspace_bedrock_enabled | `bool` | `true` | Give workspaces Bedrock credentials for Claude Code and Codex; a `workspace_namespaces` entry opts out with `bedrock = "false"` |
+| workspace_bedrock_inference_scope | `string` | `geo` | Inference profiles workspaces use: `geo` (requests stay in the region's geography) or `global` |
+| workspace_bedrock_model_patterns | `list(string)` | `["anthropic.claude-*", "openai.gpt-*"]` | Bedrock model IDs workspaces may invoke (IAM wildcards) |
 | workspace_templates | `list(map(string))` | `[]` | Named workspace template configs that pool entries offer as cards via their `templates` key |
 | enable_default_gpu_pool | `bool` | `false` | Append the built-in `workspace-gpu` entry and its `jupyterlab-gpu` template config; combining it with your own accelerator entries raises a plan-time error |
 | nvidia_device_plugin_version | `string` | `0.20.1` | Version of the NVIDIA device plugin chart (the template installs it when any pool entry sets `accelerator = "nvidia"`) |
@@ -343,6 +349,7 @@ The template provides two variable presets:
 | `secret_arn` | ARN of the Secrets Manager secret storing the OAuth app client secret |
 | `jupyterlab_image_uri` | ECR image URI for the JupyterLab workspace image |
 | `kubeconfig_path` | Path to the local kubeconfig file for this cluster |
+| `workspace_bedrock_roles` | JSON-encoded map of workspace namespace to the IAM role granting its workspaces Bedrock |
 | `acm_certificate_arn` | ARN of the ACM certificate for the deployment domain |
 
 ## License
