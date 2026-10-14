@@ -12,7 +12,7 @@ locals {
   source_hash  = sha256(join("", [for f in local.source_files : filesha256("${var.source_dir}/${f}")]))
 
   # Sorted so the rendered command, and the build trigger, are stable.
-  build_arg_flags = join(" ", [for k in sort(keys(var.build_args)) : "--build-arg ${k}=${var.build_args[k]}"])
+  build_arg_flags = join(" ", [for k in sort(keys(var.build_args)) : "--build-arg \"${k}=${var.build_args[k]}\""])
 
   buildspec = <<-YAML
     version: 0.2
