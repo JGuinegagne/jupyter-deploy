@@ -20,8 +20,11 @@ locals {
   # as Claude Code derives it from AWS_REGION. Pinned on both clients
   # (ANTHROPIC_BEDROCK_REGION_PREFIX, the Codex model) so they and the IAM grants
   # cannot diverge.
+  # Empty outside the commercial and GovCloud partitions: the isolated ones (e.g.
+  # us-iso-*) have no cross-region inference profiles.
   workspace_bedrock_geo_prefix = (
-    startswith(var.region, "us-gov-") ? "us-gov" :
+    data.aws_partition.current.partition == "aws-us-gov" ? "us-gov" :
+    data.aws_partition.current.partition != "aws" ? "" :
     startswith(var.region, "us-") ? "us" :
     startswith(var.region, "eu-") ? "eu" :
     startswith(var.region, "ap-") ? "apac" : ""
@@ -37,6 +40,12 @@ locals {
       : "${substr("${local.resource_name_prefix}-ws-bedrock-${ns}", 0, 55)}-${substr(sha1(ns), 0, 8)}"
     )
   }
+
+  # Codex only reaches OpenAI models, which a pattern must allow. A literal prefix
+  # check: patterns like "op*" are not worth a glob engine.
+  workspace_bedrock_codex_allowed = anytrue([
+    for p in var.workspace_bedrock_model_patterns : startswith(p, "openai") || startswith(p, "*")
+  ])
 
   workspace_bedrock_env = [
     { name = "AWS_REGION", value = var.region },
@@ -84,16 +93,24 @@ data "aws_iam_policy_document" "workspace_bedrock" {
     }
   }
 
-  # Model discovery (Claude Code's /model).
+  # Model discovery (Claude Code's /model). Listing takes "*"; reads are limited to
+  # the granted profiles and models, so a workspace cannot read other teams'
+  # application inference profiles.
   statement {
-    sid = "DiscoverModels"
-    actions = [
-      "bedrock:ListFoundationModels",
-      "bedrock:GetFoundationModel",
-      "bedrock:ListInferenceProfiles",
-      "bedrock:GetInferenceProfile",
-    ]
+    sid       = "ListModels"
+    actions   = ["bedrock:ListFoundationModels", "bedrock:ListInferenceProfiles"]
     resources = ["*"]
+  }
+
+  statement {
+    sid     = "GetGrantedModels"
+    actions = ["bedrock:GetFoundationModel", "bedrock:GetInferenceProfile"]
+    resources = concat(local.workspace_bedrock_profile_arns, flatten([
+      for p in var.workspace_bedrock_model_patterns : [
+        "arn:${data.aws_partition.current.partition}:bedrock:*::foundation-model/${p}",
+        "arn:${data.aws_partition.current.partition}:bedrock:::foundation-model/${p}",
+      ]
+    ]))
   }
 }
 
@@ -115,6 +132,29 @@ resource "aws_iam_role_policy" "workspace_bedrock" {
   policy = data.aws_iam_policy_document.workspace_bedrock.json
 }
 
+# The operator rejects every Workspace created without a service account in a
+# namespace holding two SAs with the default label. Read the labeled SAs each plan
+# and refuse to add ours next to someone else's.
+data "kubernetes_resources" "labeled_service_accounts" {
+  for_each = toset(local.workspace_ns_names)
+
+  api_version    = "v1"
+  kind           = "ServiceAccount"
+  namespace      = each.key
+  label_selector = "workspace.jupyter.org/default-service-account=true"
+
+  depends_on = [helm_release.jupyter_k8s]
+}
+
+locals {
+  # "<namespace>/<name>" of default-labeled SAs this deployment does not own.
+  workspace_foreign_default_sas = flatten([
+    for ns, d in data.kubernetes_resources.labeled_service_accounts : [
+      for sa in d.objects : "${ns}/${sa.metadata.name}" if sa.metadata.name != local.workspace_service_account
+    ]
+  ])
+}
+
 resource "kubernetes_service_account_v1" "workspace" {
   for_each = toset(local.workspace_ns_names)
 
@@ -129,8 +169,17 @@ resource "kubernetes_service_account_v1" "workspace" {
 
   lifecycle {
     precondition {
-      condition     = !var.workspace_bedrock_enabled || local.workspace_bedrock_profile_prefix != ""
+      condition     = length(local.workspace_foreign_default_sas) == 0
+      error_message = "service accounts labeled workspace.jupyter.org/default-service-account=true already exist, and the operator rejects workspaces in a namespace with two: ${join(", ", local.workspace_foreign_default_sas)}. Remove the label from them."
+    }
+    precondition {
+      condition     = length(local.workspace_bedrock_namespaces) == 0 || local.workspace_bedrock_profile_prefix != ""
       error_message = "${var.region} has no geographic Bedrock inference profiles: set workspace_bedrock_inference_scope to \"global\", or disable workspace_bedrock_enabled."
+    }
+    precondition {
+      # Global profiles route to commercial regions only.
+      condition     = var.workspace_bedrock_inference_scope != "global" || data.aws_partition.current.partition == "aws"
+      error_message = "workspace_bedrock_inference_scope \"global\" is only available in the commercial AWS partition, not ${data.aws_partition.current.partition}: use \"geo\"."
     }
   }
 
@@ -151,7 +200,7 @@ resource "aws_eks_pod_identity_association" "workspace_bedrock" {
 # Bedrock offers the OpenAI models through US and global inference profiles only.
 check "workspace_bedrock_codex_profile" {
   assert {
-    condition     = !var.workspace_bedrock_enabled || contains(["us", "global"], local.workspace_bedrock_profile_prefix)
-    error_message = "Bedrock has no ${local.workspace_bedrock_profile_prefix}.openai.* inference profiles, so Codex cannot reach its model from ${var.region}; set workspace_bedrock_inference_scope to \"global\" to use Codex. Claude Code is unaffected."
+    condition     = length(local.workspace_bedrock_namespaces) == 0 || !local.workspace_bedrock_codex_allowed || contains(["us", "global"], local.workspace_bedrock_profile_prefix)
+    error_message = "Bedrock has no ${local.workspace_bedrock_profile_prefix}.openai.* inference profiles, so Codex cannot reach its model from ${var.region}; outside GovCloud, set workspace_bedrock_inference_scope to \"global\" to use Codex. Claude Code is unaffected."
   }
 }
