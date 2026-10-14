@@ -19,6 +19,8 @@ accessStrategy:
 #   nodeSelector/tolerations                                 - placement; must match
 #     the role of the Karpenter pool the template targets
 #   readinessProbe/idleShutdown                              - probe + idle policy
+#   baseEnv                                                  - optional env vars
+#     (name/value list) added to every workspace from the template
 workspaceTemplates:
   - name: jupyterlab
     namespace: default

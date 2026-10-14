@@ -39,6 +39,10 @@ spec:
     failureThreshold: {{ .readinessProbe.failureThreshold }}
   defaultPodSecurityContext:
     fsGroup: 1000
+  {{- with .baseEnv }}
+  baseEnv:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   defaultNodeSelector:
     {{- .nodeSelector | toYaml | nindent 4 }}
   defaultTolerations:
