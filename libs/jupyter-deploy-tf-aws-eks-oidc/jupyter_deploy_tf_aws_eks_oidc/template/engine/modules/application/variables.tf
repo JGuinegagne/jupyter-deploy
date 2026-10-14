@@ -33,3 +33,9 @@ variable "region" {
 variable "combined_tags" {
   type = map(string)
 }
+
+variable "build_args" {
+  description = "Docker build args; changing one rebuilds the image."
+  type        = map(string)
+  default     = {}
+}
