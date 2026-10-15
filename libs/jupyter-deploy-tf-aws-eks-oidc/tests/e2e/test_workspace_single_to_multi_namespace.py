@@ -28,7 +28,6 @@ from .constants import (
 pytestmark = [
     pytest.mark.usefixtures("kubernetes_cluster_login"),
     pytest.mark.mutating,
-    pytest.mark.full_deployment,
 ]
 
 WORKSPACE = "e2e-ns-single-to-multi"
