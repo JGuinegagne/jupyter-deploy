@@ -44,6 +44,10 @@ The template optionally creates infrastructure for building custom workspace ima
 
 The template builds the JupyterLab application image automatically on first deploy when `workspace_app_jupyterlab_use = true`.
 
+The JupyterLab image ships the Claude Code and Codex CLIs, at the versions pinned by
+`workspace_app_claude_code_version` and `workspace_app_codex_version`. Both call Amazon
+Bedrock with the workspace's own credentials; see [Bedrock access](#bedrock-access).
+
 ## Access and Permissions
 
 Two layers govern access to the cluster: **IAM** controls who can reach the
@@ -60,6 +64,30 @@ The template creates several IAM roles:
 - **Node roles** — One per node group, with managed policies for ECR pull, EKS worker nodes, and CNI.
 - **Pod identity associations** — external-dns uses EKS Pod Identity for Route 53 access.
 - **Admin access entries** — The template always authorizes the caller's IAM principal; roles in `admin_role_names` and users in `admin_user_names` get cluster admin permissions and workspace admin group membership.
+- **Workspace Bedrock roles** — One per workspace namespace with Bedrock access, bound to the namespace's `workspace` service account through EKS Pod Identity; see [Bedrock access](#bedrock-access).
+
+### Bedrock access
+
+When `workspace_bedrock_enabled = true`, workspaces get AWS credentials limited to
+invoking Amazon Bedrock models, so that `claude` and `codex` work in a workspace terminal
+with no setup:
+
+- Every workspace namespace holds a `workspace` service account, which the operator
+  assigns to each new workspace. Workspaces created before it existed keep the `default`
+  service account and get no credentials until recreated.
+- Each namespace with Bedrock gets its own IAM role, so CloudTrail attributes calls to
+  the team's namespace. A `workspace_namespaces` entry opts out with `bedrock = "false"`.
+- The role may invoke the models matching `workspace_bedrock_model_patterns`, only
+  through the cross-region inference profiles of `workspace_bedrock_inference_scope`:
+  `geo` keeps requests in the deployment region's geography (e.g. `us.` profiles),
+  `global` lets Bedrock serve them from any region. Bedrock offers the OpenAI models
+  through `us.` and `global.` profiles only, so Codex needs `global` outside the US.
+- Changes reach a workspace on its next start.
+
+In an account that never used a model, the first invocation enables it through an AWS
+Marketplace subscription, which the workspace roles cannot start: an admin invokes each model
+once first (and submits Anthropic's one-time first-time-use form). The project's
+`TROUBLESHOOT.md` walks through it.
 
 ## Helm charts
 
@@ -176,6 +204,11 @@ The template provides two variable presets:
 | workspace_app_jupyterlab_app_type | `string` | `jupyterlab` | Application type identifier for the workspace template |
 | workspace_app_jupyterlab_image_name | `string` | See preset | ECR repository name for the JupyterLab image |
 | workspace_app_jupyterlab_image_build | `string` | `v1` | Build tag (increment to trigger rebuild) |
+| workspace_app_claude_code_version | `string` | See preset | Claude Code version installed in the JupyterLab image |
+| workspace_app_codex_version | `string` | See preset | Codex CLI version installed in the JupyterLab image |
+| workspace_bedrock_enabled | `bool` | `true` | Give workspaces Bedrock credentials for Claude Code and Codex; a `workspace_namespaces` entry opts out with `bedrock = "false"` |
+| workspace_bedrock_inference_scope | `string` | `geo` | Inference profiles workspaces use: `geo` (requests stay in the region's geography) or `global` |
+| workspace_bedrock_model_patterns | `list(string)` | `["anthropic.claude-*", "openai.gpt-*"]` | Bedrock model IDs workspaces may invoke (IAM wildcards) |
 | workspace_templates | `list(map(string))` | `[]` | Named workspace template configs that pool entries offer as cards via their `templates` key |
 | enable_default_gpu_pool | `bool` | `false` | Append the built-in `workspace-gpu` entry and its `jupyterlab-gpu` template config; combining it with your own accelerator entries raises a plan-time error |
 | nvidia_device_plugin_version | `string` | `0.20.1` | Version of the NVIDIA device plugin chart (the template installs it when any pool entry sets `accelerator = "nvidia"`) |
@@ -200,4 +233,5 @@ The template provides two variable presets:
 | `secret_arn` | ARN of the Secrets Manager secret storing the OAuth app client secret |
 | `jupyterlab_image_uri` | ECR image URI for the JupyterLab workspace image |
 | `kubeconfig_path` | Path to the local kubeconfig file for this cluster |
+| `workspace_bedrock_roles` | JSON-encoded map of workspace namespace to the IAM role granting its workspaces Bedrock |
 | `acm_certificate_arn` | ARN of the ACM certificate for the deployment domain |

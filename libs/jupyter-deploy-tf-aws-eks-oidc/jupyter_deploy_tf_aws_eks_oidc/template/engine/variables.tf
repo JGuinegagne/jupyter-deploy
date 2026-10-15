@@ -549,7 +549,7 @@ variable "node_expire_after" {
 
 variable "workspace_namespaces" {
   description = <<-EOT
-    Kubernetes namespaces for workspaces, each with the GitHub teams allowed to use it. Keys: name, teams, templates.
+    Kubernetes namespaces for workspaces, each with the GitHub teams allowed to use it. Keys: name, teams, templates, bedrock.
 
     Leave empty to use a single namespace: every workspace lives in "default",
     and every team in oauth_allowed_teams may create workspaces there.
@@ -576,11 +576,14 @@ variable "workspace_namespaces" {
       templates - comma-separated workspace_templates config names offered in this
                   namespace, on top of the built-in "jupyterlab" template; each
                   config must be offered by a workspace_nodepools entry
+      bedrock   - "false" to withhold Bedrock credentials from this namespace's
+                  workspaces when workspace_bedrock_enabled is true (default "true")
 
     Example:
       workspace_namespaces = [
         { name = "default", teams = "my-org:platform" },
         { name = "team-ml", teams = "my-org:ml,my-org:research", templates = "jupyterlab-gpu" },
+        { name = "guests", teams = "my-org:guests", bedrock = "false" },
       ]
   EOT
   type        = list(map(string))
@@ -588,9 +591,16 @@ variable "workspace_namespaces" {
   validation {
     condition = alltrue([
       for e in var.workspace_namespaces :
-      length(setsubtract(keys(e), ["name", "teams", "templates"])) == 0
+      length(setsubtract(keys(e), ["name", "teams", "templates", "bedrock"])) == 0
     ])
-    error_message = "Each workspace_namespaces entry may only set the keys name, teams and templates."
+    error_message = "Each workspace_namespaces entry may only set the keys name, teams, templates and bedrock."
+  }
+
+  validation {
+    condition = alltrue([
+      for e in var.workspace_namespaces : contains(["true", "false"], lookup(e, "bedrock", "true"))
+    ])
+    error_message = "workspace_namespaces bedrock must be \"true\" or \"false\"."
   }
 
   validation {
@@ -1021,11 +1031,12 @@ variable "workspace_app_jupyterlab_image_name" {
   description = <<-EOT
     The ECR repository name for the JupyterLab workspace image.
 
-    Changing this value creates a new ECR repository. Use the convention
-    'jupyterlab-v<version>' so that version upgrades produce a new repo
-    while keeping previous images available for running workspaces.
+    Changing this value creates a new ECR repository. The default,
+    'jupyterlab-v<template version>', follows each template release, so an
+    upgrade builds into a new repo while previous images stay available for
+    running workspaces.
 
-    Example: jupyterlab-v1.0.0
+    Example: jupyterlab-v0.4.0
   EOT
   type        = string
 }
@@ -1040,4 +1051,105 @@ variable "workspace_app_jupyterlab_image_build" {
     Example: v1
   EOT
   type        = string
+}
+
+variable "workspace_app_claude_code_version" {
+  description = <<-EOT
+    The Claude Code version installed in the JupyterLab workspace image.
+
+    Changing it rebuilds the image; workspaces pick up the new build on their
+    next start once you also increment workspace_app_jupyterlab_image_build.
+
+    Example: 2.1.287
+  EOT
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.workspace_app_claude_code_version))
+    error_message = "workspace_app_claude_code_version must be an exact version (e.g. 2.1.287)."
+  }
+}
+
+variable "workspace_app_codex_version" {
+  description = <<-EOT
+    The Codex CLI version installed in the JupyterLab workspace image.
+
+    Changing it rebuilds the image; workspaces pick up the new build on their
+    next start once you also increment workspace_app_jupyterlab_image_build.
+
+    Example: 0.162.1
+  EOT
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.workspace_app_codex_version))
+    error_message = "workspace_app_codex_version must be an exact version (e.g. 0.162.1)."
+  }
+}
+
+variable "workspace_bedrock_enabled" {
+  description = <<-EOT
+    Whether workspaces get AWS credentials to call Amazon Bedrock, so that Claude
+    Code and Codex work out of the box in a workspace terminal.
+
+    When enabled, each workspace namespace gets its own IAM role, limited to
+    Bedrock inference on the models matching workspace_bedrock_model_patterns,
+    and bound to the namespace's workspace service account via EKS Pod Identity.
+    A workspace_namespaces entry may opt its namespace out with bedrock = "false".
+
+    Bedrock enables a model on its first invocation in the account, which takes AWS
+    Marketplace permissions the workspace roles do not have: invoke each model once as
+    an admin (e.g. in the Bedrock console playground) before users do. Anthropic models
+    also require the one-time first-time-use form.
+    Workspaces pick up a change on their next start.
+
+    Recommended: true
+  EOT
+  type        = bool
+}
+
+variable "workspace_bedrock_inference_scope" {
+  description = <<-EOT
+    Where Bedrock may serve Claude requests from workspaces.
+
+    "geo" uses the cross-region inference profiles of the deployment region's
+    geography (e.g. us.anthropic.* in us-west-2): requests stay within that geography.
+    "global" uses the global inference profiles (global.anthropic.*): more capacity,
+    but requests may be served from any commercial region.
+
+    Bedrock offers the OpenAI models through US and global inference profiles only:
+    outside the US, Codex needs "global".
+
+    Recommended: geo
+  EOT
+  type        = string
+
+  validation {
+    condition     = contains(["geo", "global"], var.workspace_bedrock_inference_scope)
+    error_message = "workspace_bedrock_inference_scope must be \"geo\" or \"global\"."
+  }
+}
+
+variable "workspace_bedrock_model_patterns" {
+  description = <<-EOT
+    Bedrock model IDs workspaces may invoke, as IAM wildcard patterns without the
+    inference profile prefix (e.g. "anthropic.claude-sonnet-*").
+
+    Covers both Claude Code (anthropic.*) and Codex (openai.*) models. Claude Code picks
+    its default model per release, which the patterns must keep allowed; Codex uses the
+    best model its release offers among the allowed ones.
+
+    Example: ["anthropic.claude-*", "openai.gpt-*"]
+  EOT
+  type        = list(string)
+
+  validation {
+    condition     = length(var.workspace_bedrock_model_patterns) > 0
+    error_message = "workspace_bedrock_model_patterns must list at least one pattern; disable workspace_bedrock_enabled to grant none."
+  }
+
+  validation {
+    condition     = alltrue([for p in var.workspace_bedrock_model_patterns : can(regex("^[a-z0-9][a-z0-9.*:-]*$", p))])
+    error_message = "workspace_bedrock_model_patterns entries must be model IDs or IAM wildcards (lowercase letters, digits, '.', '-', ':', '*'), without an inference profile prefix or ARN."
+  }
 }

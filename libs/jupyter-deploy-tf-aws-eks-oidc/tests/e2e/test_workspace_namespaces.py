@@ -11,6 +11,8 @@ import os
 from typing import Any
 
 import pytest
+from pytest_jupyter_deploy.cli import JDCliError
+from pytest_jupyter_deploy.coding_agents import CANARY, ask_claude_code, ask_codex
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
 from pytest_jupyter_deploy.kubernetes.kubectl import run_kubectl
 from pytest_jupyter_deploy.kubernetes.namespace import temporary_namespace
@@ -261,6 +263,41 @@ def test_plan_time_validation(
 
 
 @pytest.mark.order(ORDER_NAMESPACES + 9)
+@skip_if_testvars_not_set(NS_REQUIRED_VARS)
+def test_coding_agents_answer_only_in_bedrock_enabled_namespaces(
+    e2e_deployment: EndToEndDeployment, mapped: dict[str, Any]
+) -> None:
+    """Claude Code and Codex answer in a Bedrock-enabled namespace, and fail in an opted-out one.
+
+    The base mapping leaves Bedrock on in e2e-ns-a (no bedrock key) and opts e2e-ns-b out with
+    bedrock = "false". Both namespaces hold the labeled workspace service account, but only
+    e2e-ns-a binds it to an IAM role through EKS Pod Identity, so only its workspaces get
+    AWS credentials. The agents are prompted headless; their TUIs are covered by
+    test_workspace_coding_agents.
+    """
+    names = {NS_A: "e2e-ns-bedrock-a", NS_B: "e2e-ns-bedrock-b"}
+    try:
+        # Created after the mapping is applied: the operator assigns the service account
+        # and the template env at creation only.
+        for name in names.values():
+            kubectl_apply_workspace(name, WORKSPACES_DIR, as_user=_user(), as_groups=_group(_rbac_team()))
+        for ns, name in names.items():
+            kubectl_poll_workspace_status(name, "Running", namespace=ns, timeout_s=NS_RUNNING_TIMEOUT_S)
+            e2e_deployment.cli.wait_for_workspace_pod_exec_ready(name, scope=ns, timeout_s=60)
+
+        for ask in (ask_claude_code, ask_codex):
+            # Positive: the Bedrock-enabled namespace's workspace gets the model's answer.
+            assert CANARY in ask(e2e_deployment, name=names[NS_A], scope=NS_A)
+            # Negative: without credentials the agent exits non-zero. Its error text is not
+            # asserted on: it varies across CLI releases.
+            with pytest.raises(JDCliError):
+                ask(e2e_deployment, name=names[NS_B], scope=NS_B)
+    finally:
+        for ns, name in names.items():
+            kubectl_delete_workspace(name, namespace=ns)
+
+
+@pytest.mark.order(ORDER_NAMESPACES + 10)
 @skip_if_testvars_not_set(NS_REQUIRED_VARS)
 def test_web_app_follows_mapping_change(
     e2e_deployment: EndToEndDeployment,

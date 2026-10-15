@@ -206,6 +206,9 @@ locals {
       { key = "jupyter-deploy/role", operator = "Equal", value = "workspaces", effect = "NoSchedule" }
     ]
     readinessProbe = { port = 8888, initialDelaySeconds = 2, periodSeconds = 3, failureThreshold = 30 }
+    # Bedrock client config (workspace_bedrock.tf); set in every namespace, as
+    # the clients only lack credentials where Bedrock is off.
+    baseEnv = local.workspace_bedrock_env
     idleShutdown = {
       enabled           = var.workspaces_idle_shutdown_enabled
       timeoutMinutes    = var.workspaces_idle_shutdown_timeout_default
@@ -288,6 +291,7 @@ locals {
         { key = "jupyter-deploy/role", operator = "Equal", value = b.role, effect = "NoSchedule" }
       ]
       readinessProbe = { port = 8888, initialDelaySeconds = 2, periodSeconds = 3, failureThreshold = 30 }
+      baseEnv        = local.jupyterlab_template_values.baseEnv
       idleShutdown = {
         enabled           = var.workspaces_idle_shutdown_enabled
         timeoutMinutes    = tonumber(lookup(b.config, "idle_minutes", var.workspaces_idle_shutdown_timeout_default))

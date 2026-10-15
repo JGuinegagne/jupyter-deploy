@@ -12,6 +12,7 @@ from pytest_jupyter_deploy.plugin import handle_browser_context_args
 from pytest_jupyter_deploy.workspaces.kubectl import (
     kubectl_apply_workspace,
     kubectl_delete_workspace,
+    kubectl_poll_workspace_status,
 )
 from pytest_jupyter_deploy.workspaces.template import get_min_idle_timeout, set_min_idle_timeout
 
@@ -29,6 +30,7 @@ from .constants import (
     NS_SMALL_TEMPLATE_CONFIG,
     ROUTER_NAMESPACE,
     SEEDED_WORKSPACES,
+    WORKSPACE_NAMESPACE,
     WORKSPACES_DIR,
 )
 
@@ -184,16 +186,58 @@ def relaxed_idle_floor(kubernetes_cluster_login: None, default_workspace_namespa
         set_min_idle_timeout(DEFAULT_WORKSPACE_TEMPLATE, default_workspace_namespace, original)
 
 
+@pytest.fixture(scope="module")
+def coding_agents_workspace(
+    e2e_deployment: EndToEndDeployment, kubernetes_cluster_login: None
+) -> Generator[str, None, None]:
+    """A workspace created in the default namespace once Bedrock is enabled there.
+
+    Enables Bedrock first if the deployment has it off, globally or for the default
+    namespace's entry. The workspace is created afterwards because the operator only
+    assigns the service account and the template env at creation: a workspace older
+    than the configuration would never get credentials.
+    """
+    e2e_deployment.ensure_deployed()
+    enabled = e2e_deployment.get_bool_variable_value("workspace_bedrock_enabled")
+    namespaces = e2e_deployment.get_list_of_maps_variable_value("workspace_namespaces")
+    opted_out = any(e["name"] == WORKSPACE_NAMESPACE and e.get("bedrock") == "false" for e in namespaces)
+    # Not a mutating case, though this branch redeploys and does not restore: Bedrock in the
+    # default namespace is the template's default, so this only puts back the configuration
+    # the tests are written against. CI deployments never take it; it catches a local project
+    # whose owner turned Bedrock off, which would otherwise fail every case below.
+    if not enabled or opted_out:
+        overrides: dict[str, Any] = {"workspace_bedrock_enabled": True}
+        if opted_out:
+            overrides["workspace_namespaces"] = [
+                {k: v for k, v in e.items() if not (e["name"] == WORKSPACE_NAMESPACE and k == "bedrock")}
+                for e in namespaces
+            ]
+        e2e_deployment.ensure_deployed_with_overrides(overrides)
+
+    name = "e2e-coding-agents"
+    kubectl_apply_workspace(name, WORKSPACES_DIR)
+    try:
+        kubectl_poll_workspace_status(name, "Running", namespace=WORKSPACE_NAMESPACE, timeout_s=600)
+        e2e_deployment.cli.wait_for_workspace_pod_exec_ready(name, scope=WORKSPACE_NAMESPACE, timeout_s=60)
+        yield name
+    finally:
+        kubectl_delete_workspace(name, namespace=WORKSPACE_NAMESPACE)
+
+
 # ── Workspace namespaces ──────────────────────────────────────────────────────
 
 # The variables the workspace-namespace modules rewrite.
 _NAMESPACE_MAPPING_VARIABLES = ["workspace_namespaces", "workspace_templates", "workspace_nodepools"]
 
 
-def _namespace_entry(name: str, teams: list[str], templates: list[str] | None = None) -> dict[str, str]:
+def _namespace_entry(
+    name: str, teams: list[str], templates: list[str] | None = None, bedrock: bool = True
+) -> dict[str, str]:
     entry = {"name": name, "teams": ",".join(dict.fromkeys(teams))}
     if templates:
         entry["templates"] = ",".join(templates)
+    if not bedrock:
+        entry["bedrock"] = "false"
     return entry
 
 
@@ -204,7 +248,7 @@ def namespace_base_values(e2e_deployment: EndToEndDeployment, restored_namespace
     - default:  every team in oauth_allowed_teams, keeping the cards the empty mapping
                 gives it, so its live workspaces keep their templates
     - e2e-ns-a: JD_E2E_RBAC_TEAM + a synthetic "only-a" team, also offering e2e-cpu-small
-    - e2e-ns-b: JD_E2E_RBAC_TEAM + a synthetic "only-b" team
+    - e2e-ns-b: JD_E2E_RBAC_TEAM + a synthetic "only-b" team, opted out of Bedrock
 
     Also allowlists the synthetic teams (incl. the #409 case's "only-default") in variables.yaml,
     after restored_namespace_mapping has snapshotted the deployment's own allowlist.
@@ -241,7 +285,7 @@ def namespace_base_values(e2e_deployment: EndToEndDeployment, restored_namespace
         "workspace_namespaces": [
             _namespace_entry("default", allowed_teams, list(dict.fromkeys(offered))),
             _namespace_entry(NS_A, [rbac_team, f"{org}:{NS_ONLY_A_TEAM}"], [NS_SMALL_TEMPLATE]),
-            _namespace_entry(NS_B, [rbac_team, f"{org}:{NS_ONLY_B_TEAM}"]),
+            _namespace_entry(NS_B, [rbac_team, f"{org}:{NS_ONLY_B_TEAM}"], bedrock=False),
         ],
     }
 

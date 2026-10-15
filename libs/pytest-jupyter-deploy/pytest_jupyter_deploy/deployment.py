@@ -633,6 +633,13 @@ class EndToEndDeployment:
         assert isinstance(value, str), f"Expected str, got {type(value)}"
         return value
 
+    def get_bool_variable_value(self, variable_name: str) -> bool:
+        """Call jupyter-deploy show CLI, return the parsed response as bool."""
+        result = self.cli.run_command(["jupyter-deploy", "show", "--variable", variable_name, "--text"])
+        output = result.stdout.strip().lower()
+        assert output in ("true", "false"), f"Expected a bool, got {output!r}"
+        return output == "true"
+
     def get_list_str_variable_value(self, variable_name: str) -> list[str]:
         """Call jupyter-deploy show CLI, return the parsed response as list[str]."""
         result = self.cli.run_command(["jupyter-deploy", "show", "--variable", variable_name, "--text"])
