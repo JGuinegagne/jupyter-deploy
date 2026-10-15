@@ -115,7 +115,7 @@ variable "oauth_allowed_teams" {
   EOT
   type        = list(string)
   validation {
-    condition     = alltrue([for t in var.oauth_allowed_teams : length(split(":", t)) == 2])
+    condition     = alltrue([for t in var.oauth_allowed_teams : can(regex("^[^:\\s]+:[^:\\s]+$", t))])
     error_message = "Each entry in oauth_allowed_teams must be in 'org:team' format."
   }
 }
@@ -562,7 +562,8 @@ variable "workspace_namespaces" {
 
     Removing or renaming a namespace deletes all resources in it, including workspaces.
     In order to prevent accidental data loss, a guard prevents removing a namespace with
-    an active workspace.
+    an active workspace. Removing a team from a namespace with workspaces only warns:
+    the workspaces stay, but their owners in that team lose access to them.
 
     Required keys per entry (all strings):
       name      - Kubernetes namespace (e.g. "team-ml"); unique across entries; must not
