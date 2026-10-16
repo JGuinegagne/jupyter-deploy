@@ -133,15 +133,9 @@ The template provides two variable presets:
 | aws | >= 6.0 |
 | kubernetes | >= 2.30 |
 | helm | >= 3.0 |
-
-## Providers
-
-| Name | Purpose |
-|---|---|
-| aws | AWS resource management |
-| kubernetes | Kubernetes resources (RBAC, namespaces) |
-| helm | Helm chart installation |
-| null | Provisioners for build triggers and health waits |
+| random | >= 3.0 |
+| time | >= 0.9 |
+| archive | >= 2.0 |
 
 ## Terraform Modules
 
