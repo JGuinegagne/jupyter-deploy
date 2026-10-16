@@ -1,12 +1,5 @@
 # Prerequisites
 
-## Installation
-
-- Install the **JupyterDeploy** CLI with the `aws` option: `uv add "jupyter-deploy[aws]"`
-- Install the **AWS EC2 Base** template: `uv add jupyter-deploy-tf-aws-ec2-base`
-
-If you use `pip` instead of `uv`, run `pip install "jupyter-deploy[aws]" jupyter-deploy-tf-aws-ec2-base`.
-
 ## AWS account
 The template needs to create AWS resources. Your local environment needs access to valid AWS credentials.
 
@@ -23,18 +16,19 @@ If you do not own a domain yet, you can buy one through Amazon Route 53 using th
 
 ## Setup a GitHub OAuth app
 
-The template gates access to your **JupyterLab** application with GitHub identities. You will need to create a GitHub OAuth app for this purpose.
+The template gates access to your **JupyterLab** application with GitHub identities. Log on to GitHub in your web browser, then create a new OAuth app using [this link](https://github.com/settings/applications/new). See the GitHub [documentation](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app) for details.
 
-First, log on to GitHub on your web browser, then use [this link](https://github.com/settings/applications/new) to create a new OAuth app.
+Next, configure the OAuth app:
 
-You can choose any name for the application; for example `jupyter-deploy-aws-base`.
+| Field | Value |
+|---|---|
+| Application name | any, e.g. `jupyter-deploy-aws-base` |
+| Homepage URL | `https://<subdomain>.<domain>` |
+| Authorization callback URL | `https://<subdomain>.<domain>/oauth2/callback` |
 
-Set `Homepage URL` to: `https://<subdomain>.<domain>`; for example `https://jupyterlab-app.<domain>`.
-`<domain>` corresponds to the domain above. You can choose any `<subdomain>` you like, but it must be a valid domain part (lowercase letters, digits, or hyphens).
+```{note}
+`<domain>` is your registered domain from above. Choose any `<subdomain>`, using lowercase letters, digits, or hyphens;
+the callback URL must match both exactly.
+```
 
-Set `Authorization callback URL` to: `https://<subdomain>.<domain>/oauth2/callback`.
-Make sure it matches the `<domain>` and `<subdomain>` exactly.
-
-In the next page, write down and save your app client ID. Generate an app client secret, and write it down as well.
-
-Refer to GitHub [documentation](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app) for more details.
+Finally, save the **client ID**, generate a **client secret**, and save that too. You will need them to run `jd config`.

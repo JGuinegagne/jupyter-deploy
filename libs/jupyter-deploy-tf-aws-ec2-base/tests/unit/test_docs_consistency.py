@@ -14,6 +14,7 @@ RAW_GITHUB_PREFIX = (
 
 
 _HEADING_RE = re.compile(r"^(#{3,6}) ")
+_ADMONITION_RE = re.compile(r"```\{(note|warning|important|tip)\}\n(.*?)\n```", re.DOTALL)
 
 
 def _promote_headings(line: str) -> str:
@@ -28,14 +29,30 @@ def _promote_headings(line: str) -> str:
     return line
 
 
+def _admonitions_to_blockquotes(text: str) -> str:
+    """Rewrite MyST admonitions as the `> **Kind:** ...` blockquotes PyPI can render.
+
+    The docs use fenced MyST admonitions (```{note}), which PyPI and GitHub display as
+    raw code blocks, so the README carries the same text as a blockquote instead.
+    """
+
+    def _to_blockquote(match: re.Match[str]) -> str:
+        kind = match.group(1).capitalize()
+        lines = match.group(2).strip("\n").splitlines()
+        return "\n".join([f"> **{kind}:** {lines[0]}"] + [f"> {line}" for line in lines[1:]])
+
+    return _ADMONITION_RE.sub(_to_blockquote, text)
+
+
 def _normalize(text: str) -> str:
     """Normalize markdown for comparison.
 
+    - Convert MyST admonitions to blockquotes
     - Promote all headings by one level (### -> ##, #### -> ###, etc.)
     - Replace absolute GitHub raw image URLs with relative paths
     - Strip trailing whitespace on each line
     """
-    lines = text.strip().splitlines()
+    lines = _admonitions_to_blockquotes(text.strip()).splitlines()
     normalized: list[str] = []
     for line in lines:
         line = line.rstrip()
