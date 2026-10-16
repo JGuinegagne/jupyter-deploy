@@ -14,6 +14,10 @@ These icons are used in architecture diagrams for documentation purposes.
 | `aws.svg` | Official AWS logo (orange smile mark) | AWS Trademark, permitted for architecture diagrams |
 | `dex.svg` | [dexidp/dex](https://github.com/dexidp/dex) | Apache 2.0 |
 | `kubernetes.svg` | [kubernetes/kubernetes](https://github.com/kubernetes/kubernetes) | Apache 2.0 |
+| `k8s-role.svg` | [kubernetes/community icons](https://github.com/kubernetes/community/tree/main/icons) | Apache 2.0 |
+| `k8s-crd.svg` | [kubernetes/community icons](https://github.com/kubernetes/community/tree/main/icons) | Apache 2.0 |
+| `k8s-sa.svg` | [kubernetes/community icons](https://github.com/kubernetes/community/tree/main/icons) | Apache 2.0 |
+| `k8s-user.svg` | [kubernetes/community icons](https://github.com/kubernetes/community/tree/main/icons) | Apache 2.0 |
 | `terraform.svg` | [hashicorp/terraform](https://github.com/hashicorp/terraform) | HashiCorp Trademark, permitted for architecture diagrams |
 | `codebuild.svg` | [AWS Architecture Icons](https://aws.amazon.com/architecture/icons/) via [weibeld/aws-icons-svg](https://github.com/weibeld/aws-icons-svg) | AWS Trademark, permitted for architecture diagrams |
 | `route53.svg` | [AWS Architecture Icons](https://aws.amazon.com/architecture/icons/) via [weibeld/aws-icons-svg](https://github.com/weibeld/aws-icons-svg) | AWS Trademark, permitted for architecture diagrams |
@@ -21,7 +25,9 @@ These icons are used in architecture diagrams for documentation purposes.
 | `eks.svg` | [AWS Architecture Icons](https://aws.amazon.com/architecture/icons/) via [weibeld/aws-icons-svg](https://github.com/weibeld/aws-icons-svg) | AWS Trademark, permitted for architecture diagrams |
 | `ec2.svg` | [AWS Architecture Icons](https://aws.amazon.com/architecture/icons/) via [weibeld/aws-icons-svg](https://github.com/weibeld/aws-icons-svg) | AWS Trademark, permitted for architecture diagrams |
 | `iam.svg` | [AWS Architecture Icons](https://aws.amazon.com/architecture/icons/) via [weibeld/aws-icons-svg](https://github.com/weibeld/aws-icons-svg) | AWS Trademark, permitted for architecture diagrams |
+| `iam-credentials.svg` | [AWS Architecture Icons](https://aws.amazon.com/architecture/icons/) via [weibeld/aws-icons-svg](https://github.com/weibeld/aws-icons-svg) | AWS Trademark, permitted for architecture diagrams |
 | `ebs.svg` | [AWS Architecture Icons](https://aws.amazon.com/architecture/icons/) via [weibeld/aws-icons-svg](https://github.com/weibeld/aws-icons-svg) | AWS Trademark, permitted for architecture diagrams |
 | `s3.svg` | [AWS Architecture Icons](https://aws.amazon.com/architecture/icons/) via [weibeld/aws-icons-svg](https://github.com/weibeld/aws-icons-svg) | AWS Trademark, permitted for architecture diagrams |
 | `ssm.svg` | [AWS Architecture Icons](https://aws.amazon.com/architecture/icons/) via [weibeld/aws-icons-svg](https://github.com/weibeld/aws-icons-svg) | AWS Trademark, permitted for architecture diagrams |
 | `internet-gateway.svg` | [AWS Architecture Icons](https://aws.amazon.com/architecture/icons/) via [weibeld/aws-icons-svg](https://github.com/weibeld/aws-icons-svg) | AWS Trademark, permitted for architecture diagrams |
+| `bedrock.svg` | [AWS Architecture Icons](https://aws.amazon.com/architecture/icons/) via [aws-samples/sample-aiml-security-assessment](https://github.com/aws-samples/sample-aiml-security-assessment) | AWS Trademark, permitted for architecture diagrams |
