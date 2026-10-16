@@ -30,7 +30,7 @@ before it can read private membership.
 ```
 
 Next, create a new OAuth app:
-- for your organization: 
+- for your organization:
 `Settings` → `Developer settings` → `OAuth Apps` → `New OAuth App`
 - for a personal app, log on to GitHub in your web browser, then use
 [this link](https://github.com/settings/applications/new).
@@ -47,7 +47,7 @@ Next, configure your OAuth app:
 | Homepage URL | `https://<subdomain>.<domain>` |
 | Authorization callback URL | `https://<subdomain>.<domain>/dex/callback` |
 
-Finally, save the **client ID**, generate a **client secret**, and save that too. You will need to run `jd config`.
+Finally, save the **client ID**, generate a **client secret**, and save that too. You will need them to run `jd config`.
 
 ```{note}
 The callback URL uses `/dex/callback` (not `/oauth2/callback` as in the base template),

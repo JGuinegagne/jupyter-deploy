@@ -38,25 +38,37 @@ If you do not own a domain yet, you can buy one through Amazon Route 53 using th
 
 ### Setup a GitHub OAuth app
 
-The template gates access to workspaces with GitHub identities via Dex as the OIDC provider. You will need to create a GitHub OAuth app for this purpose.
+The template gates access with GitHub identities. You grant access to **GitHub teams**, which must belong to your GitHub organization.
 
-First, log on to GitHub on your web browser, then use [this link](https://github.com/settings/applications/new) to create a new OAuth app.
+If you do not have a GitHub organization, you can create one using [this guide](https://docs.github.com/en/organizations/collaborating-with-groups-in-organizations/creating-a-new-organization-from-scratch).
 
-You can choose any name for the application; for example `jupyter-deploy-eks-oidc`.
+> **Note:** A personal app also works, but the organization may require
+> [third-party application approval](https://docs.github.com/en/organizations/managing-oauth-access-to-your-organizations-data/approving-oauth-apps-for-your-organization)
+> before it can read private membership.
 
-Set `Homepage URL` to: `https://<subdomain>.<domain>`; for example `https://workspaces.example.com`.
-`<domain>` corresponds to the domain above. You can choose any `<subdomain>` you like, but it must be a valid domain part (lowercase letters, digits, or hyphens).
+Next, create a new OAuth app:
+- for your organization:
+`Settings` → `Developer settings` → `OAuth Apps` → `New OAuth App`
+- for a personal app, log on to GitHub in your web browser, then use
+[this link](https://github.com/settings/applications/new).
 
-Set `Authorization callback URL` to: `https://<subdomain>.<domain>/dex/callback`.
-Make sure it matches the `<domain>` and `<subdomain>` exactly.
+See the
+GitHub [documentation](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app)
+for details.
 
-> **Note:** Make sure the callback URL ends in `/dex/callback`
+Next, configure your OAuth app:
 
-In the next page, write down and save your app client ID. Generate an app client secret, and write it down as well.
+| Field | Value |
+|---|---|
+| Application name | any, e.g. `jupyter-deploy-eks-oidc` |
+| Homepage URL | `https://<subdomain>.<domain>` |
+| Authorization callback URL | `https://<subdomain>.<domain>/dex/callback` |
 
-The `oauth_allowed_teams` variable grants access to GitHub teams, in `org:team` format. To grant an organization's teams access, create the OAuth app under that organization (`Settings → Developer settings → OAuth Apps`) so its owners can manage the app and the app can read team membership. See [Prerequisites](https://jupyter-deploy.readthedocs.io/en/latest/templates/aws-eks-oidc-template/prerequisites.html) for details.
+Finally, save the **client ID**, generate a **client secret**, and save that too. You will need them to run `jd config`.
 
-Refer to GitHub [documentation](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app) for more details.
+> **Note:** The callback URL uses `/dex/callback` (not `/oauth2/callback` as in the base template),
+> because authentication goes through Dex as the OIDC identity provider. It must match
+> your `<subdomain>` and `<domain>` exactly.
 
 ## Usage
 
@@ -72,6 +84,12 @@ Or with pip:
 ```bash
 pip install "jupyter-deploy[aws,k8s]" jupyter-deploy-tf-aws-eks-oidc
 ```
+
+`jupyter-deploy` also needs these tools installed locally; `jd config` prompts you to install any that are missing:
+[Terraform](https://developer.hashicorp.com/terraform/install) (>= 1.5.7),
+the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html),
+[kubectl](https://kubernetes.io/docs/tasks/tools/), [Helm](https://helm.sh/docs/intro/install/)
+and [yq](https://github.com/mikefarah/yq#install).
 
 ### Project setup
 ```bash
