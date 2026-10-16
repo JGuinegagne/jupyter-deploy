@@ -1,0 +1,86 @@
+{
+  "apiVersion": "workspace.jupyter.org/v1alpha1",
+  "kind": "Workspace",
+  "metadata": {
+    "annotations": {
+      "workspace.jupyter.org/created-by": "kubernetes-admin",
+      "workspace.jupyter.org/last-updated-by": "system:serviceaccount:jupyter-k8s-system:jupyter-k8s-controller-manager"
+    },
+    "generation": 1,
+    "labels": {
+      "workspace.jupyter.org/template-name": "custom-image-template",
+      "workspace.jupyter.org/template-namespace": "default"
+    },
+    "name": "gpu-workspace",
+    "namespace": "default"
+  },
+  "spec": {
+    "accessType": "Public",
+    "appType": "jupyterlab",
+    "desiredStatus": "Running",
+    "displayName": "GPU workspace",
+    "image": "nginx:latest",
+    "ownershipType": "Public",
+    "resources": {
+      "limits": {
+        "cpu": "500m",
+        "memory": "512Mi",
+        "nvidia.com/gpu": "1"
+      },
+      "requests": {
+        "cpu": "100m",
+        "memory": "128Mi",
+        "nvidia.com/gpu": "1"
+      }
+    },
+    "serviceAccountName": "default",
+    "storage": {
+      "mountPath": "/data",
+      "size": "1Gi"
+    },
+    "templateRef": {
+      "name": "custom-image-template"
+    }
+  },
+  "status": {
+    "conditions": [
+      {
+        "type": "Available",
+        "status": "False",
+        "reason": "WaitingForNode",
+        "message": "0/1 nodes are available: 1 Insufficient nvidia.com/gpu. preemption: 0/1 nodes are available: 1 No preemption victims found for incoming pod.",
+        "lastTransitionTime": "2026-10-16T01:36:59Z"
+      },
+      {
+        "type": "Progressing",
+        "status": "True",
+        "reason": "WaitingForNode",
+        "message": "0/1 nodes are available: 1 Insufficient nvidia.com/gpu. preemption: 0/1 nodes are available: 1 No preemption victims found for incoming pod.",
+        "lastTransitionTime": "2026-10-16T01:36:59Z"
+      },
+      {
+        "type": "Degraded",
+        "status": "False",
+        "reason": "NoError",
+        "message": "No errors detected",
+        "lastTransitionTime": "2026-10-16T01:36:59Z"
+      },
+      {
+        "type": "Stopped",
+        "status": "False",
+        "reason": "DesiredStateRunning",
+        "message": "Workspace is starting",
+        "lastTransitionTime": "2026-10-16T01:36:59Z"
+      },
+      {
+        "type": "Deleting",
+        "status": "False",
+        "reason": "DesiredStateRunning",
+        "message": "Workspace is starting",
+        "lastTransitionTime": "2026-10-16T01:36:59Z"
+      }
+    ],
+    "deploymentName": "workspace-gpu-workspace",
+    "serviceName": "workspace-gpu-workspace-service"
+  }
+}

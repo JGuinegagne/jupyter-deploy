@@ -23,8 +23,11 @@ jd server list --limit 20
 jd server list --limit 20 --continue-from TOKEN
 ```
 
-`jd server status` reports a single operational word derived from the Workspace's
-conditions: `Running`, `Starting`, `Stopping`, `Stopped`, or `Degraded`.
+`jd server status` prints one of `Running`, `Starting`, `Stopping`, `Stopped` or
+`Degraded`, derived from the Workspace's conditions. While a workspace starts, or
+after a start has failed, the template may add the current step or the failure
+reason in parentheses after the word. For the full detail, including each
+condition's `message`, use `jd server show --json`, which prints the whole Workspace.
 
 ```bash
 jd server status --name WORKSPACE-NAME --scope SCOPE
