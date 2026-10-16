@@ -38,7 +38,7 @@ def _admonitions_to_blockquotes(text: str) -> str:
 
     def _to_blockquote(match: re.Match[str]) -> str:
         kind = match.group(1).capitalize()
-        lines = match.group(2).strip("\n").splitlines()
+        lines = match.group(2).strip("\n").splitlines() or [""]
         return "\n".join([f"> **{kind}:** {lines[0]}"] + [f"> {line}" for line in lines[1:]])
 
     return _ADMONITION_RE.sub(_to_blockquote, text)
