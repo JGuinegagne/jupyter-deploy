@@ -51,6 +51,8 @@ prerequisites
 user-guide
 architecture
 web-ui
+team-isolation
+bedrock-integration
 autoscaling
 details
 ```
