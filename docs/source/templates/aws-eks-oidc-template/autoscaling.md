@@ -107,7 +107,7 @@ write the `workspace_templates` and `workspace_nodepools` entries directly. In e
 - `templates` lists the `workspace_templates` configs to offer as cards, each
   rendered as a workspace template pinned to the pool's role.
 
-Here is an example of a second GPU pool with its own card and idle workspace rule:
+Here is an example of a custom GPU pool with its own card and idle workspace rule:
 
 ```yaml
 workspace_templates:

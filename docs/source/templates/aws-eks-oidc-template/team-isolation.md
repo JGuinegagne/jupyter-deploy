@@ -6,7 +6,7 @@ Kubernetes namespace they can run workspaces:
 - `oauth_allowed_teams`: the GitHub teams that may sign in, each in `org:team` format.
 - `workspace_namespaces`: the Kubernetes namespaces where workspaces run.
 
-**Dex** rejects any users who does not belong to one of the teams listed in `oauth_allowed_teams`.
+**Dex** rejects any user who does not belong to one of the teams listed in `oauth_allowed_teams`.
 
 ![Team isolation](diagrams/team-isolation.svg)
 
@@ -31,13 +31,17 @@ overrides:
   oauth_allowed_teams:
     - my-org:ml
     - my-org:platform
+  enable_default_gpu_pool: true
   workspace_namespaces:
+    - name: default
+      teams: my-org:ml,my-org:platform
     - name: team-ml
       teams: my-org:ml
       templates: jupyterlab-gpu
-    - name: default
-      teams: my-org:ml,my-org:platform
 ```
+
+The `jupyterlab-gpu` template comes with the default GPU pool, which `enable_default_gpu_pool` turns on;
+see [AutoScaling](autoscaling.md).
 
 Users may create, manage and access workspaces in all the namespaces associated with their GitHub team.
 
