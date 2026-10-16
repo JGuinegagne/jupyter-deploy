@@ -23,8 +23,6 @@ cd my-eks-deployment
 jd init . -E terraform -P aws -I eks -T oidc
 ```
 
-Consider making `my-eks-deployment` a git repository.
-
 ## Configure and deploy
 
 ```bash
