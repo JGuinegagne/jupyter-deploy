@@ -1,0 +1,330 @@
+# EKS OIDC Template — Team Isolation (multiple workspace namespaces)
+
+vars: {
+  d2-config: {
+    layout-engine: elk
+  }
+}
+
+classes: {
+  box: {
+    shape: rectangle
+    style: {
+      bold: true
+      stroke-width: 3
+      font-size: 26
+    }
+  }
+
+
+
+  namespace: {
+    style: {
+      fill: "#dce8f5"
+      stroke: "#1565c0"
+      stroke-width: 2
+      stroke-dash: 3
+      bold: true
+      font-size: 26
+    }
+  }
+
+  workspace: {
+    shape: rectangle
+    icon: ../shared/icons/jupyter.svg
+    style: {
+      fill: "#bbdefb"
+      stroke: "#1565c0"
+      stroke-width: 2
+      font-size: 24
+    }
+  }
+
+  role: {
+    shape: image
+    icon: ../shared/icons/k8s-role.svg
+    width: 72
+    height: 72
+    style: {
+      bold: true
+      font-size: 22
+    }
+  }
+
+
+  template: {
+    shape: image
+    icon: ../shared/icons/k8s-crd.svg
+    width: 72
+    height: 72
+    style: {
+      bold: true
+      font-size: 22
+    }
+  }
+
+
+  identity: {
+    shape: rectangle
+    icon: ../shared/icons/k8s-user.svg
+    icon.near: center-left
+    label.near: center-right
+    width: 380
+    height: 120
+    style: {
+      fill: "#ffffff"
+      stroke: "#1565c0"
+      stroke-width: 2
+      font-size: 22
+      font: mono
+    }
+  }
+
+  row: {
+    style: {
+      fill: transparent
+      stroke-width: 0
+    }
+  }
+
+  member: {
+    style: {
+      font-size: 22
+      stroke: "#616161"
+      stroke-width: 2
+      stroke-dash: 3
+    }
+  }
+
+  green_flow: {
+    style: {
+      stroke: "#2e7d32"
+      stroke-width: 3
+      font-size: 24
+    }
+  }
+
+  red_flow: {
+    style: {
+      stroke: "#c62828"
+      stroke-width: 3
+      stroke-dash: 5
+      font-size: 24
+    }
+  }
+
+}
+
+direction: right
+
+# Column 1: GitHub users
+users: "" {
+  class: row
+
+  alice: "" {
+    class: row
+    icon: ../shared/icons/github.svg
+    icon.near: center-left
+    style.stroke-width: 0
+
+    id: |yaml
+        username: alice
+        orgs: my-org
+        teams:
+        - my-org:ml
+    | {style.font-size: 22}
+  }
+
+  bob: "" {
+    class: row
+    icon: ../shared/icons/github.svg
+    icon.near: center-left
+    style.stroke-width: 0
+
+    id: |yaml
+        username: bob
+        orgs: my-org
+        teams:
+        - my-org:ml
+    | {style.font-size: 22}
+  }
+
+  carol: "" {
+    class: row
+    icon: ../shared/icons/github.svg
+    icon.near: center-left
+    style.stroke-width: 0
+
+    id: |yaml
+        username: carol
+        orgs: my-org
+        teams:
+        - my-org:ml
+        - my-org:platform
+    | {style.font-size: 22}
+  }
+
+  dan: "" {
+    class: row
+    icon: ../shared/icons/github.svg
+    icon.near: center-left
+    style.stroke-width: 0
+
+    id: |yaml
+        username: dan
+        orgs: my-org
+        teams:
+        - my-org:interns
+    | {style.font-size: 22}
+  }
+}
+
+# Column 3: the cluster
+cluster: "EKS Cluster" {
+  style: {
+    fill: "#e3f2fd"
+    stroke: "#1565c0"
+    stroke-width: 3
+    bold: true
+    font-size: 26
+  }
+
+  router_ns: "jupyter-k8s-router" {
+    class: namespace
+
+    dex: "Dex" {
+      icon: ../shared/icons/dex.svg
+      icon.near: top-left
+      label.near: top-center
+      style: {
+        fill: "#bbdefb"
+        stroke: "#1565c0"
+        stroke-width: 3
+        bold: true
+        font-size: 26
+      }
+
+      allowlist: |yaml
+        allowed-teams:
+        - my-org:ml
+        - my-org:platform
+        - my-org:research
+      | {style.font-size: 22}
+    }
+  }
+
+  identities: "" {
+    style: {
+      fill: transparent
+      stroke-width: 0
+      bold: true
+      font-size: 24
+    }
+
+    alice: "" {
+      class: row
+      icon: ../shared/icons/k8s-user.svg
+      icon.near: center-left
+      style.stroke-width: 0
+
+      id: |yaml
+          username: github:alice
+          groups:
+          - github:my-org:ml
+      | {style.font-size: 22}
+    }
+    bob: "" {
+      class: row
+      icon: ../shared/icons/k8s-user.svg
+      icon.near: center-left
+      style.stroke-width: 0
+
+      id: |yaml
+          username: github:bob
+          groups:
+          - github:my-org:ml
+      | {style.font-size: 22}
+    }
+    carol: "" {
+      class: row
+      icon: ../shared/icons/k8s-user.svg
+      icon.near: center-left
+      style.stroke-width: 0
+
+      id: |yaml
+          username: github:carol
+          groups:
+          - github:my-org:ml
+          - github:my-org:platform
+      | {style.font-size: 22}
+    }
+  }
+
+  team_ml_ns: "team-ml" {
+    class: namespace
+    grid-rows: 2
+    grid-gap: 40
+
+    access: "" {
+      class: row
+      grid-columns: 2
+      grid-gap: 40
+
+      role: "Role\nml" {class: role}
+      template: "Template\njupyterlab" {class: template}
+    }
+
+    workspaces: "" {
+      class: row
+      grid-columns: 3
+      grid-gap: 40
+
+      ws_alice: "alice-ws" {class: workspace}
+      ws_bob: "bob-ws" {class: workspace}
+      ws_carol: "carol-ws" {class: workspace}
+    }
+  }
+
+  default_ns: "default" {
+    class: namespace
+    grid-rows: 2
+    grid-gap: 40
+
+    access: "" {
+      class: row
+      grid-columns: 2
+      grid-gap: 40
+
+      role: "Role\nplatform" {class: role}
+      template: "Template\njupyterlab" {class: template}
+    }
+
+    workspaces: "" {
+      class: row
+      grid-columns: 1
+
+      ws_carol: "carol-ws" {class: workspace}
+    }
+  }
+}
+
+# Sign-in: Dex reads each user's teams, then admits only the allowlisted ones
+users.alice.id -> cluster.router_ns.dex: "" {class: green_flow}
+users.bob.id -> cluster.router_ns.dex: "" {class: green_flow}
+users.carol.id -> cluster.router_ns.dex: "" {class: green_flow}
+users.dan.id -> cluster.router_ns.dex: "rejected at sign-in" {class: red_flow}
+
+# Dex issues each signed-in user a token; the API server maps it to a Kubernetes identity
+cluster.router_ns.dex -> cluster.identities.alice: "" {class: green_flow}
+cluster.router_ns.dex -> cluster.identities.bob: "" {class: green_flow}
+cluster.router_ns.dex -> cluster.identities.carol: "" {class: green_flow}
+
+# Each identity's groups match the Role of a namespace
+cluster.identities.alice.id -> cluster.team_ml_ns.access.role: "bind" {class: member}
+cluster.identities.alice.id -> cluster.team_ml_ns: "" {style.opacity: 0}
+cluster.identities.bob.id -> cluster.team_ml_ns.access.role: "bind" {class: member}
+cluster.identities.bob.id -> cluster.team_ml_ns: "" {style.opacity: 0}
+cluster.identities.carol.id -> cluster.team_ml_ns.access.role: "bind" {class: member}
+cluster.identities.carol.id -> cluster.team_ml_ns: "" {style.opacity: 0}
+cluster.identities.carol.id -> cluster.default_ns.access.role: "bind" {class: member}
+cluster.identities.carol.id -> cluster.default_ns: "" {style.opacity: 0}
