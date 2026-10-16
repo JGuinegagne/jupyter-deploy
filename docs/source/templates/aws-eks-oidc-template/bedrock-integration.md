@@ -83,9 +83,3 @@ overrides:
       teams: my-org:guests
       bedrock: "false"
 ```
-
-## When changes take effect
-
-A workspace takes its service account and Bedrock settings when it is created: credentials
-reach only the workspaces created after the deploy. Recreate an older workspace to give it
-access; restarting it is not enough.

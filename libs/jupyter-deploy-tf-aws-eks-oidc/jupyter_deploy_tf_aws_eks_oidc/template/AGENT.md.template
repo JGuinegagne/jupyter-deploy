@@ -148,8 +148,7 @@ EULA. Anthropic models also need a one-time first-time-use form with the deploye
 These are the deployer's decisions: point the user to TROUBLESHOOT.md, and never invoke a model,
 accept an agreement or submit the form on their behalf.
 
-Credentials reach a workspace at creation: a workspace older than its namespace's Bedrock
-configuration must be recreated, not restarted.
+Changes reach a workspace on its next start.
 
 ### View the full terraform logs
 

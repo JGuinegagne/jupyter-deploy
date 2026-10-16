@@ -81,7 +81,7 @@ with no setup:
   `geo` keeps requests in the deployment region's geography (e.g. `us.` profiles),
   `global` lets Bedrock serve them from any region. Bedrock offers the OpenAI models
   through `us.` and `global.` profiles only, so Codex needs `global` outside the US.
-- Credentials reach only the workspaces created after the deploy: recreate older ones.
+- Changes reach a workspace on its next start.
 
 In an account that never used a model, the first invocation enables it through an AWS
 Marketplace subscription, which the workspace roles cannot start: an admin invokes each model
