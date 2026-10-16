@@ -52,7 +52,6 @@ from .constants import (
 pytestmark = [
     pytest.mark.usefixtures("kubernetes_cluster_login"),
     pytest.mark.mutating,
-    pytest.mark.full_deployment,
 ]
 
 PROBE_NAMESPACE = "e2e-ns-probe"
@@ -245,10 +244,19 @@ def test_in_use_namespace_cannot_be_dropped(e2e_deployment: EndToEndDeployment, 
         ),
         (lambda m: [*m[:2], {**m[2], "teams": _team("e2e-ns-unlisted")}], "e2e-ns-unlisted"),
         (lambda m: [*m[:2], {"name": NS_B, "teams": ""}], "must list at least one team"),
+        (lambda m: [*m[:2], {**m[2], "teams": NS_ONLY_B_TEAM}], "must be in 'org:team' format"),
         (lambda m: [*m, {"name": "kube-e2e", "teams": m[2]["teams"]}], 'must not start with "kube-"'),
         (lambda m: [*m, {"name": "keda", "teams": m[2]["teams"]}], "must not name a namespace a platform component"),
     ],
-    ids=["duplicate-name", "unknown-template", "unlisted-team", "no-team", "reserved-prefix", "platform-namespace"],
+    ids=[
+        "duplicate-name",
+        "unknown-template",
+        "unlisted-team",
+        "no-team",
+        "malformed-team",
+        "reserved-prefix",
+        "platform-namespace",
+    ],
 )
 @skip_if_testvars_not_set(NS_REQUIRED_VARS)
 def test_plan_time_validation(

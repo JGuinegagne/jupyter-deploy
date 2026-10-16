@@ -417,6 +417,48 @@ locals {
   }
 }
 
+# ── Revoked team warning ──────────────────────────────────────────────────────
+# Removing a team from a namespace revokes its RBAC there; the namespace's
+# workspaces stay, but their owners in that team can no longer reach them.
+# Advisory only: moving a team elsewhere is a legitimate change. Teams are read
+# from the live RoleBinding the github-rbac chart renders in each namespace.
+data "kubernetes_resources" "workspace_role_bindings" {
+  for_each = toset(local.workspace_ns_names)
+
+  api_version    = "rbac.authorization.k8s.io/v1"
+  kind           = "RoleBinding"
+  namespace      = each.key
+  field_selector = "metadata.name=github-workspace-binding"
+
+  depends_on = [helm_release.jupyter_k8s]
+}
+
+locals {
+  # namespace => ["org:team", ...] granted live but absent from this change.
+  # Subjects carry the chart's oidcGroupPrefix ("github:").
+  workspace_ns_teams_revoked = {
+    for ns, d in data.kubernetes_resources.workspace_role_bindings : ns => [
+      for s in try(d.objects[0].subjects, []) : trimprefix(s.name, "github:")
+      if !contains(local.workspace_ns_teams[ns], trimprefix(s.name, "github:"))
+    ]
+  }
+
+  workspace_ns_teams_revoked_in_use = [
+    for ns, teams in local.workspace_ns_teams_revoked : format(
+      "%s from %s, which holds %s", join(", ", teams), ns,
+      join(", ", [for w in data.kubernetes_resources.live_workspaces[ns].objects : "${ns}/${w.metadata.name}"])
+    )
+    if length(teams) > 0 && length(data.kubernetes_resources.live_workspaces[ns].objects) > 0
+  ]
+}
+
+check "workspace_namespaces_revoked_teams" {
+  assert {
+    condition     = length(local.workspace_ns_teams_revoked_in_use) == 0
+    error_message = "this change removes teams from namespaces with live workspaces; members of those teams lose access to the workspaces they own: ${join("; ", local.workspace_ns_teams_revoked_in_use)}."
+  }
+}
+
 locals {
   # Only templates this release ships are guarded; hand-made ones are not ours to keep.
   workspace_templates_managed_keys = flatten([
