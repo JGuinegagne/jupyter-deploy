@@ -72,8 +72,7 @@ invoking Amazon Bedrock models, so that `claude` and `codex` work in a workspace
 with no setup:
 
 - Every workspace namespace holds a `workspace` service account, which the operator
-  assigns to each new workspace. Workspaces created before it existed keep the `default`
-  service account and get no credentials until recreated.
+  assigns to each new workspace.
 - Each namespace with Bedrock gets its own IAM role, so CloudTrail attributes calls to
   the team's namespace. A `workspace_namespaces` entry opts out with `bedrock = "false"`.
 - The role may invoke the models matching `workspace_bedrock_model_patterns`, only
