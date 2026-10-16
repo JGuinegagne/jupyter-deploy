@@ -229,10 +229,10 @@ class TestReadmeDocsConsistency(unittest.TestCase):
 
     def test_details_section(self) -> None:
         """The Details section must match between README and details.md."""
-        # README: ## Details up to ## Requirements
-        readme_section = _extract_lines_between(self.readme, "## Details", "## Requirements")
-        # details.md: # Details up to ## Requirements
-        doc_section = _extract_lines_between(self.details_md, "# Details", "## Requirements")
+        # README: ## Details up to ## Modules
+        readme_section = _extract_lines_between(self.readme, "## Details", "## Modules")
+        # details.md: # Details up to ## Terraform Modules
+        doc_section = _extract_lines_between(self.details_md, "# Details", "## Terraform Modules")
         self.assertEqual(
             _normalize(readme_section),
             _normalize(doc_section),
