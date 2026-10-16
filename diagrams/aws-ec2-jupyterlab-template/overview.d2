@@ -2,7 +2,7 @@
 
 vars: {
   d2-config: {
-    layout-engine: dagre
+    layout-engine: elk
   }
 }
 
@@ -20,6 +20,14 @@ classes: {
     style: {
       stroke: "#c62828"
       stroke-width: 3
+    }
+  }
+
+  green_flow: {
+    style: {
+      stroke: "#2e7d32"
+      stroke-width: 3
+      stroke-dash: 5
     }
   }
 
@@ -49,7 +57,7 @@ laptop: "Your laptop" {
     }
   }
 
-  proxy: "Local proxy\n(jd open)" {
+  proxy: "Local proxy" {
     class: box
     icon: ../shared/icons/jupyter.svg
     style: {
@@ -57,42 +65,127 @@ laptop: "Your laptop" {
       stroke: "#1565c0"
     }
   }
+
+  credentials: "AWS credentials" {
+    shape: page
+    icon: ../shared/icons/iam-credentials.svg
+    style: {
+      bold: true
+      fill: "#ffffff"
+      stroke: "#1565c0"
+      stroke-width: 2
+      font-size: 18
+    }
+  }
 }
 
-aws: "AWS" {
+aws: "" {
+  icon: ../shared/icons/aws.svg
   style: {
-    stroke: "#e65100"
-    stroke-dash: 5
-    fill: "#fafafa"
+    stroke: "#24292e"
+    stroke-width: 3
+    fill: "#fffdf7"
+    bold: true
+    font-size: 20
   }
 
-  ec2: "EC2 Instance" {
-    class: box
-    icon: ../shared/icons/ec2.svg
+  account: "AWS Account" {
     style: {
-      fill: "#fff3e0"
       stroke: "#e65100"
+      stroke-width: 2
+      stroke-dash: 5
+      fill: "#fffdf7"
+      font-size: 20
+    }
+
+    vpc: "Default VPC" {
+      style: {
+        fill: "#e8f5e9"
+        stroke: "#2e7d32"
+        stroke-width: 3
+        bold: true
+        font-size: 18
+      }
+
+      subnet: "Default subnet" {
+        style: {
+          fill: "#c8e6c9"
+          stroke: "#2e7d32"
+          stroke-width: 2
+          bold: true
+          font-size: 16
+        }
+
+        sg: "Security group\n(inbound :443 from 0.0.0.0/0)" {
+          style: {
+            fill: "#c8e6c9"
+            stroke: "#c62828"
+            stroke-width: 2
+            stroke-dash: 3
+            bold: true
+            font-size: 16
+            font-color: "#c62828"
+          }
+
+          ec2: "EC2 Instance" {
+            class: box
+            icon: ../shared/icons/ec2.svg
+            style: {
+              fill: "#fff3e0"
+              stroke: "#e65100"
+            }
+          }
+        }
+
+        ebs: "EBS data volume" {
+          shape: cylinder
+          style: {
+            fill: "#e8f5e9"
+            stroke: "#2e7d32"
+            stroke-width: 3
+            bold: true
+            font-size: 18
+          }
+
+          cert: "Self-signed\nTLS cert" {
+            shape: page
+            style: {
+              bold: true
+              fill: "#ffffff"
+              stroke: "#2e7d32"
+              stroke-width: 2
+              font-size: 16
+            }
+          }
+        }
+      }
     }
   }
 
   sts: "AWS STS" {
-    class: box
+    shape: image
     icon: ../shared/icons/iam.svg
+    width: 80
+    height: 80
     style: {
-      fill: "#fff3e0"
-      stroke: "#e65100"
+      bold: true
+      font-size: 20
     }
   }
 }
 
-laptop.webbrowser -> laptop.proxy: "1. http://127.0.0.1:PORT/lab" {
+laptop.webbrowser -> laptop.proxy: "1. localhost" {
   class: blue_flow
 }
 
-laptop.proxy -> aws.ec2: "2. HTTPS :443 (pinned cert)\n+ AWS-identity token" {
+laptop.credentials <- laptop.proxy: "2. sign identity token" {
   class: blue_flow
 }
 
-aws.ec2 -> aws.sts: "3. verify identity" {
+laptop.proxy -> aws.account.vpc.subnet.sg.ec2: "3. HTTPS (pin cert)\n+ bearer-token" {
+  class: blue_flow
+}
+
+aws.account.vpc.subnet.sg.ec2 -> aws.sts: "4. verify identity" {
   class: red_flow
 }
