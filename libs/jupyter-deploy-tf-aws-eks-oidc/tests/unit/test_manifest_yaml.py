@@ -1,3 +1,4 @@
+import json
 import re
 import unittest
 from pathlib import Path
@@ -6,7 +7,8 @@ from typing import Any
 import yaml
 from jupyter_deploy import manifest_validation
 from jupyter_deploy.handlers import base_project_handler
-from jupyter_deploy.manifest import JupyterDeployManifestV1
+from jupyter_deploy.handlers.resource.resource_utils import evaluate_status_rules
+from jupyter_deploy.manifest import JupyterDeployManifestV1, JupyterDeployStatusRuleV1
 
 from jupyter_deploy_tf_aws_eks_oidc.template import TEMPLATE_PATH
 
@@ -29,6 +31,33 @@ class TestManifest(unittest.TestCase):
         "cluster_ca_certificate",
         "server_default_scope",
     ]
+    # the start steps the template spells out; any other Progressing reason prints the bare word
+    START_STEP_PHRASES = {
+        "WaitingForNode": "provisioning node",
+        "PullingImage": "pulling image",
+        "StartingContainer": "starting container",
+    }
+    # the failure reasons the template names; any other Degraded reason prints the bare word
+    FAILURE_REASONS = {
+        "ImagePullBackOff",
+        "ErrImageNeverPull",
+        "ImageInspectError",
+        "InvalidImageName",
+        "CreateContainerConfigError",
+        "PreCreateHookError",
+        "CreateContainerError",
+        "PreStartHookError",
+        "PostStartHookError",
+        "RunContainerError",
+        "CrashLoopBackOff",
+        "ContainerStartFailed",
+        "FailedCreate",
+        "ComputeStalled",
+        "ComputeError",
+        "ServiceError",
+        "AccessProbeThresholdExceeded",
+    }
+    WORKSPACE_FIXTURE = Path(__file__).parent / "status_data" / "workspace_waiting_for_node.json"
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -38,6 +67,31 @@ class TestManifest(unittest.TestCase):
         variables_config_path = TEMPLATE_PATH / "variables.yaml"
         with open(variables_config_path) as variables_config_file:
             cls.VARIABLES_CONFIG = yaml.safe_load(variables_config_file)
+
+    @classmethod
+    def _workspace(cls, desired: str, *conditions: tuple[str, str, str]) -> str:
+        """The fixture Workspace with desiredStatus and the given (type, status, reason) conditions set on it."""
+        workspace = json.loads(cls.WORKSPACE_FIXTURE.read_text())
+        workspace["spec"]["desiredStatus"] = desired
+        by_type = {condition["type"]: condition for condition in workspace["status"]["conditions"]}
+        for cond_type, status, reason in conditions:
+            by_type[cond_type].update(status=status, reason=reason)
+        return json.dumps(workspace)
+
+    @classmethod
+    def _starting(cls, reason: str) -> str:
+        return cls._workspace(
+            "Running", ("Available", "False", reason), ("Progressing", "True", reason), ("Degraded", "False", "NoError")
+        )
+
+    @classmethod
+    def _failed(cls, reason: str) -> str:
+        return cls._workspace(
+            "Running", ("Available", "False", reason), ("Progressing", "False", reason), ("Degraded", "True", reason)
+        )
+
+    def _server_status_rules(self) -> list[JupyterDeployStatusRuleV1]:
+        return JupyterDeployManifestV1.model_validate(self.MANIFEST).server_status_rules or []
 
     def test_manifest_parses_as_yaml(self) -> None:
         self.assertIsNotNone(self.MANIFEST)
@@ -359,6 +413,60 @@ class TestManifest(unittest.TestCase):
             mng_states,
             {"ACTIVE", "CREATING", "UPDATING", "DEGRADED", "DELETING", "CREATE_FAILED", "DELETE_FAILED"},
         )
+
+    def test_each_start_step_prints_its_phrase(self) -> None:
+        """A typo in a manifest path or a renamed operator reason fails here instead of printing a bare
+        `Starting` in production."""
+        rules = self._server_status_rules()
+        for reason, phrase in self.START_STEP_PHRASES.items():
+            with self.subTest(reason=reason):
+                starting = self._starting(reason)
+                self.assertEqual(evaluate_status_rules(starting, rules), f"Starting ({phrase})")
+
+    def test_each_failure_reason_prints_in_parentheses(self) -> None:
+        rules = self._server_status_rules()
+        for reason in self.FAILURE_REASONS:
+            with self.subTest(reason=reason):
+                failed = self._failed(reason)
+                self.assertEqual(evaluate_status_rules(failed, rules), f"Degraded ({reason})")
+
+    def test_reasons_without_a_rule_print_the_bare_word(self) -> None:
+        rules = self._server_status_rules()
+        starting = self._starting("SomethingNew")
+        self.assertEqual(evaluate_status_rules(starting, rules), "Starting")
+        failed = self._failed("SomethingNew")
+        self.assertEqual(evaluate_status_rules(failed, rules), "Degraded")
+
+    def test_stopping_and_running_print_the_bare_word(self) -> None:
+        rules = self._server_status_rules()
+        stopping = self._workspace(
+            "Stopped",
+            ("Available", "False", "ResourcesNotStopped"),
+            ("Progressing", "True", "ResourcesNotStopped"),
+            ("Stopped", "False", "ResourcesNotStopped"),
+        )
+        self.assertEqual(evaluate_status_rules(stopping, rules), "Stopping")
+        running = self._workspace(
+            "Running",
+            ("Available", "True", "ResourcesReady"),
+            ("Progressing", "False", "ResourcesReady"),
+            ("Degraded", "False", "NoError"),
+        )
+        self.assertEqual(evaluate_status_rules(running, rules), "Running")
+
+    def test_detailed_rules_name_exactly_the_pinned_reasons(self) -> None:
+        """A rule added or removed without updating this list fails here."""
+        if self.MANIFEST is None:
+            self.fail("MANIFEST is None")
+        rules = self.MANIFEST["server-status-rules"]
+
+        def reasons_matched_on(path: str) -> set[str]:
+            return {match["equals"] for rule in rules for match in rule["all"] if match["path"] == path}
+
+        self.assertEqual(
+            reasons_matched_on(".status.conditions[type=Progressing].reason"), set(self.START_STEP_PHRASES)
+        )
+        self.assertEqual(reasons_matched_on(".status.conditions[type=Degraded].reason"), self.FAILURE_REASONS)
 
     def test_host_list_command_supports_query_param(self) -> None:
         """host.list command must wire a 'query' source-key for the --query filter."""
