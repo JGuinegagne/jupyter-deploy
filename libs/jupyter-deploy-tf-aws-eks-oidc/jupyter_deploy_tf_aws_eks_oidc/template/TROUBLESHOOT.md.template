@@ -209,10 +209,9 @@ jd server exec --name <workspace-name> --scope <namespace> -- "codex exec --skip
 kubectl get workspace <workspace-name> -n <namespace> -o jsonpath='{.spec.serviceAccountName}'
 ```
 
-- **Could not load AWS credentials**: the workspace was created before its namespace had the
-  `workspace` service account, or the namespace opts out (`bedrock: "false"` on its
-  `workspace_namespaces` entry, or `workspace_bedrock_enabled: false`). Credentials, like the
-  template env, reach a workspace at creation: recreate it.
+- **Could not load AWS credentials**: the namespace opts out (`bedrock: "false"` on its
+  `workspace_namespaces` entry, or `workspace_bedrock_enabled: false`). Turn it back on, run
+  `jd config` and `jd up`, then restart the workspace.
 - **AccessDeniedException naming a model or inference profile**: the model is outside
   `workspace_bedrock_model_patterns`, or its inference profile is outside
   `workspace_bedrock_inference_scope` (Codex outside the US needs `global`).

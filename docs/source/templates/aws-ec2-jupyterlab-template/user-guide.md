@@ -28,8 +28,6 @@ cd my-jupyterlab-deployment
 jd init . -E terraform -P aws -I ec2 -T jupyterlab
 ```
 
-Consider making `my-jupyterlab-deployment` a git repository.
-
 ## Configure and create the infrastructure
 
 ```bash

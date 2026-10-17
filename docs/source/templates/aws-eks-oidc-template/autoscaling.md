@@ -40,8 +40,11 @@ Restart a stopped workspace at any time:
 The routing tier (Traefik, Authmiddleware, and the Web UI) scales its pod count with
 [KEDA](https://keda.sh/), driven by the number of open connections Traefik reports to
 Prometheus. As traffic rises, KEDA adds replicas; as it falls, it removes them (the Web
-UI and Authmiddleware never scale below one replica). You do not configure this directly —
-the thresholds ship with the template.
+UI and Authmiddleware never scale below one replica).
+
+```{note}
+You do not need to configure this directly; the thresholds ship with the template.
+```
 
 ## Node autoscaling
 
@@ -77,20 +80,34 @@ You control node pools through admin variables:
 | `node_expire_after` | `504h` | Maximum node lifetime before Karpenter recycles it. |
 
 Add a CPU workspace pool by appending an entry to `workspace_nodepools`: no new
-variables required. For GPU capacity, `enable_default_gpu_pool: true` is the
-one-line path: it appends a built-in `workspace-gpu` entry (`g4dn,g5,g6,g6e,g7,g7e`
-on-demand instances, fleet ceiling `max_gpus: "4"`) plus its `jupyterlab-gpu`
-template config. To configure GPU support yourself, leave the flag off and
-write the entries directly (combining both is a plan-time error): an entry with
-`accelerator: nvidia` installs the NVIDIA device plugin, gets the
-`nvidia.com/gpu.present` label the plugin selects on, and is fenced by its
-`role` (defaulting to the pool name); the optional `max_gpus` caps the fleet
-(absent means unbounded, up to the account's service quota); and the entry's
-`templates` key lists `workspace_templates` configs to offer as cards, each
-rendered as a workspace template pinned to the pool's role. A config with
-pinned `cpu`/`memory`/`gpus` renders one fixed shape; a config with only
-`idle_minutes` inherits the standard adjustable shape. A second GPU pool with
-its own card and idle rule is one more entry plus one more config, for example:
+variables required.
+
+### GPU nodes
+
+By default, this template does not provide access to GPU nodes.
+
+To let users create workspaces on GPU nodes, set the `enable_default_gpu_pool` template variable to `true`.
+It appends a built-in `workspace-gpu` entry (`g4dn` to `g7e` on-demand instances), sets a fleet ceiling `max_gpus: "4"` and
+configures the `jupyterlab-gpu` template.
+
+```{note}
+An AWS account that has never used GPU instances must first raise its
+`Running On-Demand G and VT instances` service quota. Refer to the project's `TROUBLESHOOT.md` for more details.
+```
+
+### Advanced configuration
+
+You can also configure GPU node pools yourself. In that case, leave the flag off and
+write the `workspace_templates` and `workspace_nodepools` entries directly. In each
+`workspace_nodepools` entry:
+- `accelerator: nvidia` installs the NVIDIA device plugin on the nodes and adds the
+  `nvidia.com/gpu.present` label the plugin selects on;
+- the optional `max_gpus` caps the fleet (absent means unbounded, up to the account's
+  service quota);
+- `templates` lists the `workspace_templates` configs to offer as cards, each
+  rendered as a workspace template pinned to the pool's role.
+
+Here is an example of a custom GPU pool with its own card and idle workspace rule:
 
 ```yaml
 workspace_templates:
@@ -110,14 +127,17 @@ workspace_nodepools:
     templates: jupyterlab-gpu-p
 ```
 
+```{warning}
 Delete GPU workspaces before removing their entry or turning the flag off:
-doing so removes the pool and the template they depend on. First GPU use on an
-account without prior GPU usage requires raising the
-`Running On-Demand G and VT instances` service quota (see the troubleshooting
-guide). Inspect pools at runtime with `jd pool list`,
-`jd pool show --name <pool>`, and `jd pool status --name <pool>`.
+doing so removes the pool and the template they depend on.
+```
 
-```{note}
-The Cluster Autoscaler's image version tracks the cluster's Kubernetes minor version.
-The template pins them together.
+## Inspect node pools
+
+You can inspect the node pools in your cluster with the following commands:
+
+```bash
+jd pool list
+jd pool show --name <pool>
+jd pool status --name <pool>
 ```

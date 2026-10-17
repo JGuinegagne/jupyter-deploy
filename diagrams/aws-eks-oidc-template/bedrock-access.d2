@@ -1,0 +1,173 @@
+# EKS OIDC Template — Bedrock access for coding agents
+
+vars: {
+  d2-config: {
+    layout-engine: elk
+  }
+}
+
+classes: {
+  box: {
+    shape: rectangle
+    style: {
+      bold: true
+      stroke-width: 3
+      font-size: 20
+    }
+  }
+
+  namespace: {
+    style: {
+      fill: "#dce8f5"
+      stroke: "#1565c0"
+      stroke-width: 2
+      stroke-dash: 3
+      bold: true
+      font-size: 20
+    }
+  }
+
+  workspace: {
+    shape: rectangle
+    icon: ../shared/icons/jupyter.svg
+    style: {
+      fill: "#bbdefb"
+      stroke: "#1565c0"
+      stroke-width: 3
+      bold: true
+      font-size: 18
+    }
+  }
+
+  service_account: {
+    shape: image
+    icon: ../shared/icons/k8s-sa.svg
+    width: 72
+    height: 72
+    style: {
+      bold: true
+      font-size: 16
+    }
+  }
+
+  green_flow: {
+    style: {
+      stroke: "#2e7d32"
+      stroke-width: 3
+      font-size: 18
+    }
+  }
+
+  red_flow: {
+    style: {
+      stroke: "#c62828"
+      stroke-width: 3
+      stroke-dash: 5
+      font-size: 18
+    }
+  }
+}
+
+direction: right
+
+aws: "AWS Account" {
+  style: {
+    fill: "#fff3e0"
+    stroke: "#e65100"
+    stroke-width: 3
+    bold: true
+    font-size: 20
+  }
+
+  cluster: "EKS Cluster" {
+    style: {
+      fill: "#e3f2fd"
+      stroke: "#1565c0"
+      stroke-width: 3
+      bold: true
+      font-size: 20
+    }
+
+    team_ml_ns: "team-ml" {
+      class: namespace
+
+      ws: "Alice\nclaude, codex" {class: workspace}
+      sa: "ServiceAccount\nworkspace" {class: service_account}
+    }
+
+    guests_ns: "guests (bedrock = \"false\")" {
+      class: namespace
+
+      ws: "Bob\nclaude, codex" {class: workspace}
+      sa: "ServiceAccount\nworkspace" {class: service_account}
+    }
+
+    pod_identity_ml: "EKS Pod Identity\nteam-ml association" {
+      class: box
+      icon: ../shared/icons/eks.svg
+      style: {
+        fill: "#bbdefb"
+        stroke: "#1565c0"
+      }
+    }
+
+    pod_identity_guests: "EKS Pod Identity\nno association" {
+      class: box
+      icon: ../shared/icons/eks.svg
+      style: {
+        fill: "#eeeeee"
+        stroke: "#9e9e9e"
+        stroke-dash: 5
+        font-color: "#757575"
+        opacity: 0.7
+      }
+    }
+  }
+
+  role: "team-ml IAM Role" {
+    icon: ../shared/icons/iam.svg
+    icon.near: top-left
+    label.near: top-center
+    style: {
+      fill: "#fce4ec"
+      stroke: "#c62828"
+      stroke-width: 3
+      bold: true
+      font-size: 20
+    }
+
+    policy: |yaml
+      Effect: Allow
+      Action: bedrock:Invoke*
+      Resource:
+        - us.anthropic.claude-*
+        - us.openai.gpt-*
+    |
+  }
+
+  bedrock: "Amazon Bedrock" {
+    shape: image
+    icon: ../shared/icons/bedrock.svg
+    width: 96
+    height: 96
+    style: {
+      bold: true
+      font-size: 20
+    }
+  }
+}
+
+# Credentials chain
+aws.cluster.team_ml_ns.ws -> aws.cluster.team_ml_ns.sa: "runs as" {class: green_flow}
+aws.cluster.team_ml_ns.sa -> aws.cluster.pod_identity_ml: "" {class: green_flow}
+aws.cluster.pod_identity_ml -> aws.role: "assume" {class: green_flow}
+aws.cluster.team_ml_ns.ws -> aws.bedrock: "InvokeModel" {class: green_flow}
+
+# Opted-out namespace
+aws.cluster.guests_ns.ws -> aws.cluster.guests_ns.sa: "runs as" {class: green_flow}
+aws.cluster.guests_ns.sa -> aws.cluster.pod_identity_guests: "no credentials" {class: red_flow}
+
+# Layout only: keep Bedrock right of the role
+aws.role -> aws.bedrock: "" {
+  style.opacity: 0
+}

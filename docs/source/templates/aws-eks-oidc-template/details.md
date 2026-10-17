@@ -53,8 +53,7 @@ Bedrock with the workspace's own credentials; see [Bedrock access](#bedrock-acce
 Two layers govern access to the cluster: **IAM** controls who can reach the
 Kubernetes API and administer the cluster, and **RBAC** controls what authenticated
 GitHub teams can do with workspaces. Team sign-in itself goes through GitHub OAuth via
-Dex — see [Prerequisites](prerequisites.md#grant-access-to-teams) for granting teams
-access.
+Dex. See [Team Isolation](team-isolation.md) for granting teams access.
 
 ### IAM
 
@@ -73,8 +72,7 @@ invoking Amazon Bedrock models, so that `claude` and `codex` work in a workspace
 with no setup:
 
 - Every workspace namespace holds a `workspace` service account, which the operator
-  assigns to each new workspace. Workspaces created before it existed keep the `default`
-  service account and get no credentials until recreated.
+  assigns to each new workspace.
 - Each namespace with Bedrock gets its own IAM role, so CloudTrail attributes calls to
   the team's namespace. A `workspace_namespaces` entry opts out with `bedrock = "false"`.
 - The role may invoke the models matching `workspace_bedrock_model_patterns`, only
@@ -86,8 +84,8 @@ with no setup:
 
 In an account that never used a model, the first invocation enables it through an AWS
 Marketplace subscription, which the workspace roles cannot start: an admin invokes each model
-once first (and submits Anthropic's one-time first-time-use form). The project's
-`TROUBLESHOOT.md` walks through it.
+once first (and submits Anthropic's one-time first-time-use form). See
+[Bedrock Integration](bedrock-integration.md) for the steps.
 
 ## Helm charts
 

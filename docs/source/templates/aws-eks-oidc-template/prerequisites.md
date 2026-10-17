@@ -1,12 +1,5 @@
 # Prerequisites
 
-## Installation
-
-- Install the **JupyterDeploy** CLI with the `aws`, `k8s` options: `uv add "jupyter-deploy[aws,k8s]"`
-- Install the **AWS EKS OIDC** template: `uv add jupyter-deploy-tf-aws-eks-oidc`
-
-If you use `pip` instead of `uv`, run `pip install "jupyter-deploy[aws,k8s]" jupyter-deploy-tf-aws-eks-oidc`.
-
 ## AWS account
 
 The template creates AWS resources (VPC, EKS cluster, node groups, IAM roles, ECR, Route 53 records).
@@ -26,25 +19,27 @@ If you do not own a domain yet, you can buy one through Amazon Route 53 using th
 
 ## Setup a GitHub OAuth app
 
-The template gates workspace access with GitHub identities via Dex as the OIDC
-provider. You grant access to **GitHub teams** (referenced as `org:team`), so create
-the OAuth app under the organization that owns those teams — organization owners can
-then manage the app and read team membership without per-user approval. A personal app
-also works, but the organization may require
+The template gates access with GitHub identities. You grant access to **GitHub teams**, which must belong to your GitHub organization.
+
+If you do not have a GitHub organization, you can create one using [this guide](https://docs.github.com/en/organizations/collaborating-with-groups-in-organizations/creating-a-new-organization-from-scratch).
+
+```{note}
+A personal app also works, but the organization may require
 [third-party application approval](https://docs.github.com/en/organizations/managing-oauth-access-to-your-organizations-data/approving-oauth-apps-for-your-organization)
 before it can read private membership.
+```
 
-### Create the app
+Next, create a new OAuth app:
+- for your organization:
+`Settings` → `Developer settings` → `OAuth Apps` → `New OAuth App`
+- for a personal app, log on to GitHub in your web browser, then use
+[this link](https://github.com/settings/applications/new).
 
-Create a new OAuth app: use your organization's
-`Settings → Developer settings → OAuth Apps → New OAuth App`
-(`https://github.com/organizations/<your-org>/settings/applications/new`), or
-[this link](https://github.com/settings/applications/new) for a personal app. See the
+See the
 GitHub [documentation](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app)
 for details.
 
-Set the fields as follows (choose any `<subdomain>`, using lowercase letters, digits,
-or hyphens; `<domain>` is your registered domain from above):
+Next, configure your OAuth app:
 
 | Field | Value |
 |---|---|
@@ -52,44 +47,10 @@ or hyphens; `<domain>` is your registered domain from above):
 | Homepage URL | `https://<subdomain>.<domain>` |
 | Authorization callback URL | `https://<subdomain>.<domain>/dex/callback` |
 
-Then save the **client ID**, generate a **client secret**, and save that too — you
-supply both during `jd config`.
+Finally, save the **client ID**, generate a **client secret**, and save that too. You will need them to run `jd config`.
 
 ```{note}
 The callback URL uses `/dex/callback` (not `/oauth2/callback` as in the base template),
 because authentication goes through Dex as the OIDC identity provider. It must match
 your `<subdomain>` and `<domain>` exactly.
 ```
-
-### Grant access to teams
-
-Two variables control who may access the cluster:
-
-- `oauth_allowed_teams` — GitHub teams that may sign in, each in `org:team` format
-  (e.g. `my-org:data-science`). Only members of these teams can authenticate.
-- `workspace_namespaces` — optional mapping of Kubernetes namespaces to the teams that can
-  create and manage workspaces in each. Leave it empty to let every allowed team use the
-  `default` namespace.
-
-```bash
-# pass each team as a separate flag
-jd config \
-  --oauth-allowed-teams my-org:data-science \
-  --oauth-allowed-teams my-org:ml-platform
-```
-
-You can also set these in `variables.yaml`. If you later change the teams or
-namespaces, re-run `jd config` followed by `jd up`. The app must be able to read team
-membership for the owning organization — automatic for an organization-owned app;
-for a personal app an organization owner must approve it first.
-
-## Tools
-
-The template requires the following tools installed locally:
-
-- [Terraform](https://developer.hashicorp.com/terraform/install) (>= 1.5.7)
-- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
-- [kubectl](https://kubernetes.io/docs/tasks/tools/) (for `jd cluster login` and direct cluster access)
-- [Helm](https://helm.sh/docs/intro/install/) (for `jd component reconcile`)
-
-`jupyter-deploy` will prompt you to install any missing tool during `jd config`.

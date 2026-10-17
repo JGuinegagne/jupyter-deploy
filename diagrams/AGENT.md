@@ -16,6 +16,10 @@ From the repo root: `just docs-diagrams`
 
 This compiles all `.d2` files and writes SVGs to the mapped docs directories.
 
+## Layout tips
+
+- Layout follows edge direction: write `a <- b` to keep `a` ranked before `b` while drawing the arrow towards `a`.
+
 ## Where diagrams are used
 
 - **Docs site**: referenced with relative paths (e.g. `diagrams/overview.svg`)

@@ -14,6 +14,12 @@ Or with pip:
 pip install "jupyter-deploy[aws,k8s]" jupyter-deploy-tf-aws-eks-oidc
 ```
 
+`jupyter-deploy` also needs these tools installed locally; `jd config` prompts you to install any that are missing:
+[Terraform](https://developer.hashicorp.com/terraform/install) (>= 1.5.7),
+the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html),
+[kubectl](https://kubernetes.io/docs/tasks/tools/), [Helm](https://helm.sh/docs/intro/install/)
+and [yq](https://github.com/mikefarah/yq#install).
+
 ## Project setup
 
 ```bash
@@ -22,8 +28,6 @@ cd my-eks-deployment
 
 jd init . -E terraform -P aws -I eks -T oidc
 ```
-
-Consider making `my-eks-deployment` a git repository.
 
 ## Configure and deploy
 

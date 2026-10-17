@@ -23,8 +23,6 @@ cd my-jupyter-deployment
 jd init . -E terraform -P aws -I ec2 -T base
 ```
 
-Consider making `my-jupyter-deployment` a git repository.
-
 ## Configure and create the infrastructure
 ```bash
 jd config

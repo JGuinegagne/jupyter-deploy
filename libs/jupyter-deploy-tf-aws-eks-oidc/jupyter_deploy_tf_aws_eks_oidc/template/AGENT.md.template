@@ -61,8 +61,12 @@ variables (this template does not use the `jd users`/`jd teams` commands).
   each. Empty (the default): every team in `oauth_allowed_teams` may create workspaces in
   `default`. Non-empty: each entry `{name, teams, templates}` creates a namespace (or adopts
   `default`) whose Role and RoleBinding cover only its listed teams; no namespace grants every
-  team, so list `default` explicitly to keep using it. `templates` adds `workspace_templates`
-  configs to the built-in `jupyterlab` card in that namespace.
+  team, so list `default` explicitly to keep using it. The first entry is the default namespace
+  of the web app and of `jd server`. `templates` adds `workspace_templates` configs to the
+  built-in `jupyterlab` card in that namespace; `bedrock: "false"` withholds Bedrock credentials.
+
+A team must be in both: `jd config` refuses a namespace team missing from `oauth_allowed_teams`,
+and warns about an allowed team no namespace lists (its members sign in but cannot create workspaces).
 
 ```bash
 # allow two GitHub teams (pass each entry as a separate flag)
@@ -82,8 +86,14 @@ overrides:
       templates: jupyterlab-gpu
 ```
 
-`jd config` refuses a change that would delete a template a live workspace still uses.
-Removing a namespace entry deletes that namespace and every workspace and volume in it.
+After `jd up` allowlists a new team, restart Dex (`jd component restart --name dex`) so it serves
+the new allowlist; users then sign in again, since a token they hold keeps its old teams until it expires.
+
+IMPORTANT: removing or renaming a namespace entry deletes that namespace and every workspace and
+volume in it. `jd config` refuses to remove a namespace that still holds a workspace, more than 5
+namespaces in one change, or a template a live workspace still uses. Removing a team from a
+namespace with workspaces only warns: the workspaces stay, but their owners in that team lose access.
+Never work around these guards by deleting workspaces on the user's behalf.
 
 The OAuth app itself must be registered with the GitHub organization that owns these teams.
 When creating the OAuth app, log in as a member of the organization and set the
@@ -138,8 +148,7 @@ EULA. Anthropic models also need a one-time first-time-use form with the deploye
 These are the deployer's decisions: point the user to TROUBLESHOOT.md, and never invoke a model,
 accept an agreement or submit the form on their behalf.
 
-Credentials reach a workspace at creation: a workspace older than its namespace's Bedrock
-configuration must be recreated, not restarted.
+Changes reach a workspace on its next start.
 
 ### View the full terraform logs
 
