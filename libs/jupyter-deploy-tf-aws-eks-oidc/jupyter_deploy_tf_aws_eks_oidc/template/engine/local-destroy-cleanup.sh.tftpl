@@ -107,20 +107,26 @@ fi
 
 echo "Cleaning up Route53 records for $FULL_DOMAIN..."
 
-# Match: <domain>, aaaa-<domain>, cname-<domain> (external-dns ownership records)
-# Exclude: NS and SOA records
+# Match: every record named <domain> except NS/SOA, plus the external-dns ownership TXT
+# records, named <type>-<domain> (a-, aaaa-, cname-, ...). Those are matched by content,
+# their owner being this deployment (txtOwnerId = <domain>), not by an enumeration of
+# record types, so a type external-dns starts publishing cannot leave its record behind.
 domain_dot="$FULL_DOMAIN."
 jq_filter='[.ResourceRecordSets[] | select(
-    (.Name == $d or .Name == ("aaaa-" + $d) or .Name == ("cname-" + $d))
-    and (.Type != "NS" and .Type != "SOA")
+    (.Name == $d and .Type != "NS" and .Type != "SOA")
+    or (.Type == "TXT"
+        and (.Name | endswith("-" + $d))
+        and (.Name | .[0:(length - ($d | length) - 1)] | test("^[a-z]+$"))
+        and any(.ResourceRecords[]?.Value | ltrimstr("\"") | rtrimstr("\"") | split(",")[];
+                . == "external-dns/owner=" + $o))
 ) | {Action: "DELETE", ResourceRecordSet: .}]'
 
 records_json=$(aws route53 list-resource-record-sets \
     --hosted-zone-id "$HOSTED_ZONE_ID" \
     --region "$REGION" \
-    --output json 2>/dev/null)
+    --output json)
 
-changes=$(echo "$records_json" | jq --arg d "$domain_dot" "$jq_filter")
+changes=$(echo "$records_json" | jq --arg d "$domain_dot" --arg o "$FULL_DOMAIN" "$jq_filter")
 record_count=$(echo "$changes" | jq 'length')
 
 if [ "$record_count" -gt 0 ]; then
@@ -130,7 +136,7 @@ if [ "$record_count" -gt 0 ]; then
         --hosted-zone-id "$HOSTED_ZONE_ID" \
         --change-batch "$change_batch" \
         --region "$REGION" \
-        --output text 2>&1 || true
+        --output text
     echo "  DNS cleanup complete."
 else
     echo "  No DNS records found, nothing to clean up."

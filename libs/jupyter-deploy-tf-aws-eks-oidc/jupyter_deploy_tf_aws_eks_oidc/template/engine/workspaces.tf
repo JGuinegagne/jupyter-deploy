@@ -97,17 +97,25 @@ resource "null_resource" "destroy_workspaces" {
   triggers = {
     cluster_name = local.cluster_name
     region       = var.region
-    script = templatefile("${path.module}/local-destroy-workspaces.sh.tftpl", {
-      cluster_name = local.cluster_name
-      region       = var.region
-    })
   }
 
+  # Rendered at destroy time, not stored in triggers: a replacement would run this
+  # script, deleting every workspace, during `jd up` (see null_resource.wait_for_lb_cleanup).
   provisioner "local-exec" {
     when        = destroy
     interpreter = ["/bin/bash", "-c"]
     quiet       = true
-    command     = self.triggers.script
+    command = templatefile("${path.module}/local-destroy-workspaces.sh.tftpl", {
+      cluster_name = self.triggers.cluster_name
+      region       = self.triggers.region
+    })
+  }
+
+  lifecycle {
+    # Older deployments still hold the rendered script in their state's triggers: ignore
+    # it, so dropping it does not replace the resource and delete every workspace.
+    # Drop at v1.0.
+    ignore_changes = [triggers["script"]]
   }
 
   # On destroy this runs FIRST (before any of these are torn down). We depend only
