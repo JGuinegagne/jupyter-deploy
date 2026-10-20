@@ -109,6 +109,16 @@ resource "helm_release" "workspace_router" {
   wait             = false
   timeout          = 600
 
+  # Tags the NLB, its target groups and its security group (via the Service's
+  # aws-load-balancer-additional-resource-tags annotation) so the DeploymentId tag
+  # sweep finds them. Applied when the NLB is created only: the in-tree controller
+  # never re-tags an existing one.
+  values = [
+    yamlencode({
+      traefik = { additionalResourceTags = local.combined_tags }
+    })
+  ]
+
   set = concat(
     [
       {
