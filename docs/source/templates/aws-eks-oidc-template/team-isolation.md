@@ -59,7 +59,8 @@ A few rules apply:
 - **No namespace grants every team**: once you list namespaces, `default` admits only the teams
   of its own entry. List `default` explicitly to keep using it.
 - **The first entry is the default namespace**: the Web UI and the `jd server` commands use
-  it when you pass no `--scope`.
+  it when you pass no `--scope`. `jd component` and `jd health` read the `jupyterlab` template
+  from `default` when it is listed, else from the first entry.
 - **Each namespace offers its own templates**: a namespace offers the built-in `jupyterlab`
   template, plus the configs listed in its `templates` key. Each config must be offered by a
   `workspace_nodepools` entry.
@@ -82,11 +83,7 @@ regardless of team membership.
 
 ## Apply a team change
 
-After `jd up` allowlists a new team, restart **Dex** so that it serves the new allowlist:
-
-```bash
-jd component restart --name dex
-```
+When `jd up` changes the allowlist, it rolls out a new **Dex** pod that serves it.
 
 Users then sign in again. A token they already hold keeps their previous teams until it expires.
 
