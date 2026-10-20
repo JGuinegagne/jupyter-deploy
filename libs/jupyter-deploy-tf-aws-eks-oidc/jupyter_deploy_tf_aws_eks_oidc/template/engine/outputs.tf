@@ -141,6 +141,11 @@ output "server_default_scope" {
   value       = local.workspace_ns_names[0]
 }
 
+output "component_template_scope" {
+  description = "Kubernetes namespace where `jd component` and `jd health` read the jupyterlab WorkspaceTemplate: default when it is a workspace namespace, else the first one."
+  value       = contains(local.workspace_ns_names, "default") ? "default" : local.workspace_ns_names[0]
+}
+
 output "workspace_bedrock_roles" {
   description = "JSON-encoded map of workspace namespace to the IAM role ARN granting its workspaces Bedrock; namespaces without Bedrock are absent."
   value       = jsonencode({ for ns in local.workspace_bedrock_namespaces : ns => module.workspace_bedrock_role[ns].role_arn })
