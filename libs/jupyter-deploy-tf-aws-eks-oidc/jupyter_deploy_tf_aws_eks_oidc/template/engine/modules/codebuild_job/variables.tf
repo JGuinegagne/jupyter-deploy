@@ -29,3 +29,11 @@ variable "source_s3_bucket_arn" {
 variable "combined_tags" {
   type = map(string)
 }
+
+variable "log_group_name" {
+  type = string
+}
+
+variable "log_retention_days" {
+  type = number
+}

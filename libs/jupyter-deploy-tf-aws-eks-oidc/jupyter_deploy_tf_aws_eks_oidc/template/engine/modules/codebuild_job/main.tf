@@ -67,6 +67,15 @@ resource "aws_iam_role_policy" "codebuild" {
   policy = data.aws_iam_policy_document.codebuild_permissions.json
 }
 
+# Declared rather than left to CodeBuild, whose default /aws/codebuild/<project> group
+# never expires and outlives `jd down`. A name of our own, not CodeBuild's default, so
+# that deployments where CodeBuild already created the default group need no import.
+resource "aws_cloudwatch_log_group" "build" {
+  name              = var.log_group_name
+  retention_in_days = var.log_retention_days
+  tags              = var.combined_tags
+}
+
 resource "aws_codebuild_project" "this" {
   name         = var.project_name
   service_role = aws_iam_role.codebuild.arn
@@ -79,6 +88,12 @@ resource "aws_codebuild_project" "this" {
 
   artifacts {
     type = "NO_ARTIFACTS"
+  }
+
+  logs_config {
+    cloudwatch_logs {
+      group_name = aws_cloudwatch_log_group.build.name
+    }
   }
 
   environment {
