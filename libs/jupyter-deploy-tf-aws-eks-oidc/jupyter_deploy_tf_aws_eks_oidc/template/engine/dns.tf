@@ -24,7 +24,8 @@ locals {
   ])
 
   # target => { name, region } for "<lb-name>-<id>.elb.<region>.amazonaws.com"; null for
-  # anything else (an IP, another service), which is foreign by definition.
+  # anything else (an IP, an ALB or Classic LB, another service), which is foreign by
+  # definition.
   domain_record_nlbs = {
     for t in local.domain_record_targets :
     t => try(regex("^(?P<name>.+)-[0-9a-f]+\\.elb\\.(?P<region>[a-z0-9-]+)\\.amazonaws\\.com$", t), null)
@@ -41,7 +42,7 @@ locals {
   # target => owning cluster name; null when nothing live answers on it.
   domain_record_owners = {
     for t, lb in local.domain_record_nlbs : t => (
-      lb == null ? "not a load balancer" :
+      lb == null ? "not an NLB" :
       local.domain_record_live_arns[t] == null ? null :
       coalesce(one([
         for k in keys(data.aws_lb.domain_record[t].tags) : trimprefix(k, "kubernetes.io/cluster/")
