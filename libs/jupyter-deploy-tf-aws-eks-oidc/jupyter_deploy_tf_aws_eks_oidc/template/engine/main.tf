@@ -163,6 +163,7 @@ resource "null_resource" "wait_for_lb_cleanup" {
   provisioner "local-exec" {
     when        = destroy
     interpreter = ["/bin/bash", "-c"]
+    quiet       = true
     command = templatefile("${path.module}/local-destroy-cleanup.sh.tftpl", {
       vpc_id         = self.triggers.vpc_id
       region         = self.triggers.region

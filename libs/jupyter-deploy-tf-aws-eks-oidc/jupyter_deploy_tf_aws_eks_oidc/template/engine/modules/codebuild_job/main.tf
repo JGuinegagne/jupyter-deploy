@@ -50,14 +50,11 @@ data "aws_iam_policy_document" "codebuild_permissions" {
     resources = [var.source_s3_bucket_arn]
   }
 
+  # Scoped to the declared build group (below): CodeBuild needs no CreateLogGroup.
   statement {
-    sid = "CloudWatchLogs"
-    actions = [
-      "logs:CreateLogGroup",
-      "logs:CreateLogStream",
-      "logs:PutLogEvents",
-    ]
-    resources = ["*"]
+    sid       = "CloudWatchLogs"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.build.arn}:*"]
   }
 }
 

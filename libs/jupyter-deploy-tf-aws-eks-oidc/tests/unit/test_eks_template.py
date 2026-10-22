@@ -330,3 +330,46 @@ def test_helm_releases_take_namespace_from_release_namespaces() -> None:
         f"helm_release(s) {offenders} must set namespace = local.release_namespaces.<key>; "
         "add the namespace to local.release_namespaces in helm.tf if it is new."
     )
+
+
+def test_csi_volume_reaper_outlives_nodes_on_destroy() -> None:
+    """Everything that can hold an EBS CSI volume attached MUST depend on the reaper, so
+    on destroy it is torn down first; otherwise the reaper waits out its 600s deadline on
+    still-attached volumes and fails `jd down`."""
+    graph, _ = _build_depends_on_graph()
+    reaper = frozenset({"null_resource.reap_csi_volumes"})
+    for holder in ("aws_eks_node_group.platform", "null_resource.wait_for_lb_cleanup"):
+        assert _reaches(graph, holder, reaper), f"{holder} must depend on null_resource.reap_csi_volumes"
+
+
+def _extract_braced_attribute(body: str, name: str) -> str:
+    """Return the `{...}` content of `name = {...}` in body, or "" if absent."""
+    m = re.search(rf"\b{name}\s*=\s*\{{", body)
+    if not m:
+        return ""
+    depth = 1
+    idx = m.end()
+    while idx < len(body) and depth > 0:
+        if body[idx] == "{":
+            depth += 1
+        elif body[idx] == "}":
+            depth -= 1
+        idx += 1
+    return body[m.end() : idx - 1]
+
+
+def test_destroy_provisioners_do_not_store_scripts_in_triggers() -> None:
+    """A null_resource with a destroy provisioner MUST NOT keep its rendered script in
+    triggers: editing the script would replace the resource, and the replacement runs
+    the destroy provisioner against the live cluster during `jd up`."""
+    offenders = []
+    for tf_file in sorted((TEMPLATE_PATH / "engine").rglob("*.tf")):
+        for rtype, rname, body in _iter_resource_blocks(tf_file.read_text()):
+            if rtype != "null_resource" or not re.search(r"when\s*=\s*destroy", body):
+                continue
+            if "templatefile(" in _extract_braced_attribute(body, "triggers"):
+                offenders.append(f"{rtype}.{rname}")
+    assert not offenders, (
+        f"{offenders} render a script in triggers; render it in the destroy provisioner's "
+        "command from self.triggers instead."
+    )

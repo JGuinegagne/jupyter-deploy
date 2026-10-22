@@ -153,7 +153,11 @@ resource "null_resource" "reap_csi_volumes" {
 
       echo "Reaping EBS CSI volumes of deployment ${self.triggers.deployment_id}..."
       deadline=$((SECONDS + 600))
-      while attached=$(list_volumes in-use,creating) && [ -n "$attached" ]; do
+      # Plain assignments, not a while condition or a for word list, where a failed
+      # describe-volumes would read as "no volumes" instead of failing the destroy.
+      while :; do
+        attached=$(list_volumes in-use,creating)
+        [ -z "$attached" ] && break
         if [ "$SECONDS" -ge "$deadline" ]; then
           echo "ERROR: EBS CSI volumes still attached after 600s: $attached" >&2
           exit 1
@@ -162,7 +166,8 @@ resource "null_resource" "reap_csi_volumes" {
         sleep 15
       done
 
-      for vol in $(list_volumes available); do
+      available=$(list_volumes available)
+      for vol in $available; do
         if out=$(aws ec2 delete-volume --region "$region" --volume-id "$vol" 2>&1); then
           echo "  Deleted volume: $vol"
         elif grep -q "InvalidVolume.NotFound" <<<"$out"; then
