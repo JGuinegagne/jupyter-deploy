@@ -102,9 +102,12 @@ resource "aws_eks_addon" "ebs_csi_driver" {
   # Pin the controller Deployment to the platform node group. The node plugin is a
   # DaemonSet and is deliberately left to run on every node (workspaces included) —
   # it must be present wherever a workspace EBS volume is mounted.
+  # extraVolumeTags: stamps every volume the driver provisions, whatever its StorageClass,
+  # so null_resource.reap_csi_volumes and the DeploymentId tag sweep find them.
   configuration_values = jsonencode({
     controller = {
-      nodeSelector = local.components_node_selector
+      nodeSelector    = local.components_node_selector
+      extraVolumeTags = local.combined_tags
     }
   })
 
@@ -114,6 +117,69 @@ resource "aws_eks_addon" "ebs_csi_driver" {
   }
 
   depends_on = [aws_eks_addon.pod_identity_agent]
+}
+
+# Destroy-time: delete the EBS volumes the CSI driver provisioned for this deployment.
+# Their StorageClasses reclaim on PVC deletion, but a PVC whose deletion is skipped or
+# races the cluster going away leaves an unattached volume that bills forever. Matches
+# the DeploymentId tag (extraVolumeTags above) AND the driver's own CSIVolumeName tag,
+# so only driver-provisioned volumes qualify. Tags apply at creation: volumes created
+# before extraVolumeTags was set carry no DeploymentId and are not reaped.
+#
+# Runs once nothing can hold a volume attached: aws_eks_node_group.platform and
+# null_resource.wait_for_lb_cleanup (which terminates Karpenter instances) depend on it,
+# so on destroy they are torn down first.
+#
+# NOT best-effort, like the EC2 templates' reap_volume_backups: a volume still attached
+# or a failed delete fails the destroy; an already-deleted volume counts as success, so
+# re-running `jd down` converges.
+resource "null_resource" "reap_csi_volumes" {
+  triggers = {
+    deployment_id = random_id.postfix.hex
+    region        = var.region
+  }
+
+  provisioner "local-exec" {
+    when        = destroy
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      set -euo pipefail
+      region="${self.triggers.region}"
+      filters=("Name=tag:DeploymentId,Values=${self.triggers.deployment_id}" "Name=tag-key,Values=CSIVolumeName")
+      list_volumes() {
+        aws ec2 describe-volumes --region "$region" --filters "$${filters[@]}" "Name=status,Values=$1" \
+          --query 'Volumes[].VolumeId' --output text
+      }
+
+      echo "Reaping EBS CSI volumes of deployment ${self.triggers.deployment_id}..."
+      deadline=$((SECONDS + 600))
+      # Plain assignments, not a while condition or a for word list, where a failed
+      # describe-volumes would read as "no volumes" instead of failing the destroy.
+      while :; do
+        attached=$(list_volumes in-use,creating)
+        [ -z "$attached" ] && break
+        if [ "$SECONDS" -ge "$deadline" ]; then
+          echo "ERROR: EBS CSI volumes still attached after 600s: $attached" >&2
+          exit 1
+        fi
+        echo "  Waiting for volumes to detach: $attached"
+        sleep 15
+      done
+
+      available=$(list_volumes available)
+      for vol in $available; do
+        if out=$(aws ec2 delete-volume --region "$region" --volume-id "$vol" 2>&1); then
+          echo "  Deleted volume: $vol"
+        elif grep -q "InvalidVolume.NotFound" <<<"$out"; then
+          echo "  Already deleted: $vol"
+        else
+          echo "ERROR: failed to delete volume $vol: $out" >&2
+          exit 1
+        fi
+      done
+      echo "  EBS CSI volume reaping complete."
+    EOT
+  }
 }
 
 resource "aws_eks_addon" "cert_manager" {

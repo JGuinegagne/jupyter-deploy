@@ -27,6 +27,10 @@ module "app_jupyterlab" {
   region            = var.region
   combined_tags     = local.combined_tags
 
+  # Next to fluent-bit's /jupyter-deploy/<deployment-id>/components|workspaces/* groups.
+  build_log_group_name     = "/jupyter-deploy/${random_id.postfix.hex}/image-builds/jupyterlab"
+  build_log_retention_days = var.component_log_retention_days
+
   # CodeBuild fails with ACCESS_DENIED on logs:CreateLogStream if the IAM role
   # policy hasn't propagated yet. EKS cluster creation takes ~10min, which is
   # more than enough for IAM eventual consistency to settle.

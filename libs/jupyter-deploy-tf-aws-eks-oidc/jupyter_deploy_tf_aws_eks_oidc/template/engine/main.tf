@@ -97,6 +97,19 @@ data "aws_caller_identity" "current" {}
 
 resource "random_id" "postfix" {
   byte_length = 4
+
+  # Domain ownership guard (see dns.tf). It fires here, not on a resource of its own,
+  # because it needs this deployment's cluster name: known at plan on every run once the
+  # id exists; on a first deploy, checked at apply as soon as the id is generated, before
+  # any AWS resource starts (they all depend on the id).
+  lifecycle {
+    postcondition {
+      condition = alltrue([
+        for owner in values(local.domain_record_owners) : owner == null || owner == "${var.cluster_name_prefix}-${self.hex}"
+      ])
+      error_message = "${local.full_domain} already routes to another live deployment: ${join(", ", local.domain_record_live_owners)}. Pick another subdomain, or tear that deployment down first."
+    }
+  }
 }
 
 locals {
@@ -112,10 +125,6 @@ locals {
   combined_tags        = merge(local.default_tags, var.custom_tags)
   cluster_name         = "${var.cluster_name_prefix}-${random_id.postfix.hex}"
   resource_name_prefix = local.cluster_name
-}
-
-data "aws_route53_zone" "domain" {
-  name = var.domain
 }
 
 locals {
@@ -146,21 +155,35 @@ resource "null_resource" "wait_for_lb_cleanup" {
     hosted_zone_id = data.aws_route53_zone.domain.zone_id
     full_domain    = local.full_domain
     cluster_name   = local.cluster_name
-    script = templatefile("${path.module}/local-destroy-cleanup.sh.tftpl", {
-      vpc_id         = module.vpc.vpc_id
-      region         = var.region
-      hosted_zone_id = data.aws_route53_zone.domain.zone_id
-      full_domain    = local.full_domain
-      cluster_name   = local.cluster_name
-    })
   }
 
+  # The script is rendered at destroy time, NOT stored in triggers: a trigger change
+  # replaces this resource, and a replacement runs the destroy provisioner, i.e. this
+  # whole teardown against a live cluster during `jd up`.
   provisioner "local-exec" {
     when        = destroy
     interpreter = ["/bin/bash", "-c"]
     quiet       = true
-    command     = self.triggers.script
+    command = templatefile("${path.module}/local-destroy-cleanup.sh.tftpl", {
+      vpc_id         = self.triggers.vpc_id
+      region         = self.triggers.region
+      hosted_zone_id = self.triggers.hosted_zone_id
+      full_domain    = self.triggers.full_domain
+      cluster_name   = self.triggers.cluster_name
+    })
   }
+
+  lifecycle {
+    # Older deployments still hold the rendered script in their state's triggers: ignore
+    # it, so dropping it does not replace the resource and run the old teardown on a live
+    # cluster.
+    # Drop at v1.0.
+    ignore_changes = [triggers["script"]]
+  }
+
+  # On destroy, the CSI volume reaper waits for this script to terminate the Karpenter
+  # instances its volumes may be attached to.
+  depends_on = [null_resource.reap_csi_volumes]
 }
 
 module "eks_cluster" {
@@ -314,7 +337,8 @@ resource "aws_eks_node_group" "platform" {
 
   tags = local.combined_tags
 
-  depends_on = [null_resource.core_node_addons]
+  # null_resource.reap_csi_volumes: on destroy, the reaper runs once these nodes are gone.
+  depends_on = [null_resource.core_node_addons, null_resource.reap_csi_volumes]
 }
 
 module "oauth_secret" {

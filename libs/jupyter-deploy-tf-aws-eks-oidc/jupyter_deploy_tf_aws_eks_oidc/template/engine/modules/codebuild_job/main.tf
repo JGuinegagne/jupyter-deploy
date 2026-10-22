@@ -50,14 +50,11 @@ data "aws_iam_policy_document" "codebuild_permissions" {
     resources = [var.source_s3_bucket_arn]
   }
 
+  # Scoped to the declared build group (below): CodeBuild needs no CreateLogGroup.
   statement {
-    sid = "CloudWatchLogs"
-    actions = [
-      "logs:CreateLogGroup",
-      "logs:CreateLogStream",
-      "logs:PutLogEvents",
-    ]
-    resources = ["*"]
+    sid       = "CloudWatchLogs"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.build.arn}:*"]
   }
 }
 
@@ -65,6 +62,15 @@ resource "aws_iam_role_policy" "codebuild" {
   name   = "${var.project_name}-permissions"
   role   = aws_iam_role.codebuild.id
   policy = data.aws_iam_policy_document.codebuild_permissions.json
+}
+
+# Declared rather than left to CodeBuild, whose default /aws/codebuild/<project> group
+# never expires and outlives `jd down`. A name of our own, not CodeBuild's default, so
+# that deployments where CodeBuild already created the default group need no import.
+resource "aws_cloudwatch_log_group" "build" {
+  name              = var.log_group_name
+  retention_in_days = var.log_retention_days
+  tags              = var.combined_tags
 }
 
 resource "aws_codebuild_project" "this" {
@@ -79,6 +85,12 @@ resource "aws_codebuild_project" "this" {
 
   artifacts {
     type = "NO_ARTIFACTS"
+  }
+
+  logs_config {
+    cloudwatch_logs {
+      group_name = aws_cloudwatch_log_group.build.name
+    }
   }
 
   environment {

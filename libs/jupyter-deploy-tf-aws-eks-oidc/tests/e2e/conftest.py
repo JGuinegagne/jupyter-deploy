@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 import pytest
 from pytest_jupyter_deploy.deployment import EndToEndDeployment
-from pytest_jupyter_deploy.kubernetes.kubectl import resource_absent, run_kubectl
+from pytest_jupyter_deploy.kubernetes.kubectl import resource_absent
 from pytest_jupyter_deploy.plugin import handle_browser_context_args
 from pytest_jupyter_deploy.workspaces.kubectl import (
     kubectl_apply_workspace,
@@ -28,7 +28,6 @@ from .constants import (
     NS_ONLY_DEFAULT_TEAM,
     NS_SMALL_TEMPLATE,
     NS_SMALL_TEMPLATE_CONFIG,
-    ROUTER_NAMESPACE,
     SEEDED_WORKSPACES,
     WORKSPACE_NAMESPACE,
     WORKSPACES_DIR,
@@ -305,14 +304,3 @@ def restored_namespace_mapping(e2e_deployment: EndToEndDeployment) -> Generator[
         else:
             e2e_deployment.update_override_value(key, value)
     e2e_deployment.ensure_deployed_with(reset_args)
-
-
-@pytest.fixture
-def fresh_dex(e2e_deployment: EndToEndDeployment) -> None:
-    """Restart dex so it serves the applied allowlist; requested before the browser login.
-
-    Remove once the pinned router chart rolls dex on config changes:
-    https://github.com/jupyter-infra/jupyter-k8s-aws/issues/100
-    """
-    e2e_deployment.cli.run_command(["jupyter-deploy", "component", "restart", "--name", "dex"])
-    run_kubectl("rollout", "status", "deployment/dex", "-n", ROUTER_NAMESPACE, "--timeout=300s", check=True)

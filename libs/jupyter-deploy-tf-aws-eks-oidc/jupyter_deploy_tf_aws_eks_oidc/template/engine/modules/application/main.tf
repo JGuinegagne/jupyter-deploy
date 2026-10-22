@@ -63,6 +63,8 @@ module "build" {
   buildspec            = local.buildspec
   source_s3_location   = "${var.build_bucket_name}/${var.image_name}/${var.image_build}/source.zip"
   source_s3_bucket_arn = var.build_bucket_arn
+  log_group_name       = var.build_log_group_name
+  log_retention_days   = var.build_log_retention_days
   combined_tags        = var.combined_tags
 }
 

@@ -734,8 +734,16 @@ variable "custom_tags" {
   }
 
   validation {
-    condition     = alltrue([for k, v in var.custom_tags : can(regex("^[\\w\\s_.:/=+\\-@]+$", k))])
-    error_message = "Tag keys may only contain Unicode letters, digits, whitespace, and _.:/=+-@"
+    # Narrower than AWS, which also allows "=" in keys: see the next rule.
+    condition     = alltrue([for k, v in var.custom_tags : can(regex("^[\\w\\s_.:/+\\-@]+$", k))])
+    error_message = "Tag keys may only contain Unicode letters, digits, whitespace, and _.:/+-@"
+  }
+
+  # The NLB tag annotation and the EBS CSI driver's extra-tags flag both encode tags as
+  # "k1=v1,k2=v2", so either separator inside a key or value would split it into wrong tags.
+  validation {
+    condition     = alltrue([for v in values(var.custom_tags) : !strcontains(v, "=") && !strcontains(v, ",")])
+    error_message = "Tag values must not contain '=' or ','."
   }
 }
 
@@ -872,18 +880,20 @@ variable "enable_component_logging" {
 
 variable "component_log_retention_days" {
   description = <<-EOT
-    Retention in days for the CloudWatch log groups created by component logging.
+    Retention in days for the CloudWatch log groups of the components, the
+    workspaces and the image builds.
 
     This is distinct from cluster_log_retention_days, which controls the EKS
-    control-plane logs. Only used when enable_component_logging is true.
+    control-plane logs. The component and workspace log groups exist only when
+    enable_component_logging is true; the image build log group always does.
 
     Recommended: 7
   EOT
   type        = number
 
   validation {
-    condition     = var.component_log_retention_days >= 1 && var.component_log_retention_days <= 3653
-    error_message = "component_log_retention_days must be between 1 and 3653."
+    condition     = contains([1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653], var.component_log_retention_days)
+    error_message = "component_log_retention_days must be a CloudWatch retention period: 1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288 or 3653."
   }
 }
 

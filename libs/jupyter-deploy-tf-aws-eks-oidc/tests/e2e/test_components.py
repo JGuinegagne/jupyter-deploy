@@ -355,6 +355,19 @@ def test_component_show_custom_resource(e2e_deployment: EndToEndDeployment) -> N
 
 
 @pytest.mark.usefixtures("kubernetes_cluster_login")
+def test_jupyterlab_template_component_reads_default_namespace(e2e_deployment: EndToEndDeployment) -> None:
+    """Single-namespace mode: the jupyterlab-template component reads the template in default."""
+    e2e_deployment.ensure_deployed()
+    if e2e_deployment.get_list_of_maps_variable_value("workspace_namespaces"):
+        pytest.skip("workspace_namespaces is set; test_workspace_namespaces covers the multi-namespace rule")
+
+    result = e2e_deployment.cli.run_command(
+        ["jupyter-deploy", "component", "show", "--name", "jupyterlab-template", "--json"]
+    )
+    assert json.loads(result.stdout)["resource"]["metadata"]["namespace"] == "default"
+
+
+@pytest.mark.usefixtures("kubernetes_cluster_login")
 def test_helmrelease_component_show(e2e_deployment: EndToEndDeployment) -> None:
     """Verify show --json returns the helm release info for a HelmRelease component.
 

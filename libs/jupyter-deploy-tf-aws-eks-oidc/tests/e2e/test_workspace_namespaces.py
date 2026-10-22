@@ -7,6 +7,7 @@ it changes the mapping itself. Only #409 relies on the bot's real membership of
 JD_E2E_RBAC_TEAM. All workspaces are CPU-only.
 """
 
+import json
 import os
 from typing import Any
 
@@ -310,7 +311,6 @@ def test_coding_agents_answer_only_in_bedrock_enabled_namespaces(
 def test_web_app_follows_mapping_change(
     e2e_deployment: EndToEndDeployment,
     mapped: dict[str, Any],
-    fresh_dex: None,
     dex_oauth_web_app: WebAppNavigator,
 ) -> None:
     """#409: after `jd up` moves the bot's team from e2e-ns-a to e2e-ns-b, a reload resolves e2e-ns-b alone.
@@ -335,6 +335,11 @@ def test_web_app_follows_mapping_change(
         },
     )
     assert navigator.resolve_namespaces() == (NS_A, [NS_A])
+    # #449: listed, default wins over the first entry for `jd component`/`jd health`.
+    shown = e2e_deployment.cli.run_command(
+        ["jupyter-deploy", "component", "show", "--name", "jupyterlab-template", "--json"]
+    )
+    assert json.loads(shown.stdout)["resource"]["metadata"]["namespace"] == "default"
 
     # The public access path into a non-default namespace: create from e2e-ns-a's own
     # card, then open it through the router and auth middleware.

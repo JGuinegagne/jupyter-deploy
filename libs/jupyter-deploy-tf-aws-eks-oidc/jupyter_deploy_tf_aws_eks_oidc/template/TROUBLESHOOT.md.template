@@ -118,10 +118,19 @@ leftover NLB tagged with the cluster name and delete it with
 In-cluster controllers create some AWS resources — Kubernetes' in-tree service controller
 provisions the NLB behind the Traefik Service, and external-dns writes the Route 53 records —
 so Terraform never holds them in its state.
-They also may not carry the `DeploymentId` tag, so a tag search alone can miss them.
+The NLB and its target groups carry the `DeploymentId` tag only if a recent template version
+created them, and Route 53 records carry no tags, so a tag search alone can miss them.
 Check for and remove the following resources:
 - Network Load Balancers still referencing the (now-deleted) cluster VPC
 - Target groups outlive the NLB. They are tagged kubernetes.io/cluster/<cluster-name>=owned
+- EBS volumes the CSI driver provisioned for PVCs, left `available`. `jd down` deletes those
+  carrying the `DeploymentId` tag; volumes created by an older template version lack it, and
+  only carry the driver's `CSIVolumeName` tag
+
+CloudWatch log groups of the components and workspaces (`/jupyter-deploy/<deployment-id>/components/*`
+and `.../workspaces/*`) are left in place on purpose, for post-teardown diagnosis. Their events
+expire after `component_log_retention_days`; the emptied groups cost nothing, delete them once
+you no longer need them.
 
 **Important:** verify each resource's owning cluster/VPC before deleting. Target groups
 and external-dns Route53 records are tagged with the *owning cluster name* — a same-account
