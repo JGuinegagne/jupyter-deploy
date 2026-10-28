@@ -22,6 +22,10 @@ _WORKSPACE_SERVICE_FMT = "workspace-{name}-service"
 _CURL_IMAGE = "curlimages/curl:latest"
 # curl exit 28 == operation timeout → the connection was blocked (denied).
 _CURL_TIMEOUT_EXIT = 28
+# curl's "empty reply" exit: the server accepted the connection, then closed it without an
+# HTTP response, as a TLS-only listener does with a plain-HTTP request. The connection got
+# through, so for a NetworkPolicy probe it is an allow.
+_CURL_EMPTY_REPLY_EXIT = 52
 # Default prefix for probe-pod names; a unique suffix is always appended.
 _DEFAULT_POD_PREFIX = "netpol-probe"
 
@@ -130,7 +134,7 @@ def probe_service(
     finally:
         delete_probe_pod(pod_name, from_namespace)
 
-    if exit_code == 0:
+    if exit_code in (0, _CURL_EMPTY_REPLY_EXIT):
         return True
     if exit_code == _CURL_TIMEOUT_EXIT:
         return False

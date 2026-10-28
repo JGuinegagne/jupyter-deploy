@@ -3,6 +3,8 @@
 import subprocess
 from unittest.mock import patch
 
+import pytest
+
 from pytest_jupyter_deploy.workspaces import network_probe
 
 
@@ -95,3 +97,23 @@ def test_probe_service_allowed_retries_with_distinct_names() -> None:
     assert allowed is False
     assert len(seen) == 3
     assert len(set(seen)) == 3
+
+
+def test_probe_service_maps_curl_exit_codes() -> None:
+    """0 and 52 (empty reply from a TLS-only listener) are allows, 28 is a deny, others raise."""
+    for exit_code, expected in [(0, True), (52, True), (28, False)]:
+        with (
+            patch.object(network_probe, "_run", return_value=_completed(returncode=0)),
+            patch.object(network_probe, "_wait_for_terminated_exit_code", return_value=exit_code),
+            patch.object(network_probe, "delete_probe_pod"),
+        ):
+            assert network_probe.probe_service("svc.host", 8443, from_namespace="ns") is expected, exit_code
+
+    # A DNS failure (curl exit 6) must not read as allow or deny.
+    with (
+        patch.object(network_probe, "_run", return_value=_completed(returncode=0)),
+        patch.object(network_probe, "_wait_for_terminated_exit_code", return_value=6),
+        patch.object(network_probe, "delete_probe_pod"),
+        pytest.raises(RuntimeError, match="ambiguously"),
+    ):
+        network_probe.probe_service("svc.host", 8443, from_namespace="ns")
