@@ -13,12 +13,16 @@ throwaway namespaces + probe pods, cleaned up on exit), so it runs in the
 non-mutating chain.
 
 Probe semantics (see pytest_jupyter_deploy.workspaces.network_probe):
-- allowed  → curl connects (any HTTP status)
+- allowed  → curl connects (any HTTP status, or an empty reply from a TLS-only listener)
 - denied   → curl connect timeout
+
+Ports are read from each component's live Service rather than hardcoded: the chart moves
+every component to a TLS port when internalTls is on, and these cases must hold either way.
 """
 
 import pytest
 from pytest_jupyter_deploy.kubernetes.namespace import temporary_namespace
+from pytest_jupyter_deploy.kubernetes.services import get_service_port
 from pytest_jupyter_deploy.workspaces.network_probe import probe_service, probe_service_allowed
 
 pytestmark = pytest.mark.usefixtures("kubernetes_cluster_login")
@@ -34,21 +38,17 @@ CROSS_NAMESPACE_PREFIX = "e2e-routing-netpol"
 # Pod labels the policies key on. Traefik is the only allowed ingress source.
 TRAEFIK_LABELS = {"app": "traefik", "component": "router"}
 
-# Routing components and their ingress ports (from the aws-oidc chart).
-DEX = ("dex", 5556)
-OAUTH2_PROXY = ("oauth2-proxy", 4180)
-AUTHMIDDLEWARE = ("authmiddleware", 8080)
-WEB_APP = ("web-app", 8090)
-
-ALL_COMPONENTS = [DEX, OAUTH2_PROXY, AUTHMIDDLEWARE, WEB_APP]
+# Routing components, by their Service name in the aws-oidc chart.
+DEX = "dex"
+ALL_COMPONENTS = [DEX, "oauth2-proxy", "authmiddleware", "web-app"]
 
 
 def _service_host(component: str) -> str:
     return f"{component}.{ROUTER_NAMESPACE}.svc.cluster.local"
 
 
-@pytest.mark.parametrize("component,port", ALL_COMPONENTS, ids=[c for c, _ in ALL_COMPONENTS])
-def test_traefik_ingress_allowed(component: str, port: int) -> None:
+@pytest.mark.parametrize("component", ALL_COMPONENTS)
+def test_traefik_ingress_allowed(component: str) -> None:
     """Positive control: a traefik-labeled pod in the router namespace is allowed.
 
     Pins the deny cases below to the policy itself — if this allow-path were
@@ -58,6 +58,7 @@ def test_traefik_ingress_allowed(component: str, port: int) -> None:
     allow rules for a fresh source pod asynchronously and can fail closed on the
     first probe.
     """
+    port = get_service_port(component, ROUTER_NAMESPACE)
     allowed = probe_service_allowed(
         _service_host(component),
         port,
@@ -67,9 +68,10 @@ def test_traefik_ingress_allowed(component: str, port: int) -> None:
     assert allowed, f"traefik in '{ROUTER_NAMESPACE}' should be allowed to reach {component}:{port}"
 
 
-@pytest.mark.parametrize("component,port", ALL_COMPONENTS, ids=[c for c, _ in ALL_COMPONENTS])
-def test_same_namespace_non_traefik_ingress_denied(component: str, port: int) -> None:
+@pytest.mark.parametrize("component", ALL_COMPONENTS)
+def test_same_namespace_non_traefik_ingress_denied(component: str) -> None:
     """A non-traefik pod in the router namespace cannot reach the component."""
+    port = get_service_port(component, ROUTER_NAMESPACE)
     allowed = probe_service(
         _service_host(component),
         port,
@@ -79,13 +81,14 @@ def test_same_namespace_non_traefik_ingress_denied(component: str, port: int) ->
     assert not allowed, f"a non-traefik pod in '{ROUTER_NAMESPACE}' should be denied ingress to {component}:{port}"
 
 
-@pytest.mark.parametrize("component,port", ALL_COMPONENTS, ids=[c for c, _ in ALL_COMPONENTS])
-def test_cross_namespace_ingress_denied(component: str, port: int) -> None:
+@pytest.mark.parametrize("component", ALL_COMPONENTS)
+def test_cross_namespace_ingress_denied(component: str) -> None:
     """An unrelated namespace cannot reach the component (even with traefik labels).
 
     The policy requires both the traefik podSelector AND the router
     namespaceSelector, so traefik-like labels from another namespace must fail.
     """
+    port = get_service_port(component, ROUTER_NAMESPACE)
     cross_namespace = f"{CROSS_NAMESPACE_PREFIX}-{component}"
     with temporary_namespace(cross_namespace):
         allowed = probe_service(
@@ -99,17 +102,17 @@ def test_cross_namespace_ingress_denied(component: str, port: int) -> None:
 
 @pytest.mark.parametrize("app_label", ["oauth2-proxy", "authmiddleware"])
 def test_dex_health_gate_ingress_allowed(app_label: str) -> None:
-    """The dex policy allows oauth2-proxy/authmiddleware to reach dex:5556.
+    """The dex policy allows oauth2-proxy/authmiddleware to reach dex on its Service port.
 
-    This is the in-cluster init health-gate path (wait-for-dex): those pods probe
-    dex:5556/dex/healthz before starting. The policy grants it via a podSelector
-    matchExpressions on app In (oauth2-proxy, authmiddleware) within the router ns.
+    This is the in-cluster init health-gate path (wait-for-dex): those pods check dex
+    before starting. The policy grants it via a podSelector matchExpressions on
+    app In (oauth2-proxy, authmiddleware) within the router ns.
     """
-    dex_component, dex_port = DEX
+    dex_port = get_service_port(DEX, ROUTER_NAMESPACE)
     allowed = probe_service_allowed(
-        _service_host(dex_component),
+        _service_host(DEX),
         dex_port,
         from_namespace=ROUTER_NAMESPACE,
         pod_labels={"app": app_label},
     )
-    assert allowed, f"'{app_label}' health-gate pod should be allowed to reach {dex_component}:{dex_port}"
+    assert allowed, f"'{app_label}' health-gate pod should be allowed to reach {DEX}:{dex_port}"
