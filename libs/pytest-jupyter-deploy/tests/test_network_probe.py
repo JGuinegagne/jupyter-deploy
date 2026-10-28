@@ -100,8 +100,8 @@ def test_probe_service_allowed_retries_with_distinct_names() -> None:
 
 
 def test_probe_service_maps_curl_exit_codes() -> None:
-    """0 and 52 (empty reply from a TLS-only listener) are allows, 28 is a deny, others raise."""
-    for exit_code, expected in [(0, True), (52, True), (28, False)]:
+    """0 is an allow, 28 a deny; anything else, e.g. an empty reply (52) or a DNS failure (6), raises."""
+    for exit_code, expected in [(0, True), (28, False)]:
         with (
             patch.object(network_probe, "_run", return_value=_completed(returncode=0)),
             patch.object(network_probe, "_wait_for_terminated_exit_code", return_value=exit_code),
@@ -109,11 +109,33 @@ def test_probe_service_maps_curl_exit_codes() -> None:
         ):
             assert network_probe.probe_service("svc.host", 8443, from_namespace="ns") is expected, exit_code
 
-    # A DNS failure (curl exit 6) must not read as allow or deny.
-    with (
-        patch.object(network_probe, "_run", return_value=_completed(returncode=0)),
-        patch.object(network_probe, "_wait_for_terminated_exit_code", return_value=6),
-        patch.object(network_probe, "delete_probe_pod"),
-        pytest.raises(RuntimeError, match="ambiguously"),
-    ):
-        network_probe.probe_service("svc.host", 8443, from_namespace="ns")
+    for exit_code in (6, 52):
+        with (
+            patch.object(network_probe, "_run", return_value=_completed(returncode=0)),
+            patch.object(network_probe, "_wait_for_terminated_exit_code", return_value=exit_code),
+            patch.object(network_probe, "delete_probe_pod"),
+            pytest.raises(RuntimeError, match="ambiguously"),
+        ):
+            network_probe.probe_service("svc.host", 8443, from_namespace="ns")
+
+
+def test_probe_service_https_skips_verification() -> None:
+    """scheme="https" requests an https:// URL with --insecure; the http default sends neither."""
+    for scheme, url, insecure in [("https", "https://svc.host:8443/", True), ("http", "http://svc.host:8443/", False)]:
+        with (
+            patch.object(network_probe, "_run", return_value=_completed(returncode=0)) as run_mock,
+            patch.object(network_probe, "_wait_for_terminated_exit_code", return_value=0),
+            patch.object(network_probe, "delete_probe_pod"),
+        ):
+            network_probe.probe_service("svc.host", 8443, from_namespace="ns", scheme=scheme)
+
+        run_cmd = run_mock.call_args_list[0].args[0]
+        assert run_cmd[-1] == url
+        assert ("--insecure" in run_cmd) is insecure
+
+
+def test_probe_service_rejects_unknown_scheme() -> None:
+    """A scheme other than http/https raises before any pod is created."""
+    with patch.object(network_probe, "_run") as run_mock, pytest.raises(ValueError, match="unsupported probe scheme"):
+        network_probe.probe_service("svc.host", 8443, from_namespace="ns", scheme="grpc")
+    run_mock.assert_not_called()
