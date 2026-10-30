@@ -11,6 +11,10 @@ services:
         - SERVICE_UID=$${SERVICE_UID}
         - SERVICE_GID=$${SERVICE_GID}
         - DOCKER_GID=$${DOCKER_GID}
+        - CLAUDE_CODE_VERSION=${claude_code_version}
+        - CODEX_VERSION=${codex_version}
+        - CODEX_PROFILE_PREFIX=${bedrock_profile_prefix}
+        - CODEX_MODEL_PATTERNS=${codex_model_patterns}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8888/lab/favicon.ico"]
@@ -26,13 +30,21 @@ services:
         fluentd-address: "localhost:24224"
         tag: "docker.jupyter"
     networks:
-      - web
+      jupyter:
+        ipv4_address: 172.30.250.10
     environment:
       - AWS_REGION=${aws_region}
+      - ANTHROPIC_BEDROCK_REGION_PREFIX=${bedrock_profile_prefix}
+      # Fail fast on a missing credential instead of hanging on IMDS probes the network drops.
+      - AWS_EC2_METADATA_DISABLED=true
+%{ if bedrock_enabled ~}
+      - AWS_CONFIG_FILE=/etc/aws/config
+%{ endif ~}
     depends_on:
       - fluent-bit
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=jupyter"
       - "traefik.http.routers.jupyter.rule=Host(`${full_domain}`)"
       - "traefik.http.routers.jupyter.entrypoints=websecure"
       - "traefik.http.routers.jupyter.tls.certresolver=letsencrypt"
@@ -51,6 +63,9 @@ services:
     volumes:
       - /mnt/jupyter-data:/home/jovyan
       - /var/run/docker.sock:/var/run/docker.sock
+%{ if bedrock_enabled ~}
+      - bedrock-creds:/run/bedrock-creds:ro
+%{ endif ~}
 %{ if length(ebs_mounts) > 0 ~}
 %{ for ebs in ebs_mounts ~}
       - /home/jovyan/${ebs.mount_point}:/home/jovyan/${ebs.mount_point}
@@ -197,6 +212,7 @@ services:
       - ./acme.json:/acme.json
     networks:
       - web
+      - jupyter
     environment:
       - AWS_REGION=${aws_region}
   fluent-bit:
@@ -242,7 +258,53 @@ services:
       - web
     environment:
       - TZ=UTC
+%{ if bedrock_enabled ~}
+  bedrock-sidecar:
+    build:
+      context: ./bedrock-sidecar
+      dockerfile: Dockerfile
+    container_name: bedrock-sidecar
+    restart: unless-stopped
+    mem_limit: "256M"
+    mem_reservation: "64M"
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "fluentd"
+      options:
+        fluentd-address: "localhost:24224"
+        tag: "docker.bedrock-sidecar"
+    depends_on:
+      - fluent-bit
+    healthcheck:
+      # Healthy iff the published credentials expire more than 5 min out; the loop refreshes every
+      # 15 min, so a stuck loop turns unhealthy about five minutes before the hour-long session ends.
+      test: ["CMD", "/refresh.sh", "-healthcheck"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - web
+    environment:
+      - BEDROCK_APP_ROLE_ARN=${bedrock_app_role_arn}
+      - AWS_REGION=${aws_region}
+    volumes:
+      - bedrock-creds:/creds
+# The sidecar publishes the app role's credentials here; jupyter mounts it read-only.
+volumes:
+  bedrock-creds:
+%{ endif ~}
 networks:
   web:
     name: web
     driver: bridge
+  # Fixed subnet so jupyter can hold the fixed address that the host firewall rule in
+  # docker-startup.sh matches. Traefik shares this network to route to jupyter, but keeps its
+  # own address on it, so the rule leaves its IMDS traffic alone.
+  jupyter:
+    name: jupyter
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.250.0/24

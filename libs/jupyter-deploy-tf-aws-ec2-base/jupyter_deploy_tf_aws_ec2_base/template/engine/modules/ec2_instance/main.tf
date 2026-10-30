@@ -117,6 +117,14 @@ resource "aws_instance" "ec2_jupyter_server" {
   key_name               = var.key_pair_name
   iam_instance_profile   = var.instance_profile_name
 
+  # IMDSv2 only. Hop limit 2 (default 1) reaches the bedrock-sidecar (assumes the bedrock-app role) and
+  # traefik (Route53 ACME) one docker-bridge hop away; the jupyter network is firewalled off IMDS anyway.
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 2
+  }
+
   tags = merge(
     var.combined_tags,
     {
