@@ -238,7 +238,9 @@ variable "routing_max_memory" {
 
 variable "workspace_nodepools" {
   description = <<-EOT
-    Workspace Karpenter NodePools, one NodePool + EC2NodeClass pair per entry. Keys: name, instance_families, disk_size_gb, max_cpu, max_memory, accelerator, role, max_gpus, templates.
+    NodePools. Keys: name, instance_families, disk_size_gb, max_cpu, max_memory, accelerator, role, max_gpus, templates.
+
+    Each entry is a workspace Karpenter NodePool + EC2NodeClass pair.
 
     Supports multiple pools (e.g. CPU + GPU).
 
@@ -488,9 +490,10 @@ variable "enable_default_gpu_pool" {
 
 variable "nvidia_device_plugin_version" {
   description = <<-EOT
-    Helm chart version of the NVIDIA device plugin, installed when any
-    workspace_nodepools entry sets accelerator = "nvidia" (the built-in GPU
-    pool does).
+    Helm chart version of the NVIDIA device plugin.
+
+    The template installs it when any workspace_nodepools entry sets
+    accelerator = "nvidia" (the built-in GPU pool does).
 
     Refer to: https://github.com/NVIDIA/k8s-device-plugin/releases
 
@@ -549,7 +552,7 @@ variable "node_expire_after" {
 
 variable "workspace_namespaces" {
   description = <<-EOT
-    Kubernetes namespaces for workspaces, each with the GitHub teams allowed to use it. Keys: name, teams, templates, bedrock.
+    Workspace namespaces with allow-listed GitHub teams. Keys: name, teams, templates, bedrock.
 
     Leave empty to use a single namespace: every workspace lives in "default",
     and every team in oauth_allowed_teams may create workspaces there.
@@ -880,8 +883,9 @@ variable "enable_component_logging" {
 
 variable "component_log_retention_days" {
   description = <<-EOT
-    Retention in days for the CloudWatch log groups of the components, the
-    workspaces and the image builds.
+    Retention in days for the components, workspaces and image builds logs.
+
+    Applies to their CloudWatch log groups.
 
     This is distinct from cluster_log_retention_days, which controls the EKS
     control-plane logs. The component and workspace log groups exist only when
@@ -1100,8 +1104,9 @@ variable "workspace_app_codex_version" {
 
 variable "workspace_bedrock_enabled" {
   description = <<-EOT
-    Whether workspaces get AWS credentials to call Amazon Bedrock, so that Claude
-    Code and Codex work out of the box in a workspace terminal.
+    Whether workspaces get AWS credentials to call Amazon Bedrock.
+
+    Claude Code and Codex then work out of the box in a workspace terminal.
 
     When enabled, each workspace namespace gets its own IAM role, limited to
     Bedrock inference on the models matching workspace_bedrock_model_patterns,
@@ -1143,8 +1148,9 @@ variable "workspace_bedrock_inference_scope" {
 
 variable "workspace_bedrock_model_patterns" {
   description = <<-EOT
-    Bedrock model IDs workspaces may invoke, as IAM wildcard patterns without the
-    inference profile prefix (e.g. "anthropic.claude-sonnet-*").
+    Bedrock model IDs workspaces may invoke, as IAM wildcard patterns.
+
+    Patterns omit the inference profile prefix (e.g. "anthropic.claude-sonnet-*").
 
     Covers both Claude Code (anthropic.*) and Codex (openai.*) models. Claude Code picks
     its default model per release, which the patterns must keep allowed; Codex uses the
@@ -1184,8 +1190,9 @@ variable "workspace_volume_snapshots_enabled" {
 
 variable "workspace_volume_snapshot_interval_hours" {
   description = <<-EOT
-    Hours between two snapshots of a workspace volume, when
-    workspace_volume_snapshots_enabled is true.
+    Hours between two snapshots of a workspace volume.
+
+    Applies when workspace_volume_snapshots_enabled is true.
 
     One of 1, 2, 3, 4, 6, 8, 12 or 24.
 
@@ -1201,8 +1208,10 @@ variable "workspace_volume_snapshot_interval_hours" {
 
 variable "workspace_volume_snapshot_retain_count" {
   description = <<-EOT
-    Number of scheduled snapshots to keep per workspace volume, when
-    workspace_volume_snapshots_enabled is true; the oldest is deleted past it.
+    Number of scheduled snapshots to keep per workspace volume.
+
+    Applies when workspace_volume_snapshots_enabled is true; DLM deletes the oldest
+    snapshot past this count.
 
     Recommended: 7
   EOT
