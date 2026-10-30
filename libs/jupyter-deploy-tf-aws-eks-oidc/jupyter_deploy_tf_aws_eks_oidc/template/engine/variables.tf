@@ -186,7 +186,7 @@ variable "karpenter_version" {
 
     Refer to: https://github.com/aws/karpenter-provider-aws/releases
 
-    Recommended: 1.15.0
+    Recommended: 1.15.1
   EOT
   type        = string
 }
@@ -211,7 +211,7 @@ variable "prometheus_version" {
 
     Refer to: https://github.com/prometheus-community/helm-charts/releases
 
-    Recommended: 29.37.0
+    Recommended: 29.40.0
   EOT
   type        = string
 }
@@ -1162,5 +1162,54 @@ variable "workspace_bedrock_model_patterns" {
   validation {
     condition     = alltrue([for p in var.workspace_bedrock_model_patterns : can(regex("^[a-z0-9][a-z0-9.*:-]*$", p))])
     error_message = "workspace_bedrock_model_patterns entries must be model IDs or IAM wildcards (lowercase letters, digits, '.', '-', ':', '*'), without an inference profile prefix or ARN."
+  }
+}
+
+variable "workspace_volume_snapshots_enabled" {
+  description = <<-EOT
+    Whether to snapshot workspace volumes on a schedule.
+
+    An Amazon Data Lifecycle Manager policy snapshots every EBS volume the ebs-sc
+    StorageClass provisions (workspace home volumes) every
+    workspace_volume_snapshot_interval_hours, keeping the latest
+    workspace_volume_snapshot_retain_count per volume. Snapshots outlive their volume,
+    so a deleted workspace or namespace can be restored from them.
+
+    `jd down` deletes every snapshot of this deployment, whatever this value.
+
+    Recommended: true
+  EOT
+  type        = bool
+}
+
+variable "workspace_volume_snapshot_interval_hours" {
+  description = <<-EOT
+    Hours between two snapshots of a workspace volume, when
+    workspace_volume_snapshots_enabled is true.
+
+    One of 1, 2, 3, 4, 6, 8, 12 or 24.
+
+    Recommended: 24
+  EOT
+  type        = number
+
+  validation {
+    condition     = contains([1, 2, 3, 4, 6, 8, 12, 24], var.workspace_volume_snapshot_interval_hours)
+    error_message = "workspace_volume_snapshot_interval_hours must be one of 1, 2, 3, 4, 6, 8, 12 or 24."
+  }
+}
+
+variable "workspace_volume_snapshot_retain_count" {
+  description = <<-EOT
+    Number of scheduled snapshots to keep per workspace volume, when
+    workspace_volume_snapshots_enabled is true; the oldest is deleted past it.
+
+    Recommended: 7
+  EOT
+  type        = number
+
+  validation {
+    condition     = var.workspace_volume_snapshot_retain_count >= 1 && var.workspace_volume_snapshot_retain_count <= 1000 && floor(var.workspace_volume_snapshot_retain_count) == var.workspace_volume_snapshot_retain_count
+    error_message = "workspace_volume_snapshot_retain_count must be a whole number between 1 and 1000."
   }
 }
